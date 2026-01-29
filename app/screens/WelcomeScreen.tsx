@@ -8,12 +8,13 @@ import { useAppTheme } from "@/theme/context"
 import { $styles } from "@/theme/styles"
 import type { ThemedStyle } from "@/theme/types"
 import { useSafeAreaInsetsStyle } from "@/utils/useSafeAreaInsetsStyle"
+import { Button } from "@/components/Button"
 
 const welcomeLogo = require("@assets/images/logo.png")
 const welcomeFace = require("@assets/images/welcome-face.png")
 
 export const WelcomeScreen: FC = function WelcomeScreen() {
-  const { themed, theme } = useAppTheme()
+  const { themed, theme, toggleTheme, themeContext } = useAppTheme()
 
   const $bottomContainerInsets = useSafeAreaInsetsStyle(["bottom"])
 
@@ -35,7 +36,10 @@ export const WelcomeScreen: FC = function WelcomeScreen() {
           tintColor={theme.colors.palette.neutral900}
         />
       </View>
-
+      <Button
+          tx="welcomeScreen:SwitchTheme"
+          onPress={toggleTheme}
+        />
       <View style={themed([$bottomContainer, $bottomContainerInsets])}>
         <Text tx="welcomeScreen:postscript" size="md" />
       </View>
