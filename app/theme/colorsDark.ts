@@ -32,6 +32,11 @@ const palette = {
   accent200: "#FFD84A",
   accent100: "#FFC61A",
 
+  // Priority tokens
+  priorityLow: "#4CD28A",
+  priorityMedium: "#F5D057",
+  priorityHigh: "#FF6B6B",
+
   angry100: "#F2D6CD",
   angry500: "#C03403",
 
@@ -51,4 +56,7 @@ export const colors = {
   separator: palette.neutral300,
   error: palette.angry500,
   errorBackground: palette.angry100,
+  priorityLow: palette.priorityLow,
+  priorityMedium: palette.priorityMedium,
+  priorityHigh: palette.priorityHigh,
 } as const

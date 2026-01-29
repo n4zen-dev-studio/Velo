@@ -9,7 +9,13 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack"
 
 import Config from "@/config"
 import { ErrorBoundary } from "@/screens/ErrorScreen/ErrorBoundary"
-import { WelcomeScreen } from "@/screens/WelcomeScreen"
+import { AuthScreen } from "@/screens/AuthScreen"
+import { ConflictResolutionScreen } from "@/screens/ConflictResolutionScreen"
+import { HomeScreen } from "@/screens/HomeScreen"
+import { SettingsScreen } from "@/screens/SettingsScreen"
+import { TaskDetailScreen } from "@/screens/TaskDetailScreen"
+import { TaskEditorScreen } from "@/screens/TaskEditorScreen"
+import { SyncDebugScreen } from "@/devtools/SyncDebugScreen"
 import { useAppTheme } from "@/theme/context"
 
 import type { AppStackParamList, NavigationProps } from "./navigationTypes"
@@ -31,6 +37,7 @@ const AppStack = () => {
 
   return (
     <Stack.Navigator
+      initialRouteName="Auth"
       screenOptions={{
         headerShown: false,
         navigationBarColor: colors.background,
@@ -39,7 +46,13 @@ const AppStack = () => {
         },
       }}
     >
-      <Stack.Screen name="Welcome" component={WelcomeScreen} />
+      <Stack.Screen name="Auth" component={AuthScreen} />
+      <Stack.Screen name="Home" component={HomeScreen} />
+      <Stack.Screen name="TaskEditor" component={TaskEditorScreen} />
+      <Stack.Screen name="TaskDetail" component={TaskDetailScreen} />
+      <Stack.Screen name="ConflictResolution" component={ConflictResolutionScreen} />
+      <Stack.Screen name="Settings" component={SettingsScreen} />
+      <Stack.Screen name="SyncDebug" component={SyncDebugScreen} />
       {/** 🔥 Your screens go here */}
       {/* IGNITE_GENERATOR_ANCHOR_APP_STACK_SCREENS */}
     </Stack.Navigator>

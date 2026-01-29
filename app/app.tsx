@@ -30,6 +30,7 @@ import { useNavigationPersistence } from "./navigators/navigationUtilities"
 import { ThemeProvider } from "./theme/context"
 import { customFontsToLoad } from "./theme/typography"
 import { loadDateFnsLocale } from "./utils/formatDate"
+import { initializeDatabase } from "./services/db"
 import * as storage from "./utils/storage"
 
 export const NAVIGATION_PERSISTENCE_KEY = "NAVIGATION_STATE"
@@ -38,20 +39,13 @@ export const NAVIGATION_PERSISTENCE_KEY = "NAVIGATION_STATE"
 const prefix = Linking.createURL("/")
 const config = {
   screens: {
-    Login: {
-      path: "",
-    },
-    Welcome: "welcome",
-    Demo: {
-      screens: {
-        DemoShowroom: {
-          path: "showroom/:queryIndex?/:itemIndex?",
-        },
-        DemoDebug: "debug",
-        DemoPodcastList: "podcast",
-        DemoCommunity: "community",
-      },
-    },
+    Auth: "",
+    Home: "home",
+    TaskEditor: "task-editor/:taskId?",
+    TaskDetail: "task/:taskId",
+    ConflictResolution: "conflicts/:conflictId/:taskId",
+    Settings: "settings",
+    SyncDebug: "sync-debug",
   },
 }
 
@@ -74,6 +68,10 @@ export function App() {
     initI18n()
       .then(() => setIsI18nInitialized(true))
       .then(() => loadDateFnsLocale())
+  }, [])
+
+  useEffect(() => {
+    initializeDatabase().catch((error) => console.error("Failed to init DB", error))
   }, [])
 
   // Before we show the app, we have to wait for our state to be ready.

@@ -32,6 +32,11 @@ export const palette = {
   accent400: "#FFD84A",
   accent500: "#FFC61A",
 
+  // Priority tokens
+  priorityLow: "#2E8B57",
+  priorityMedium: "#E0B422",
+  priorityHigh: "#D64545",
+
   angry100: "#F2D6CD",
   angry500: "#C03403",
 
@@ -87,4 +92,10 @@ export const colors = {
    * Error Background.
    */
   errorBackground: palette.angry100,
+  /**
+   * Task priority colors.
+   */
+  priorityLow: palette.priorityLow,
+  priorityMedium: palette.priorityMedium,
+  priorityHigh: palette.priorityHigh,
 } as const
