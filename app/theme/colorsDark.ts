@@ -1,38 +1,42 @@
 const palette = {
+  // Neutrals (dark theme) — anchor: 171418
   neutral900: "#FFFFFF",
-  neutral800: "#F4F2F1",
-  neutral700: "#D7CEC9",
-  neutral600: "#B6ACA6",
-  neutral500: "#978F8A",
-  neutral400: "#564E4A",
-  neutral300: "#3C3836",
-  neutral200: "#191015",
-  neutral100: "#000000",
+  neutral800: "#F1F0F3",
+  neutral700: "#D6D3DB",
+  neutral600: "#A8A3B0",
+  neutral500: "#80798F",
+  neutral400: "#4B4656",
+  neutral300: "#2C2734",
+  neutral200: "#1E1A24",
+  neutral100: "#171418",
 
-  primary600: "#F4E0D9",
-  primary500: "#E8C1B4",
-  primary400: "#DDA28E",
-  primary300: "#D28468",
-  primary200: "#C76542",
-  primary100: "#A54F31",
+  // Primary reversed for dark tokens usage (keeps Ignite’s convention)
+  primary600: "#F4ECFF",
+  primary500: "#E8D7FF",
+  primary400: "#D5B3FF", // main
+  primary300: "#B687FF",
+  primary200: "#8F55FF",
+  primary100: "#6B2FE6",
 
-  secondary500: "#DCDDE9",
-  secondary400: "#BCC0D6",
-  secondary300: "#9196B9",
-  secondary200: "#626894",
-  secondary100: "#41476E",
+  // Secondary reversed
+  secondary500: "#EEF0F6",
+  secondary400: "#D6DAE8",
+  secondary300: "#B2B8D1",
+  secondary200: "#7A839E",
+  secondary100: "#4D556B",
 
-  accent500: "#FFEED4",
-  accent400: "#FFE1B2",
-  accent300: "#FDD495",
-  accent200: "#FBC878",
-  accent100: "#FFBB50",
+  // Accent reversed (yellow pops nicely on dark)
+  accent500: "#FFF9DB",
+  accent400: "#FFF1AE",
+  accent300: "#FFE57A",
+  accent200: "#FFD84A",
+  accent100: "#FFC61A",
 
   angry100: "#F2D6CD",
   angry500: "#C03403",
 
-  overlay20: "rgba(25, 16, 21, 0.2)",
-  overlay50: "rgba(25, 16, 21, 0.5)",
+  overlay20: "rgba(23, 20, 24, 0.2)",
+  overlay50: "rgba(23, 20, 24, 0.5)",
 } as const
 
 export const colors = {

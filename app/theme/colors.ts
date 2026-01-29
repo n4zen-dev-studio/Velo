@@ -1,38 +1,43 @@
-const palette = {
+export const palette = {
+  // Neutrals (light theme)
   neutral100: "#FFFFFF",
-  neutral200: "#F4F2F1",
-  neutral300: "#D7CEC9",
-  neutral400: "#B6ACA6",
-  neutral500: "#978F8A",
-  neutral600: "#564E4A",
-  neutral700: "#3C3836",
-  neutral800: "#191015",
-  neutral900: "#000000",
+  neutral200: "#F6F5F8",
+  neutral300: "#E6E3EA",
+  neutral400: "#C9C3D1",
+  neutral500: "#A69FB1",
+  neutral600: "#5B5566",
+  neutral700: "#3C3744",
+  neutral800: "#221F27",
+  neutral900: "#171418",
 
-  primary100: "#F4E0D9",
-  primary200: "#E8C1B4",
-  primary300: "#DDA28E",
-  primary400: "#D28468",
-  primary500: "#C76542",
-  primary600: "#A54F31",
+  // Primary (purple scale) — anchor: D5B3FF
+  primary100: "#F4ECFF",
+  primary200: "#E8D7FF",
+  primary300: "#D5B3FF", // main
+  primary400: "#B687FF",
+  primary500: "#8F55FF",
+  primary600: "#6B2FE6",
 
-  secondary100: "#DCDDE9",
-  secondary200: "#BCC0D6",
-  secondary300: "#9196B9",
-  secondary400: "#626894",
-  secondary500: "#41476E",
+  // Secondary (cool slate / desaturated purple-gray)
+  secondary100: "#EEF0F6",
+  secondary200: "#D6DAE8",
+  secondary300: "#B2B8D1",
+  secondary400: "#7A839E",
+  secondary500: "#4D556B",
 
-  accent100: "#FFEED4",
-  accent200: "#FFE1B2",
-  accent300: "#FDD495",
-  accent400: "#FBC878",
-  accent500: "#FFBB50",
+  // Accent (soft light yellow)
+  accent100: "#FFF9DB",
+  accent200: "#FFF1AE",
+  accent300: "#FFE57A",
+  accent400: "#FFD84A",
+  accent500: "#FFC61A",
 
   angry100: "#F2D6CD",
   angry500: "#C03403",
 
-  overlay20: "rgba(25, 16, 21, 0.2)",
-  overlay50: "rgba(25, 16, 21, 0.5)",
+  // Overlays based on your dark anchor (171418)
+  overlay20: "rgba(23, 20, 24, 0.2)",
+  overlay50: "rgba(23, 20, 24, 0.5)",
 } as const
 
 export const colors = {
