@@ -3,6 +3,7 @@ import * as SecureStore from "expo-secure-store"
 
 const DEVICE_ID_KEY = "tasktrak.deviceId"
 const LOCAL_USER_ID_KEY = "tasktrak.localUserId"
+const LOCAL_SESSION_MODE_KEY = "tasktrak.sessionMode"
 
 function bytesToHex(bytes: Uint8Array) {
   return Array.from(bytes)
@@ -35,4 +36,24 @@ export async function getCurrentUserId() {
   const nextId = await generateUuidV4()
   await SecureStore.setItemAsync(LOCAL_USER_ID_KEY, nextId)
   return nextId
+}
+
+export async function setCurrentUserId(userId: string) {
+  await SecureStore.setItemAsync(LOCAL_USER_ID_KEY, userId)
+}
+
+export async function deriveUserIdFromEmail(email: string) {
+  const digest = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, email)
+  return `${digest.slice(0, 8)}-${digest.slice(8, 12)}-${digest.slice(12, 16)}-${digest.slice(
+    16,
+    20,
+  )}-${digest.slice(20, 32)}`
+}
+
+export async function setSessionMode(mode: "local") {
+  await SecureStore.setItemAsync(LOCAL_SESSION_MODE_KEY, mode)
+}
+
+export async function getSessionMode() {
+  return SecureStore.getItemAsync(LOCAL_SESSION_MODE_KEY)
 }

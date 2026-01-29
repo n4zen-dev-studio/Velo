@@ -72,6 +72,15 @@ export async function listPendingOps(limit = 50) {
   )
 }
 
+export async function listFailedOps(limit = 50) {
+  const database = await getDb()
+  return queryAll<ChangeLogEntry>(
+    database,
+    "SELECT * FROM change_log WHERE status = 'FAILED' ORDER BY lastAttemptAt DESC LIMIT ?",
+    [limit],
+  )
+}
+
 export async function countPendingOps() {
   const database = await getDb()
   const row = await queryFirst<{ count: number }>(

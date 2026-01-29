@@ -32,6 +32,7 @@ import { customFontsToLoad } from "./theme/typography"
 import { loadDateFnsLocale } from "./utils/formatDate"
 import { initializeDatabase } from "./services/db"
 import * as storage from "./utils/storage"
+import { syncController } from "./services/sync/SyncController"
 
 export const NAVIGATION_PERSISTENCE_KEY = "NAVIGATION_STATE"
 
@@ -72,6 +73,11 @@ export function App() {
 
   useEffect(() => {
     initializeDatabase().catch((error) => console.error("Failed to init DB", error))
+  }, [])
+
+  useEffect(() => {
+    syncController.initialize()
+    return () => syncController.dispose()
   }, [])
 
   // Before we show the app, we have to wait for our state to be ready.

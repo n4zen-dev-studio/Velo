@@ -26,8 +26,35 @@ export async function seedDefaultStatuses(db?: SQLiteDatabase) {
 
 export async function listStatuses(projectId: string | null) {
   const database = await getDb()
-  const sql = projectId
-    ? "SELECT * FROM statuses WHERE projectId = ? ORDER BY orderIndex"
-    : "SELECT * FROM statuses WHERE projectId IS NULL ORDER BY orderIndex"
-  return queryAll<Status>(database, sql, projectId ? [projectId] : [])
+
+  const rows = projectId
+    ? await queryAll<Status>(
+        database,
+        `
+        SELECT s.*
+        FROM statuses s
+        WHERE s.projectId IS NULL OR s.projectId = ?
+        AND NOT EXISTS (
+          SELECT 1 FROM statuses ps
+          WHERE ps.projectId = ?
+            AND ps.id = s.id
+        )
+        ORDER BY s.orderIndex
+        `,
+        [projectId, projectId],
+      )
+    : await queryAll<Status>(
+        database,
+        "SELECT * FROM statuses WHERE projectId IS NULL ORDER BY orderIndex",
+      )
+
+  // 🔒 FINAL GUARANTEE: no duplicate composite keys
+  const seen = new Set<string>()
+  return rows.filter((s) => {
+    const key = `${s.projectId ?? "personal"}:${s.id}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
 }
+

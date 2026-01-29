@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { View, ViewStyle } from "react-native"
+import { useNavigation } from "@react-navigation/native"
 
 import { Button } from "@/components/Button"
 import { GlassCard } from "@/components/GlassCard"
@@ -8,6 +9,13 @@ import { Text } from "@/components/Text"
 import { TextField } from "@/components/TextField"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
+import type { AppStackScreenProps } from "@/navigators/navigationTypes"
+import {
+  deriveUserIdFromEmail,
+  generateUuidV4,
+  setCurrentUserId,
+  setSessionMode,
+} from "@/services/sync/identity"
 
 import { useAuthViewModel } from "./useAuthViewModel"
 
@@ -16,6 +24,14 @@ export function AuthScreen() {
   const { offlineNotice } = useAuthViewModel()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const navigation = useNavigation<AppStackScreenProps<"Auth">["navigation"]>()
+
+  const handleContinue = async () => {
+    const userId = email ? await deriveUserIdFromEmail(email.trim().toLowerCase()) : await generateUuidV4()
+    await setCurrentUserId(userId)
+    await setSessionMode("local")
+    navigation.reset({ index: 0, routes: [{ name: "Home" }] })
+  }
 
   return (
     <Screen preset="scroll" contentContainerStyle={themed($screen)}>
@@ -37,8 +53,8 @@ export function AuthScreen() {
         <Text preset="formLabel" text="Password" />
         <TextField value={password} onChangeText={setPassword} placeholder="••••••••" secureTextEntry />
         <View style={themed($buttonRow)}>
-          <Button text="Continue" preset="default" />
-          <Button text="Use Offline" preset="reversed" />
+          <Button text="Login" preset="default" onPress={handleContinue} />
+          <Button text="Continue Offline" preset="reversed" onPress={handleContinue} />
         </View>
       </GlassCard>
 

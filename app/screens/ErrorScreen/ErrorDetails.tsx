@@ -30,7 +30,7 @@ export function ErrorDetails(props: ErrorDetailsProps) {
       <View style={$topSection}>
         <Icon icon="ladybug" size={64} />
         <Text style={themed($heading)} preset="subheading" tx="errorScreen:title" />
-        <Text tx="errorScreen:friendlySubtitle" />
+        {/* <Text tx="errorScreen:friendlySubtitle" /> */}
       </View>
 
       <ScrollView

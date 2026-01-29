@@ -1,5 +1,8 @@
-import { useState } from "react"
-import { View, ViewStyle } from "react-native"
+import { useEffect, useMemo } from "react"
+import { Pressable, View, ViewStyle } from "react-native"
+import { useNavigation, useRoute } from "@react-navigation/native"
+import { Controller, useForm } from "react-hook-form"
+import { z } from "zod"
 
 import { Button } from "@/components/Button"
 import { GlassCard } from "@/components/GlassCard"
@@ -8,43 +11,109 @@ import { Text } from "@/components/Text"
 import { TextField } from "@/components/TextField"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
+import type { AppStackScreenProps } from "@/navigators/navigationTypes"
+import { useSyncStatus } from "@/services/sync/syncStore"
 
 import { useTaskEditorViewModel } from "./useTaskEditorViewModel"
 
 export function TaskEditorScreen() {
   const { themed } = useAppTheme()
-  const { title, description, priorities, statuses } = useTaskEditorViewModel()
-  const [currentTitle, setCurrentTitle] = useState(title)
-  const [currentDescription, setCurrentDescription] = useState(description)
+  const navigation = useNavigation<AppStackScreenProps<"TaskEditor">["navigation"]>()
+  const route = useRoute<AppStackScreenProps<"TaskEditor">["route"]>()
+  const { taskId, projectId } = route.params ?? {}
+  const { task, statuses, priorityOptions, defaultValues, saveTask, isSaving } =
+    useTaskEditorViewModel(taskId, projectId)
+  const syncState = useSyncStatus()
+
+  const schema = useMemo(
+    () =>
+      z.object({
+        title: z.string().min(1, "Title is required"),
+        description: z.string().optional().default(""),
+        statusId: z.string().min(1, "Status is required"),
+        priority: z.enum(["low", "medium", "high"]),
+      }),
+    [],
+  )
+
+  const resolver = async (values: unknown) => {
+    const result = schema.safeParse(values)
+    if (result.success) {
+      return { values: result.data, errors: {} }
+    }
+    const errors = result.error.flatten().fieldErrors
+    return {
+      values: {},
+      errors: Object.fromEntries(
+        Object.entries(errors).map(([key, message]) => [
+          key,
+          { type: "validation", message: message?.[0] },
+        ]),
+      ),
+    }
+  }
+
+  const { control, handleSubmit, setValue, watch, reset } = useForm({
+    defaultValues,
+    resolver,
+  })
+
+  useEffect(() => {
+    reset(defaultValues)
+  }, [defaultValues, reset])
+
+  const priorityValue = watch("priority")
+  const statusValue = watch("statusId")
+
+  const onSubmit = handleSubmit(async (values) => {
+    const saved = await saveTask(values)
+    navigation.replace("TaskDetail", { taskId: saved.id })
+  })
 
   return (
     <Screen preset="scroll" contentContainerStyle={themed($screen)}>
       <View style={themed($header)}>
-        <Text preset="heading" text="Create task" />
-        <Text preset="formHelper" text="Personal workspace" />
+        <Text preset="heading" text={task ? "Edit task" : "Create task"} />
+        <Text preset="formHelper" text={task?.projectId ? "Project workspace" : "Personal workspace"} />
       </View>
 
       <GlassCard>
         <Text preset="formLabel" text="Title" />
-        <TextField value={currentTitle} onChangeText={setCurrentTitle} placeholder="Task title" />
+        <Controller
+          control={control}
+          name="title"
+          render={({ field: { value, onChange } }) => (
+            <TextField value={value} onChangeText={onChange} placeholder="Task title" />
+          )}
+        />
         <View style={themed($spacer)} />
         <Text preset="formLabel" text="Description" />
-        <TextField
-          value={currentDescription}
-          onChangeText={setCurrentDescription}
-          placeholder="Add a short summary"
-          multiline
-          numberOfLines={4}
+        <Controller
+          control={control}
+          name="description"
+          render={({ field: { value, onChange } }) => (
+            <TextField
+              value={value}
+              onChangeText={onChange}
+              placeholder="Add a short summary"
+              multiline
+              numberOfLines={4}
+            />
+          )}
         />
       </GlassCard>
 
       <GlassCard>
         <Text preset="formLabel" text="Priority" />
         <View style={themed($pillRow)}>
-          {priorities.map((priority) => (
-            <View key={priority} style={themed($pill)}>
+          {priorityOptions.map((priority) => (
+            <Pressable
+              key={priority}
+              onPress={() => setValue("priority", priority)}
+              style={[themed($pill), priorityValue === priority && themed($pillActive)]}
+            >
               <Text text={priority} />
-            </View>
+            </Pressable>
           ))}
         </View>
       </GlassCard>
@@ -53,17 +122,29 @@ export function TaskEditorScreen() {
         <Text preset="formLabel" text="Status" />
         <View style={themed($pillRow)}>
           {statuses.map((status) => (
-            <View key={status} style={themed($pill)}>
-              <Text text={status} />
-            </View>
+            <Pressable
+              key={`${status.projectId ?? "personal"}:${status.id}`}
+              onPress={() => setValue("statusId", status.id)}
+              style={[themed($pill), statusValue === status.id && themed($pillActive)]}
+            >
+              <Text text={status.name} />
+            </Pressable>
           ))}
         </View>
       </GlassCard>
 
       <View style={themed($buttonRow)}>
-        <Button text="Save task" preset="default" />
-        <Button text="Discard" preset="reversed" />
+        <Button text={isSaving ? "Saving..." : "Save task"} preset="default" onPress={onSubmit} />
+        <Button text="Discard" preset="reversed" onPress={() => navigation.goBack()} />
       </View>
+      <Text
+        preset="formHelper"
+        text={
+          syncState.pendingCount > 0
+            ? `Saved locally · Pending sync ${syncState.pendingCount}`
+            : "Saved locally"
+        }
+      />
     </Screen>
   )
 }
@@ -95,6 +176,11 @@ const $pill: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
   backgroundColor: colors.palette.neutral100,
   borderWidth: 1,
   borderColor: colors.palette.neutral300,
+})
+
+const $pillActive: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  borderColor: colors.palette.primary400,
+  backgroundColor: colors.palette.primary100,
 })
 
 const $buttonRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({

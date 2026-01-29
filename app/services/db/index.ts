@@ -5,6 +5,7 @@ export * from "./types"
 export * from "./repositories/commentsRepository"
 export * from "./repositories/changeLogRepository"
 export * from "./repositories/projectsRepository"
+export * from "./repositories/taskEventsRepository"
 export * from "./repositories/statusesRepository"
 export * from "./repositories/tasksRepository"
 
@@ -14,6 +15,5 @@ import { seedDefaultStatuses } from "./repositories/statusesRepository"
 
 export async function initializeDatabase() {
   const db = await getDb()
-  await migrate(db)
   await seedDefaultStatuses(db)
 }

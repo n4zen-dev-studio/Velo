@@ -1,29 +1,46 @@
-import { View, ViewStyle } from "react-native"
+import { Pressable, RefreshControl, View, ViewStyle } from "react-native"
+import { useNavigation } from "@react-navigation/native"
 
 import { GlassCard } from "@/components/GlassCard"
 import { PriorityDot } from "@/components/PriorityDot"
 import { Screen } from "@/components/Screen"
-import { SyncStatusBadge } from "@/components/SyncStatusBadge"
 import { Text } from "@/components/Text"
 import { WorkspaceSwitcher } from "@/components/WorkspaceSwitcher"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
+import type { AppStackScreenProps } from "@/navigators/navigationTypes"
+import { SyncBadge } from "@/components/SyncBadge"
 
 import { useHomeViewModel } from "./useHomeViewModel"
 
 export function HomeScreen() {
   const { themed } = useAppTheme()
-  const { workspaces, activeWorkspaceId, setActiveWorkspaceId, syncStatus, tasksByStatus } =
+  const navigation = useNavigation<AppStackScreenProps<"Home">["navigation"]>()
+  const { workspaces, activeWorkspaceId, setActiveWorkspaceId, tasksByStatus, refreshAll, isRefreshing, activeProjectId } =
     useHomeViewModel()
 
   return (
-    <Screen preset="scroll" contentContainerStyle={themed($screen)}>
+    <Screen
+      preset="scroll"
+      contentContainerStyle={themed($screen)}
+      ScrollViewProps={{
+        refreshControl: <RefreshControl refreshing={isRefreshing} onRefresh={refreshAll} />,
+      }}
+    >
       <View style={themed($header)}>
         <View>
           <Text preset="heading" text="Home" />
           <Text preset="formHelper" text="Personal workspace by default" />
         </View>
-        <SyncStatusBadge status={syncStatus} />
+        <View style={themed($headerActions)}>
+          <Pressable onPress={() => navigation.navigate("Settings")}>
+            <Text preset="formLabel" text="Settings" />
+          </Pressable>
+          <Pressable onPress={() => navigation.navigate("SyncDebug")}>
+            <Text preset="formLabel" text="Debug" />
+          </Pressable>
+          <SyncBadge />
+        </View>
       </View>
 
       <WorkspaceSwitcher
@@ -37,7 +54,7 @@ export function HomeScreen() {
       />
 
       {tasksByStatus.map(({ status, tasks }) => (
-        <View key={status.id} style={themed($section)}>
+        <View key={`${status.projectId ?? "personal"}:${status.id}`} style={themed($section)}>
           <View style={themed($sectionHeader)}>
             <Text preset="subheading" text={status.name} />
             <Text preset="formHelper" text={`${tasks.length} tasks`} />
@@ -48,17 +65,29 @@ export function HomeScreen() {
             </GlassCard>
           ) : (
             tasks.map((task) => (
-              <GlassCard key={task.id}>
-                <View style={themed($taskRow)}>
-                  <PriorityDot priority={task.priority} />
-                  <Text preset="subheading" text={task.title} />
-                </View>
-                <Text preset="formHelper" text={task.description} />
-              </GlassCard>
+              <Pressable
+                key={`${task.projectId ?? "personal"}:${task.id}`}
+                onPress={() => navigation.navigate("TaskDetail", { taskId: task.id })}
+              >
+                <GlassCard>
+                  <View style={themed($taskRow)}>
+                    <PriorityDot priority={task.priority} />
+                    <Text preset="subheading" text={task.title} />
+                  </View>
+                  <Text preset="formHelper" text={task.description} />
+                </GlassCard>
+              </Pressable>
             ))
           )}
         </View>
       ))}
+
+      <Pressable
+        style={themed($fab)}
+        onPress={() => navigation.navigate("TaskEditor", { projectId: activeProjectId ?? undefined })}
+      >
+        <Text preset="heading" text="+" />
+      </Pressable>
     </Screen>
   )
 }
@@ -73,6 +102,12 @@ const $header: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexDirection: "row",
   alignItems: "center",
   justifyContent: "space-between",
+})
+
+const $headerActions: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  alignItems: "center",
+  gap: spacing.sm,
 })
 
 const $section: ThemedStyle<ViewStyle> = ({ spacing }) => ({
@@ -92,4 +127,21 @@ const $taskRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   alignItems: "center",
   gap: spacing.sm,
   marginBottom: spacing.xs,
+})
+
+const $fab: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+  position: "absolute",
+  right: spacing.lg,
+  bottom: spacing.xl,
+  width: 56,
+  height: 56,
+  borderRadius: 28,
+  alignItems: "center",
+  justifyContent: "center",
+  backgroundColor: colors.palette.primary400,
+  shadowColor: colors.palette.neutral900,
+  shadowOpacity: 0.2,
+  shadowRadius: 12,
+  shadowOffset: { width: 0, height: 6 },
+  elevation: 8,
 })
