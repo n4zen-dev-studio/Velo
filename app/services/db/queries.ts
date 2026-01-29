@@ -28,3 +28,18 @@ export async function queryFirst<T>(db: SQLiteDatabase, sql: string, params?: Re
     await statement.finalizeAsync()
   }
 }
+
+export async function executeTransaction<T>(
+  db: SQLiteDatabase,
+  task: (txDb: SQLiteDatabase) => Promise<T>,
+) {
+  await db.execAsync("BEGIN")
+  try {
+    const result = await task(db)
+    await db.execAsync("COMMIT")
+    return result
+  } catch (error) {
+    await db.execAsync("ROLLBACK")
+    throw error
+  }
+}
