@@ -21,13 +21,19 @@
       "foregroundImage": "./assets/images/app-icon-android-adaptive-foreground.png",
       "backgroundImage": "./assets/images/app-icon-android-adaptive-background.png"
     },
+    "splash": {
+      "backgroundColor": "#171418"
+    },
     "allowBackup": false,
     "edgeToEdgeEnabled": true
   },
   "ios": {
     "icon": "./assets/images/app-icon-ios.png",
     "supportsTablet": true,
-    "bundleIdentifier": "com.n4zen.tasktrak"
+    "bundleIdentifier": "com.n4zen.tasktrak",
+    "splash": {
+      "backgroundColor": "#171418"
+    }
   },
   "web": {
     "favicon": "./assets/images/app-icon-web-favicon.png",
@@ -42,7 +48,7 @@
         "image": "./assets/images/app-icon-android-adaptive-foreground.png",
         "imageWidth": 300,
         "resizeMode": "contain",
-        "backgroundColor": "#191015"
+        "backgroundColor": "#171418"
       }
     ],
     [
@@ -63,5 +69,8 @@
     "ignite": {
       "version": "11.4.0"
     }
+  },
+  "splash": {
+    "backgroundColor": "#171418"
   }
 }
