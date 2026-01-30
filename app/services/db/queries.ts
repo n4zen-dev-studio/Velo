@@ -1,5 +1,7 @@
 import type { SQLiteDatabase } from "expo-sqlite"
 
+import { withWriteLock } from "@/services/db/writeLock"
+
 const DB_DEBUG = __DEV__
 
 function assertSql(sql: string) {
@@ -17,7 +19,7 @@ function logSql(tag: string, sql: string, params: unknown[]) {
   console.log(`[DB] ${tag}:`, sql.trim(), params)
 }
 
-export async function execute(
+async function executeInternal(
   db: SQLiteDatabase,
   sql: string,
   params?: Record<string, unknown> | unknown[],
@@ -36,6 +38,14 @@ export async function execute(
     const message = err instanceof Error ? err.message : String(err)
     throw new Error(`[DB] execute failed: ${message}\nSQL: ${sql}\nparams: ${JSON.stringify(safeParams)}`)
   }
+}
+
+export async function execute(
+  db: SQLiteDatabase,
+  sql: string,
+  params?: Record<string, unknown> | unknown[],
+) {
+  return withWriteLock(() => executeInternal(db, sql, params))
 }
 
 export async function queryAll<T>(
@@ -86,13 +96,15 @@ export async function executeTransaction<T>(
   db: SQLiteDatabase,
   task: (txDb: SQLiteDatabase) => Promise<T>,
 ) {
-  await execute(db, "BEGIN")
-  try {
-    const result = await task(db)
-    await execute(db, "COMMIT")
-    return result
-  } catch (error) {
-    await execute(db, "ROLLBACK")
-    throw error
-  }
+  return withWriteLock(async () => {
+    await executeInternal(db, "BEGIN")
+    try {
+      const result = await task(db)
+      await executeInternal(db, "COMMIT")
+      return result
+    } catch (error) {
+      await executeInternal(db, "ROLLBACK")
+      throw error
+    }
+  })
 }

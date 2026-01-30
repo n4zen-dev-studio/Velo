@@ -8,6 +8,7 @@ import {
   setOnlineStatus,
   setPhase,
 } from "@/services/sync/syncStore"
+import { runSync } from "@/services/sync/SyncEngine"
 
 export type SyncTriggerReason = "app_open" | "manual" | "net_regain"
 
@@ -44,11 +45,8 @@ class SyncController {
         return
       }
       setPhase("syncing")
-      await refreshLocalCounts()
-
-      // TODO: Push local ops + pull delta changes when backend sync is implemented.
       void reason
-
+      await runSync()
       setLastSyncedAt(new Date().toISOString())
       setPhase("idle")
       setLastError(null)

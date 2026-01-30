@@ -1,0 +1,24 @@
+{
+  "name": "tasktrak-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "node dist/server.js",
+    "build": "tsc -p tsconfig.json",
+    "migrate": "tsx src/migrate.ts"
+  },
+  "dependencies": {
+    "fastify": "^4.27.0",
+    "fastify-jwt": "^6.2.0",
+    "pg": "^8.11.5",
+    "bcryptjs": "^2.4.3",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.3",
+    "typescript": "^5.9.2",
+    "@types/node": "^20.12.12"
+  }
+}

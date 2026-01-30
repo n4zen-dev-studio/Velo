@@ -7,21 +7,18 @@ import type { Status } from "@/services/db/types"
 
 export async function seedDefaultStatuses(db?: SQLiteDatabase) {
   const database = db ?? (await getDb())
-
-  await Promise.all(
-    DEFAULT_STATUS_CATALOG.map((status) =>
-      execute(
-        database,
-        `INSERT INTO statuses (id, projectId, name, orderIndex, category)
-         VALUES (?, NULL, ?, ?, ?)
-         ON CONFLICT(id, projectId) DO UPDATE SET
-           name = excluded.name,
-           orderIndex = excluded.orderIndex,
-           category = excluded.category`,
-        [status.id, status.name, status.orderIndex, status.category],
-      ),
-    ),
-  )
+  for (const status of DEFAULT_STATUS_CATALOG) {
+    await execute(
+      database,
+      `INSERT INTO statuses (id, projectId, name, orderIndex, category)
+       VALUES (?, NULL, ?, ?, ?)
+       ON CONFLICT(id, projectId) DO UPDATE SET
+         name = excluded.name,
+         orderIndex = excluded.orderIndex,
+         category = excluded.category`,
+      [status.id, status.name, status.orderIndex, status.category],
+    )
+  }
 }
 
 export async function listStatuses(projectId: string | null) {
@@ -57,4 +54,3 @@ export async function listStatuses(projectId: string | null) {
     return true
   })
 }
-

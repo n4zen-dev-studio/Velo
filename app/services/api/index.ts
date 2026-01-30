@@ -15,7 +15,7 @@ import type { ApiConfig } from "./types"
  * Configuring the apisauce instance.
  */
 export const DEFAULT_API_CONFIG: ApiConfig = {
-  url: Config.API_URL,
+  url: Config.apiUrl,
   timeout: 10000,
 }
 

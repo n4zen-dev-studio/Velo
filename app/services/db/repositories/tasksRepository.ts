@@ -22,8 +22,32 @@ interface TaskRow {
 }
 
 export async function upsertTask(task: Task, db?: SQLiteDatabase) {
+  return upsertTaskInternal(task, { enqueue: true, createEvent: true, useTransaction: true }, db)
+}
+
+export async function upsertTaskFromSync(task: Task, db?: SQLiteDatabase) {
+  return upsertTaskInternal(task, { enqueue: false, createEvent: false, useTransaction: false }, db)
+}
+
+export async function markTaskDeleted(taskId: string, deletedAt: string) {
+  return markTaskDeletedInternal(taskId, deletedAt, { enqueue: true, useTransaction: true }, undefined)
+}
+
+export async function markTaskDeletedFromSync(
+  taskId: string,
+  deletedAt: string,
+  db?: SQLiteDatabase,
+) {
+  return markTaskDeletedInternal(taskId, deletedAt, { enqueue: false, useTransaction: false }, db)
+}
+
+async function upsertTaskInternal(
+  task: Task,
+  options: { enqueue: boolean; createEvent: boolean; useTransaction: boolean },
+  db?: SQLiteDatabase,
+) {
   const database = db ?? (await getDb())
-  await executeTransaction(database, async (txDb) => {
+  const runner = async (txDb: SQLiteDatabase) => {
     const existing = await queryFirst<TaskRow>(txDb, "SELECT * FROM tasks WHERE id = ?", [
       task.id,
     ])
@@ -71,33 +95,35 @@ export async function upsertTask(task: Task, db?: SQLiteDatabase) {
     )
 
     // baseRevision must reflect the revision before this local mutation.
-    const baseRevision = existing?.revision ?? ""
-    await enqueueOp(
-      {
-        entityType: "task",
-        entityId: task.id,
-        opType: "UPSERT",
-        // Patch is plaintext for sync; DB retains encrypted description.
-        patch: {
-          id: task.id,
-          projectId: task.projectId,
-          title: task.title,
-          description: task.description,
-          statusId: task.statusId,
-          priority: task.priority,
-          assigneeUserId: task.assigneeUserId,
-          updatedAt: task.updatedAt,
-          revision: task.revision,
-          deletedAt: task.deletedAt,
+    if (options.enqueue) {
+      const baseRevision = existing?.revision ?? ""
+      await enqueueOp(
+        {
+          entityType: "task",
+          entityId: task.id,
+          opType: "UPSERT",
+          // Patch is plaintext for sync; DB retains encrypted description.
+          patch: {
+            id: task.id,
+            projectId: task.projectId,
+            title: task.title,
+            description: task.description,
+            statusId: task.statusId,
+            priority: task.priority,
+            assigneeUserId: task.assigneeUserId,
+            updatedAt: task.updatedAt,
+            revision: task.revision,
+            deletedAt: task.deletedAt,
+          },
+          baseRevision,
+          projectId: task.projectId ?? null,
+          createdAt: new Date().toISOString(),
         },
-        baseRevision,
-        projectId: task.projectId ?? null,
-        createdAt: new Date().toISOString(),
-      },
-      txDb,
-    )
+        txDb,
+      )
+    }
 
-    if (existing && existing.statusId !== task.statusId) {
+    if (options.createEvent && existing && existing.statusId !== task.statusId) {
       const userId = await getCurrentUserId()
       const eventPayload = JSON.stringify({
         from: existing.statusId,
@@ -111,7 +137,13 @@ export async function upsertTask(task: Task, db?: SQLiteDatabase) {
         [await generateUuidV4(), task.id, "STATUS_CHANGED", eventPayload, task.updatedAt, userId],
       )
     }
-  })
+  }
+
+  if (options.useTransaction) {
+    await executeTransaction(database, runner)
+  } else {
+    await runner(database)
+  }
 }
 
 export async function listTasksByWorkspace(projectId: string | null) {
@@ -130,9 +162,14 @@ export async function getTaskById(taskId: string) {
   return mapTaskRow(row)
 }
 
-export async function markTaskDeleted(taskId: string, deletedAt: string) {
-  const database = await getDb()
-  await executeTransaction(database, async (txDb) => {
+async function markTaskDeletedInternal(
+  taskId: string,
+  deletedAt: string,
+  options: { enqueue: boolean; useTransaction: boolean },
+  db?: SQLiteDatabase,
+) {
+  const database = db ?? (await getDb())
+  const runner = async (txDb: SQLiteDatabase) => {
     const existing = await queryFirst<TaskRow>(txDb, "SELECT * FROM tasks WHERE id = ?", [taskId])
     if (!existing) return
 
@@ -143,31 +180,39 @@ export async function markTaskDeleted(taskId: string, deletedAt: string) {
       [deletedAt, deletedAt, nextRevision, taskId],
     )
 
-    const plaintextDescription = await decryptText(existing.description)
-    await enqueueOp(
-      {
-        entityType: "task",
-        entityId: taskId,
-        opType: "DELETE",
-        patch: {
-          id: taskId,
-          projectId: existing.projectId,
-          title: existing.title,
-          description: plaintextDescription,
-          statusId: existing.statusId,
-          priority: existing.priority,
-          assigneeUserId: existing.assigneeUserId,
-          updatedAt: deletedAt,
-          revision: nextRevision,
-          deletedAt,
+    if (options.enqueue) {
+      const plaintextDescription = await decryptText(existing.description)
+      await enqueueOp(
+        {
+          entityType: "task",
+          entityId: taskId,
+          opType: "DELETE",
+          patch: {
+            id: taskId,
+            projectId: existing.projectId,
+            title: existing.title,
+            description: plaintextDescription,
+            statusId: existing.statusId,
+            priority: existing.priority,
+            assigneeUserId: existing.assigneeUserId,
+            updatedAt: deletedAt,
+            revision: nextRevision,
+            deletedAt,
+          },
+          baseRevision: existing.revision ?? "",
+          projectId: existing.projectId ?? null,
+          createdAt: new Date().toISOString(),
         },
-        baseRevision: existing.revision ?? "",
-        projectId: existing.projectId ?? null,
-        createdAt: new Date().toISOString(),
-      },
-      txDb,
-    )
-  })
+        txDb,
+      )
+    }
+  }
+
+  if (options.useTransaction) {
+    await executeTransaction(database, runner)
+  } else {
+    await runner(database)
+  }
 }
 
 async function mapTaskRow(row: TaskRow): Promise<Task> {

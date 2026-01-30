@@ -21,13 +21,22 @@ import { useAuthViewModel } from "./useAuthViewModel"
 
 export function AuthScreen() {
   const { themed } = useAppTheme()
-  const { offlineNotice } = useAuthViewModel()
+  const { offlineNotice, loginWithEmail } = useAuthViewModel()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const navigation = useNavigation<AppStackScreenProps<"Auth">["navigation"]>()
 
   const handleContinue = async () => {
-    const userId = email ? await deriveUserIdFromEmail(email.trim().toLowerCase()) : await generateUuidV4()
+    const normalizedEmail = email.trim().toLowerCase()
+    if (normalizedEmail && password) {
+      try {
+        await loginWithEmail(normalizedEmail, password)
+      } catch (error) {
+        console.warn("Login failed, continuing offline", error)
+      }
+    }
+
+    const userId = normalizedEmail ? await deriveUserIdFromEmail(normalizedEmail) : await generateUuidV4()
     await setCurrentUserId(userId)
     await setSessionMode("local")
     navigation.reset({ index: 0, routes: [{ name: "Home" }] })
