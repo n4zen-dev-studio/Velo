@@ -90,6 +90,15 @@ export async function countPendingOps() {
   return row?.count ?? 0
 }
 
+export async function countFailedOps() {
+  const database = await getDb()
+  const row = await queryFirst<{ count: number }>(
+    database,
+    "SELECT COUNT(1) as count FROM change_log WHERE status = 'FAILED'",
+  )
+  return row?.count ?? 0
+}
+
 export async function markOpsSent(opIds: string[], db?: SQLiteDatabase) {
   if (opIds.length === 0) return
   const database = db ?? (await getDb())
@@ -141,4 +150,9 @@ export async function pruneSentOps(keepLastN = 2000, olderThanDays = 7) {
        )`,
     [cutoff, keepLastN],
   )
+}
+
+export async function clearSentOps() {
+  const database = await getDb()
+  await execute(database, "DELETE FROM change_log WHERE status = 'SENT'")
 }

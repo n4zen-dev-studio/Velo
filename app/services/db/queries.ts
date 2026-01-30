@@ -3,6 +3,7 @@ import type { SQLiteDatabase } from "expo-sqlite"
 import { withWriteLock } from "@/services/db/writeLock"
 
 const DB_DEBUG = __DEV__
+let dbIsInTransaction = false
 
 function assertSql(sql: string) {
   if (!sql || typeof sql !== "string") {
@@ -97,14 +98,20 @@ export async function executeTransaction<T>(
   task: (txDb: SQLiteDatabase) => Promise<T>,
 ) {
   return withWriteLock(async () => {
+    if (__DEV__ && dbIsInTransaction) {
+      throw new Error("[DB] Nested executeTransaction detected")
+    }
     await executeInternal(db, "BEGIN")
     try {
+      dbIsInTransaction = true
       const result = await task(db)
       await executeInternal(db, "COMMIT")
       return result
     } catch (error) {
       await executeInternal(db, "ROLLBACK")
       throw error
+    } finally {
+      dbIsInTransaction = false
     }
   })
 }

@@ -33,6 +33,7 @@ import { loadDateFnsLocale } from "./utils/formatDate"
 import { initializeDatabase } from "./services/db"
 import * as storage from "./utils/storage"
 import { syncController } from "./services/sync/SyncController"
+import { registerBackgroundSync } from "./services/sync/backgroundSync"
 
 export const NAVIGATION_PERSISTENCE_KEY = "NAVIGATION_STATE"
 
@@ -78,6 +79,7 @@ export function App() {
 
   useEffect(() => {
     syncController.initialize()
+    registerBackgroundSync().catch((error) => console.warn("Background sync registration failed", error))
     return () => syncController.dispose()
   }, [])
 

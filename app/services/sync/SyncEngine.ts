@@ -28,6 +28,7 @@ import { delay } from "@/utils/delay"
 const SYNC_STATE_ID = "singleton"
 const MAX_OPS_PER_BATCH = 50
 const MAX_BATCHES = 5
+const MAX_CHANGES_PER_RUN = 500
 let isSyncRunning = false
 let consecutiveFailures = 0
 
@@ -48,6 +49,7 @@ export async function runSync(reason?: string) {
     let batches = 0
     let cursor = cursorRow?.lastCursor ?? null
 
+    let appliedChanges = 0
     while (batches < MAX_BATCHES) {
       const ops = await listPendingOps(MAX_OPS_PER_BATCH)
       if (ops.length === 0) break
@@ -76,9 +78,12 @@ export async function runSync(reason?: string) {
           await markOpFailed(failed.opId, failed.message, txDb)
         }
 
-        for (const change of response.changes) {
+        const remaining = Math.max(0, MAX_CHANGES_PER_RUN - appliedChanges)
+        const changesToApply = response.changes.slice(0, remaining)
+        for (const change of changesToApply) {
           await applyRemoteChange(txDb, change)
         }
+        appliedChanges += changesToApply.length
 
         const newCursor = response.newCursor ?? cursor
         await execute(
@@ -93,6 +98,7 @@ export async function runSync(reason?: string) {
 
       await pruneSentOps()
       batches += 1
+      if (appliedChanges >= MAX_CHANGES_PER_RUN) break
       void reason
     }
   } finally {

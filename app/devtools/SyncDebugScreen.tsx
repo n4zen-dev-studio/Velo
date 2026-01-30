@@ -5,7 +5,14 @@ import { useEffect, useState } from "react"
 import { GlassCard } from "@/components/GlassCard"
 import { Screen } from "@/components/Screen"
 import { Text } from "@/components/Text"
-import { listFailedOps, listPendingOps, resetFailedToPending } from "@/services/db/repositories/changeLogRepository"
+import {
+  clearSentOps,
+  countFailedOps,
+  listFailedOps,
+  listPendingOps,
+  pruneSentOps,
+  resetFailedToPending,
+} from "@/services/db/repositories/changeLogRepository"
 import { syncController } from "@/services/sync/SyncController"
 import { refreshLocalCounts, useSyncStatus } from "@/services/sync/syncStore"
 import { useAppTheme } from "@/theme/context"
@@ -16,11 +23,20 @@ export function SyncDebugScreen() {
   const syncState = useSyncStatus()
   const [pendingOps, setPendingOps] = useState([] as Awaited<ReturnType<typeof listPendingOps>>)
   const [failedOps, setFailedOps] = useState([] as Awaited<ReturnType<typeof listFailedOps>>)
+  const [failedCount, setFailedCount] = useState(0)
+  const [cursor, setCursor] = useState<string | null>(null)
 
   const load = async () => {
-    const [pending, failed] = await Promise.all([listPendingOps(50), listFailedOps(50)])
+    const [pending, failed, failedTotal, syncStateRow] = await Promise.all([
+      listPendingOps(50),
+      listFailedOps(50),
+      countFailedOps(),
+      getSyncStateRow(),
+    ])
     setPendingOps(pending)
     setFailedOps(failed)
+    setFailedCount(failedTotal)
+    setCursor(syncStateRow?.lastCursor ?? null)
     await refreshLocalCounts()
   }
 
@@ -42,12 +58,18 @@ export function SyncDebugScreen() {
 
       <GlassCard>
         <Text preset="formLabel" text="Sync cursor" />
-        <Text preset="formHelper" text={syncState.lastSyncedAt ?? "—"} />
+        <Text preset="formHelper" text={cursor ?? "—"} />
+        <Text preset="formHelper" text={`Last synced: ${syncState.lastSyncedAt ?? "—"}`} />
       </GlassCard>
 
       <GlassCard>
         <Text preset="formLabel" text="Conflicts" />
         <Text preset="formHelper" text={`${syncState.conflictCount} unresolved`} />
+      </GlassCard>
+
+      <GlassCard>
+        <Text preset="formLabel" text="Failed ops" />
+        <Text preset="formHelper" text={`${failedCount} failed`} />
       </GlassCard>
 
       <GlassCard>
@@ -96,9 +118,30 @@ export function SyncDebugScreen() {
           <Text preset="formLabel" text="Trigger sync" />
         </Pressable>
         <Pressable style={themed($button)} onPress={() => resetFailedToPending().then(load)}>
-          <Text preset="formLabel" text="Reset failed → pending" />
+          <Text preset="formLabel" text="Retry failed → pending" />
         </Pressable>
       </View>
+
+      {__DEV__ ? (
+        <View style={themed($buttonRow)}>
+          <Pressable style={themed($button)} onPress={() => clearSentOps().then(load)}>
+            <Text preset="formLabel" text="Clear SENT ops" />
+          </Pressable>
+          <Pressable style={themed($button)} onPress={() => pruneSentOps(2000, 7).then(load)}>
+            <Text preset="formLabel" text="Prune SENT ops" />
+          </Pressable>
+        </View>
+      ) : null}
+
+      <Pressable
+        style={themed($button)}
+        onPress={async () => {
+          const snapshot = await buildDebugSnapshot()
+          console.log("[SYNC] Debug snapshot", snapshot)
+        }}
+      >
+        <Text preset="formLabel" text="Export debug snapshot" />
+      </Pressable>
     </Screen>
   )
 }
@@ -139,3 +182,20 @@ const $button: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
   borderColor: colors.palette.neutral300,
   backgroundColor: colors.palette.neutral100,
 })
+
+async function getSyncStateRow() {
+  const { getDb } = await import("@/services/db/db")
+  const { queryFirst } = await import("@/services/db/queries")
+  const db = await getDb()
+  return queryFirst<{ lastCursor: string | null }>(db, "SELECT lastCursor FROM sync_state WHERE id = ?", ["singleton"])
+}
+
+async function buildDebugSnapshot() {
+  const { getDb } = await import("@/services/db/db")
+  const { queryAll, queryFirst } = await import("@/services/db/queries")
+  const db = await getDb()
+  const syncState = await queryFirst(db, "SELECT * FROM sync_state WHERE id = ?", ["singleton"])
+  const changeLog = await queryAll(db, "SELECT * FROM change_log ORDER BY createdAt DESC LIMIT 20")
+  const conflicts = await queryAll(db, "SELECT * FROM conflicts ORDER BY createdAt DESC LIMIT 5")
+  return { syncState, changeLog, conflicts }
+}

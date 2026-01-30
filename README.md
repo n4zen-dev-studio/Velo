@@ -1,77 +1,78 @@
-# Welcome to your new ignited app!
+# TaskTrak — Offline-first Jira‑lite
 
-> The latest and greatest boilerplate for Infinite Red opinions
+## Overview
+TaskTrak is a senior‑level offline‑first task tracker inspired by Jira. It uses a local SQLite database, an append‑only change log, idempotent sync, and conflict resolution UX to handle intermittent connectivity. The app prioritizes local responsiveness while providing reliable sync when network returns.
 
-This is the boilerplate that [Infinite Red](https://infinite.red) uses as a way to test bleeding-edge changes to our React Native stack.
+## Why Offline‑First
+Real teams work on the move. TaskTrak treats local data as the source of truth and syncs in the background:
+- Fast, responsive UI even without network.
+- Durable local writes with encrypted sensitive fields.
+- Eventual consistency via change log and delta sync.
 
-- [Quick start documentation](https://github.com/infinitered/ignite/blob/master/docs/boilerplate/Boilerplate.md)
-- [Full documentation](https://github.com/infinitered/ignite/blob/master/docs/README.md)
+## Sync Architecture (high‑level)
+1) Local mutations update SQLite and enqueue a change_log op.
+2) SyncEngine pushes ops to the server in batches.
+3) Server acks opIds (idempotent via op_dedup) and returns delta changes since cursor.
+4) Client applies changes or creates conflicts when local edits exist.
 
-## Getting Started
+## Conflict Resolution Strategy
+- If local edits are pending or local is newer than remote, a conflict is recorded.
+- Conflict resolution UI supports Keep Local, Use Remote, or Manual Merge.
+- Resolution enqueues a new UPSERT op and marks conflict RESOLVED.
 
-```bash
-bun install
-bun run start
+## Tech Stack
+- React Native (Ignite), Expo
+- SQLite (expo-sqlite)
+- Secure store (expo-secure-store)
+- Fastify + Prisma + Postgres
+- JWT access + refresh tokens
+
+## Tradeoffs & Future Work
+- No server‑side merge in v1 (last‑write‑wins).
+- Background sync is best‑effort, not guaranteed.
+- Future: conflict auto‑merge heuristics, project/member sync, and server‑side audit logs.
+
+---
+
+## Architecture Diagrams (Mermaid)
+
+### Local‑first data flow
+```mermaid
+flowchart TD
+  UI[UI] -->|mutate| Repo[Repositories]
+  Repo -->|write| SQLite[(SQLite)]
+  Repo -->|enqueue| ChangeLog[change_log]
+  ChangeLog --> SyncEngine[SyncEngine]
+  SyncEngine -->|push| Server[/Sync API/]
 ```
 
-To make things work on your local simulator, or on your phone, you need first to [run `eas build`](https://github.com/infinitered/ignite/blob/master/docs/expo/EAS.md). We have many shortcuts on `package.json` to make it easier:
-
-```bash
-bun run build:ios:sim # build for ios simulator
-bun run build:ios:device # build for ios device
-bun run build:ios:prod # build for ios device
+### Sync push/pull cycle
+```mermaid
+sequenceDiagram
+  participant Client
+  participant Server
+  Client->>Server: POST /sync (ops, cursor)
+  Server->>Server: apply ops + dedupe + log server_changes
+  Server-->>Client: ackOpIds + changes + newCursor
+  Client->>Client: mark ops SENT
+  Client->>Client: apply changes or create conflicts
 ```
 
-### `./assets`
-
-This directory is designed to organize and store various assets, making it easy for you to manage and use them in your application. The assets are further categorized into subdirectories, including `icons` and `images`:
-
-```tree
-assets
-├── icons
-└── images
+### Conflict resolution flow
+```mermaid
+flowchart TD
+  Change[Incoming server change] --> Check{Local pending or newer?}
+  Check -- No --> Apply[Apply to local DB]
+  Check -- Yes --> Conflict[Create conflict row]
+  Conflict --> Resolve[User resolves]
+  Resolve --> Enqueue[Enqueue resolution op]
 ```
 
-**icons**
-This is where your icon assets will live. These icons can be used for buttons, navigation elements, or any other UI components. The recommended format for icons is PNG, but other formats can be used as well.
+---
 
-Ignite comes with a built-in `Icon` component. You can find detailed usage instructions in the [docs](https://github.com/infinitered/ignite/blob/master/docs/boilerplate/app/components/Icon.md).
-
-**images**
-This is where your images will live, such as background images, logos, or any other graphics. You can use various formats such as PNG, JPEG, or GIF for your images.
-
-Another valuable built-in component within Ignite is the `AutoImage` component. You can find detailed usage instructions in the [docs](https://github.com/infinitered/ignite/blob/master/docs/Components-AutoImage.md).
-
-How to use your `icon` or `image` assets:
-
-```typescript
-import { Image } from 'react-native';
-
-const MyComponent = () => {
-  return (
-    <Image source={require('assets/images/my_image.png')} />
-  );
-};
-```
-
-## Running Maestro end-to-end tests
-
-Follow our [Maestro Setup](https://ignitecookbook.com/docs/recipes/MaestroSetup) recipe.
-
-## Next Steps
-
-### Ignite Cookbook
-
-[Ignite Cookbook](https://ignitecookbook.com/) is an easy way for developers to browse and share code snippets (or “recipes”) that actually work.
-
-### Upgrade Ignite boilerplate
-
-Read our [Upgrade Guide](https://ignitecookbook.com/docs/recipes/UpdatingIgnite) to learn how to upgrade your Ignite project.
-
-## Community
-
-⭐️ Help us out by [starring on GitHub](https://github.com/infinitered/ignite), filing bug reports in [issues](https://github.com/infinitered/ignite/issues) or [ask questions](https://github.com/infinitered/ignite/discussions).
-
-💬 Join us on [Slack](https://join.slack.com/t/infiniteredcommunity/shared_invite/zt-1f137np4h-zPTq_CbaRFUOR_glUFs2UA) to discuss.
-
-📰 Make our Editor-in-chief happy by [reading the React Native Newsletter](https://reactnativenewsletter.com/).
+## Demo Checklist
+- Offline create/edit
+- Reconnect + sync
+- Conflict creation
+- Conflict resolution
+- Background sync (best effort)

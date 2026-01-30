@@ -21,6 +21,9 @@
       "foregroundImage": "./assets/images/app-icon-android-adaptive-foreground.png",
       "backgroundImage": "./assets/images/app-icon-android-adaptive-background.png"
     },
+    "permissions": [
+      "RECEIVE_BOOT_COMPLETED"
+    ],
     "splash": {
       "backgroundColor": "#171418"
     },
@@ -33,6 +36,11 @@
     "bundleIdentifier": "com.n4zen.tasktrak",
     "splash": {
       "backgroundColor": "#171418"
+    },
+    "infoPlist": {
+      "UIBackgroundModes": [
+        "fetch"
+      ]
     }
   },
   "web": {
