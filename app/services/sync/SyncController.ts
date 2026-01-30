@@ -10,6 +10,7 @@ import {
 } from "@/services/sync/syncStore"
 import { runSync } from "@/services/sync/SyncEngine"
 import { normalizeSyncError } from "@/services/sync/syncErrors"
+import { getSessionMode } from "@/services/sync/identity"
 
 export type SyncTriggerReason = "app_open" | "manual" | "net_regain" | "background" | "app_resume"
 
@@ -70,6 +71,11 @@ class SyncController {
 
     try {
       this.lastTriggerAt = now
+      const sessionMode = await getSessionMode()
+      if (sessionMode === "local") {
+        setPhase("idle")
+        return
+      }
       const { isOnline } = getSyncState()
       if (!isOnline) {
         await refreshLocalCounts()

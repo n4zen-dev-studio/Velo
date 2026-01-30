@@ -17,6 +17,7 @@ import { SettingsScreen } from "@/screens/SettingsScreen"
 import { TaskDetailScreen } from "@/screens/TaskDetailScreen"
 import { TaskEditorScreen } from "@/screens/TaskEditorScreen"
 import { SyncDebugScreen } from "@/devtools/SyncDebugScreen"
+import { VerifyEmailScreen } from "@/screens/VerifyEmailScreen"
 import { useAppTheme } from "@/theme/context"
 
 import type { AppStackParamList, NavigationProps } from "./navigationTypes"
@@ -48,6 +49,7 @@ const AppStack = () => {
       }}
     >
       <Stack.Screen name="Auth" component={AuthScreen} />
+      <Stack.Screen name="VerifyEmail" component={VerifyEmailScreen} />
       <Stack.Screen name="Home" component={HomeScreen} />
       <Stack.Screen name="TaskEditor" component={TaskEditorScreen} />
       <Stack.Screen name="TaskDetail" component={TaskDetailScreen} />

@@ -16,26 +16,69 @@ import {
   setCurrentUserId,
   setSessionMode,
 } from "@/services/sync/identity"
+import { setTokens } from "@/services/api/tokenStore"
 
 import { useAuthViewModel } from "./useAuthViewModel"
 
 export function AuthScreen() {
   const { themed } = useAppTheme()
-  const { offlineNotice, loginWithEmail } = useAuthViewModel()
+  const { offlineNotice, loginWithEmail, signupWithEmail } = useAuthViewModel()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [error, setError] = useState<string | null>(null)
   const navigation = useNavigation<AppStackScreenProps<"Auth">["navigation"]>()
 
-  const handleContinue = async () => {
+  const handleLogin = async () => {
+    setError(null)
     const normalizedEmail = email.trim().toLowerCase()
-    if (normalizedEmail && password) {
-      try {
-        await loginWithEmail(normalizedEmail, password)
-      } catch (error) {
-        console.warn("Login failed, continuing offline", error)
-      }
+    if (!normalizedEmail || !password) {
+      setError("Email and password are required.")
+      return
     }
+    try {
+      const auth = await loginWithEmail(normalizedEmail, password)
+      await setTokens(auth.accessToken, auth.refreshToken)
+      const userId = parseUserIdFromJwt(auth.accessToken)
+      if (!userId) {
+        setError("Unable to read user session. Please try again.")
+        return
+      }
+      await setCurrentUserId(userId)
+      await setSessionMode("remote")
+      navigation.reset({ index: 0, routes: [{ name: "Home" }] })
+    } catch (err: any) {
+      if (err?.type === "EMAIL_NOT_VERIFIED") {
+        navigation.navigate("VerifyEmail", { email: normalizedEmail, password })
+        return
+      }
+      if (err?.type === "INVALID_CREDENTIALS") {
+        setError("Invalid email or password.")
+        return
+      }
+      setError("Login failed. Please try again.")
+    }
+  }
 
+  const handleSignup = async () => {
+    setError(null)
+    const normalizedEmail = email.trim().toLowerCase()
+    if (!normalizedEmail || !password) {
+      setError("Email and password are required.")
+      return
+    }
+    try {
+      const result = await signupWithEmail(normalizedEmail, password)
+      if (result.requiresEmailVerification) {
+        navigation.navigate("VerifyEmail", { email: normalizedEmail, password })
+      }
+    } catch {
+      setError("Sign up failed. Please try again.")
+    }
+  }
+
+  const handleContinueOffline = async () => {
+    setError(null)
+    const normalizedEmail = email.trim().toLowerCase()
     const userId = normalizedEmail ? await deriveUserIdFromEmail(normalizedEmail) : await generateUuidV4()
     await setCurrentUserId(userId)
     await setSessionMode("local")
@@ -61,9 +104,13 @@ export function AuthScreen() {
         <View style={themed($spacer)} />
         <Text preset="formLabel" text="Password" />
         <TextField value={password} onChangeText={setPassword} placeholder="••••••••" secureTextEntry />
+        {error ? <Text preset="formHelper" text={error} /> : null}
         <View style={themed($buttonRow)}>
-          <Button text="Login" preset="default" onPress={handleContinue} />
-          <Button text="Continue Offline" preset="reversed" onPress={handleContinue} />
+          <Button text="Login" preset="default" onPress={handleLogin} />
+          <Button text="Sign up" preset="reversed" onPress={handleSignup} />
+        </View>
+        <View style={themed($buttonRow)}>
+          <Button text="Continue Offline" preset="reversed" onPress={handleContinueOffline} />
         </View>
       </GlassCard>
 
@@ -72,6 +119,23 @@ export function AuthScreen() {
       </GlassCard>
     </Screen>
   )
+}
+
+function parseUserIdFromJwt(token: string) {
+  try {
+    const payload = token.split(".")[1]
+    const base64 = payload.replace(/-/g, "+").replace(/_/g, "/")
+    const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), "=")
+    const decoded =
+      typeof atob === "function"
+        ? atob(padded)
+        : // @ts-expect-error Buffer may exist in RN
+          Buffer.from(padded, "base64").toString("binary")
+    const data = JSON.parse(decoded)
+    return data.sub as string | undefined
+  } catch {
+    return undefined
+  }
 }
 
 const $screen: ThemedStyle<ViewStyle> = ({ spacing }) => ({
