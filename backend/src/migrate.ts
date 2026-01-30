@@ -1,10 +1,12 @@
 import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 
-import { pool } from "./db"
+import { PrismaClient } from "@prisma/client"
+
+const prisma = new PrismaClient()
 
 async function ensureMigrationsTable() {
-  await pool.query(`
+  await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
       id TEXT PRIMARY KEY,
       applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -13,8 +15,8 @@ async function ensureMigrationsTable() {
 }
 
 async function getApplied() {
-  const result = await pool.query<{ id: string }>("SELECT id FROM schema_migrations")
-  return new Set(result.rows.map((row) => row.id))
+  const rows = await prisma.$queryRaw<{ id: string }[]>`SELECT id FROM schema_migrations`
+  return new Set(rows.map((row) => row.id))
 }
 
 async function applyMigrations() {
@@ -29,24 +31,25 @@ async function applyMigrations() {
     if (applied.has(file)) continue
     const sql = readFileSync(join(migrationsDir, file), "utf8")
     console.log(`[migrate] applying ${file}`)
-    await pool.query("BEGIN")
+    await prisma.$executeRawUnsafe("BEGIN")
     try {
-      await pool.query(sql)
-      await pool.query("INSERT INTO schema_migrations (id) VALUES ($1)", [file])
-      await pool.query("COMMIT")
+      await prisma.$executeRawUnsafe(sql)
+      await prisma.$executeRawUnsafe("INSERT INTO schema_migrations (id) VALUES ($1)", file)
+      await prisma.$executeRawUnsafe("COMMIT")
     } catch (error) {
-      await pool.query("ROLLBACK")
+      await prisma.$executeRawUnsafe("ROLLBACK")
       throw error
     }
   }
 }
 
 applyMigrations()
-  .then(() => {
+  .then(async () => {
     console.log("[migrate] done")
-    return pool.end()
+    await prisma.$disconnect()
   })
-  .catch((error) => {
+  .catch(async (error) => {
     console.error("[migrate] failed", error)
+    await prisma.$disconnect()
     process.exit(1)
   })

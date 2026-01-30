@@ -7,18 +7,20 @@
     "dev": "tsx watch src/server.ts",
     "start": "node dist/server.js",
     "build": "tsc -p tsconfig.json",
-    "migrate": "tsx src/migrate.ts"
+    "migrate": "tsx src/migrate.ts",
+    "prisma:generate": "prisma generate"
   },
   "dependencies": {
     "fastify": "^4.27.0",
-    "fastify-jwt": "^6.2.0",
-    "pg": "^8.11.5",
+    "@fastify/jwt": "^7.0.1",
     "bcryptjs": "^2.4.3",
-    "dotenv": "^16.4.5"
+    "dotenv": "^16.4.5",
+    "@prisma/client": "^5.22.0"
   },
   "devDependencies": {
     "tsx": "^4.20.3",
     "typescript": "^5.9.2",
-    "@types/node": "^20.12.12"
+    "@types/node": "^20.12.12",
+    "prisma": "^5.22.0"
   }
 }

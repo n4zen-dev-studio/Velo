@@ -15,7 +15,6 @@ export interface SyncOpPayload {
 export interface SyncRequest {
   cursor: string | null
   deviceId: string
-  userId: string
   ops: SyncOpPayload[]
 }
 
@@ -28,17 +27,8 @@ export interface SyncChange {
   updatedAt: string
 }
 
-export interface SyncConflict {
-  entityType: SyncEntityType
-  entityId: string
-  localBaseRevision: string
-  remoteRevision: string
-  remotePayload: Record<string, unknown>
-}
-
 export interface SyncResponse {
-  newCursor: string
+  newCursor: string | null
   ackOpIds: string[]
   changes: SyncChange[]
-  conflicts?: SyncConflict[]
 }

@@ -1,0 +1,82 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String         @id @default(uuid()) @db.Uuid
+  email        String         @unique
+  passwordHash String         @map("password_hash")
+  createdAt    DateTime       @default(now()) @map("created_at")
+  refreshTokens RefreshToken[]
+  serverChanges ServerChange[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  tokenHash  String   @map("token_hash")
+  revokedAt  DateTime? @map("revoked_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("refresh_tokens")
+}
+
+model Task {
+  id             String   @id @db.Uuid
+  projectId      String?  @map("projectid") @db.Uuid
+  title          String
+  description    String
+  statusId       String   @map("statusid")
+  priority       String
+  assigneeUserId String?  @map("assigneeuserid") @db.Uuid
+  createdByUserId String  @map("createdbyuserid") @db.Uuid
+  updatedAt      DateTime @map("updatedat")
+  revision       String
+  deletedAt      DateTime? @map("deletedat")
+
+  @@map("tasks")
+}
+
+model Comment {
+  id             String   @id @db.Uuid
+  taskId         String   @map("taskid") @db.Uuid
+  body           String
+  createdByUserId String  @map("createdbyuserid") @db.Uuid
+  createdAt      DateTime @map("createdat")
+  updatedAt      DateTime @map("updatedat")
+  revision       String
+  deletedAt      DateTime? @map("deletedat")
+
+  @@map("comments")
+}
+
+model OpDedup {
+  opId      String   @id @map("opid")
+  userId    String   @map("user_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("op_dedup")
+}
+
+model ServerChange {
+  id         BigInt   @id @default(autoincrement())
+  userId     String   @map("user_id") @db.Uuid
+  entityType String   @map("entitytype")
+  entityId   String   @map("entityid")
+  opType     String   @map("optype")
+  payload    Json
+  revision   String
+  updatedAt  DateTime @map("updatedat")
+  createdAt  DateTime @default(now()) @map("createdat")
+
+  @@map("server_changes")
+}

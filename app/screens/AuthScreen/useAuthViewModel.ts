@@ -1,9 +1,9 @@
-import Config from "@/config"
-import { createApiClient } from "@/services/api/apiClient"
+import { BASE_URL } from "@/config/api"
+import { createHttpClient } from "@/services/api/httpClient"
 import { login } from "@/services/api/authApi"
 
 export const useAuthViewModel = () => {
-  const client = createApiClient(Config.apiUrl)
+  const client = createHttpClient(BASE_URL)
 
   const loginWithEmail = async (email: string, password: string) => {
     return login(client, email, password)

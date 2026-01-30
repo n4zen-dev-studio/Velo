@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS op_dedup (
 
 CREATE TABLE IF NOT EXISTS server_changes (
   id BIGSERIAL PRIMARY KEY,
+  user_id UUID NOT NULL,
   entitytype TEXT NOT NULL,
   entityid TEXT NOT NULL,
   optype TEXT NOT NULL,
@@ -58,3 +59,4 @@ CREATE TABLE IF NOT EXISTS server_changes (
 );
 
 CREATE INDEX IF NOT EXISTS idx_server_changes_entity ON server_changes (entitytype, entityid);
+CREATE INDEX IF NOT EXISTS idx_server_changes_user ON server_changes (user_id, id);

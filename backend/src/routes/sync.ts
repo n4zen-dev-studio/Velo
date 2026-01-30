@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify"
 
-import { query } from "../db"
+import { prisma } from "../prisma"
 
 interface SyncOp {
   opId: string
@@ -16,7 +16,6 @@ interface SyncOp {
 interface SyncRequest {
   cursor: string | null
   deviceId: string
-  userId: string
   ops: SyncOp[]
 }
 
@@ -27,180 +26,168 @@ export async function syncRoutes(app: FastifyInstance) {
 
     const ackOpIds: string[] = []
 
-    await query("BEGIN")
-    try {
+    await prisma.$transaction(async (tx) => {
       for (const op of body.ops) {
         ackOpIds.push(op.opId)
-        const existing = await query<{ opid: string }>(
-          "SELECT opid FROM op_dedup WHERE opid = $1",
-          [op.opId],
-        )
-        if (existing.rows.length > 0) continue
+        const existing = await tx.opDedup.findUnique({ where: { opId: op.opId } })
+        if (existing) continue
 
         if (op.entityType === "task") {
-          await applyTaskOp(userId, op)
+          await applyTaskOp(tx, userId, op)
         }
         if (op.entityType === "comment") {
-          await applyCommentOp(userId, op)
+          await applyCommentOp(tx, userId, op)
         }
 
-        await query(
-          "INSERT INTO op_dedup (opid, user_id) VALUES ($1, $2)",
-          [op.opId, userId],
-        )
+        await tx.opDedup.create({ data: { opId: op.opId, userId } })
       }
+    })
 
-      const cursorValue = body.cursor ? Number(body.cursor) : 0
-      const changeRows = await query<{
-        id: number
-        entitytype: "task" | "comment"
-        entityid: string
-        optype: "UPSERT" | "DELETE"
-        payload: Record<string, unknown>
-        revision: string
-        updatedat: string
-      }>(
-        `SELECT id, entitytype, entityid, optype, payload, revision, updatedat
-         FROM server_changes
-         WHERE id > $1
-         ORDER BY id ASC
-         LIMIT 500`,
-        [cursorValue],
-      )
+    const cursorValue = body.cursor ? BigInt(body.cursor) : BigInt(0)
+    const changes = await prisma.serverChange.findMany({
+      where: { userId, id: { gt: cursorValue } },
+      orderBy: { id: "asc" },
+      take: 500,
+    })
 
-      const newCursor =
-        changeRows.rows.length > 0
-          ? String(changeRows.rows[changeRows.rows.length - 1].id)
-          : String(cursorValue)
+    const newCursor = changes.length > 0 ? String(changes[changes.length - 1].id) : body.cursor
 
-      await query("COMMIT")
-
-      return reply.send({
-        newCursor,
-        ackOpIds,
-        changes: changeRows.rows.map((row) => ({
-          entityType: row.entitytype,
-          entityId: row.entityid,
-          opType: row.optype,
-          payload: row.payload,
-          revision: row.revision,
-          updatedAt: row.updatedat,
-        })),
-        conflicts: [],
-      })
-    } catch (error) {
-      await query("ROLLBACK")
-      throw error
-    }
+    return reply.send({
+      newCursor,
+      ackOpIds,
+      changes: changes.map((row) => ({
+        entityType: row.entityType as "task" | "comment",
+        entityId: row.entityId,
+        opType: row.opType as "UPSERT" | "DELETE",
+        payload: row.payload as Record<string, unknown>,
+        revision: row.revision,
+        updatedAt: row.updatedAt.toISOString(),
+      })),
+    })
   })
 }
 
-async function applyTaskOp(userId: string, op: SyncOp) {
+async function applyTaskOp(tx: typeof prisma, userId: string, op: SyncOp) {
   const patch = op.patch as any
+  const now = new Date()
+  const revision = `srv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+
   if (op.opType === "DELETE") {
-    const updatedAt = patch.updatedAt ?? new Date().toISOString()
-    const revision = `srv-${Date.now()}`
-    await query(
-      `UPDATE tasks
-       SET deletedat = $1, updatedat = $2, revision = $3
-       WHERE id = $4`,
-      [updatedAt, updatedAt, revision, op.entityId],
-    )
-    await logChange("task", op.entityId, "DELETE", patch, revision, updatedAt)
+    await tx.task.update({
+      where: { id: op.entityId },
+      data: { deletedAt: now, updatedAt: now, revision },
+    }).catch(async () => {
+      await tx.task.create({
+        data: {
+          id: op.entityId,
+          projectId: patch.projectId ?? null,
+          title: patch.title ?? "",
+          description: patch.description ?? "",
+          statusId: patch.statusId ?? "todo",
+          priority: patch.priority ?? "medium",
+          assigneeUserId: patch.assigneeUserId ?? null,
+          createdByUserId: patch.createdByUserId ?? userId,
+          updatedAt: now,
+          revision,
+          deletedAt: now,
+        },
+      })
+    })
+
+    await logChange(tx, userId, "task", op.entityId, "DELETE", patch, revision, now)
     return
   }
 
-  const updatedAt = patch.updatedAt ?? new Date().toISOString()
-  const revision = `srv-${Date.now()}`
-  await query(
-    `INSERT INTO tasks (
-        id, projectid, title, description, statusid, priority,
-        assigneeuserid, createdbyuserid, updatedat, revision, deletedat
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-      ON CONFLICT(id) DO UPDATE SET
-        projectid = excluded.projectid,
-        title = excluded.title,
-        description = excluded.description,
-        statusid = excluded.statusid,
-        priority = excluded.priority,
-        assigneeuserid = excluded.assigneeuserid,
-        createdbyuserid = excluded.createdbyuserid,
-        updatedat = excluded.updatedat,
-        revision = excluded.revision,
-        deletedat = excluded.deletedat`,
-    [
-      op.entityId,
-      patch.projectId ?? null,
-      patch.title,
-      patch.description,
-      patch.statusId,
-      patch.priority,
-      patch.assigneeUserId ?? null,
-      patch.createdByUserId ?? userId,
-      updatedAt,
-      revision,
-      patch.deletedAt ?? null,
-    ],
-  )
+  const record = {
+    id: op.entityId,
+    projectId: patch.projectId ?? null,
+    title: patch.title,
+    description: patch.description,
+    statusId: patch.statusId,
+    priority: patch.priority,
+    assigneeUserId: patch.assigneeUserId ?? null,
+    createdByUserId: patch.createdByUserId ?? userId,
+    updatedAt: now,
+    revision,
+    deletedAt: patch.deletedAt ?? null,
+  }
 
-  await logChange("task", op.entityId, "UPSERT", patch, revision, updatedAt)
+  await tx.task.upsert({
+    where: { id: op.entityId },
+    update: record,
+    create: record,
+  })
+
+  await logChange(tx, userId, "task", op.entityId, "UPSERT", record, revision, now)
 }
 
-async function applyCommentOp(userId: string, op: SyncOp) {
+async function applyCommentOp(tx: typeof prisma, userId: string, op: SyncOp) {
   const patch = op.patch as any
+  const now = new Date()
+  const revision = `srv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+
   if (op.opType === "DELETE") {
-    const updatedAt = patch.updatedAt ?? new Date().toISOString()
-    const revision = `srv-${Date.now()}`
-    await query(
-      `UPDATE comments
-       SET deletedat = $1, updatedat = $2, revision = $3
-       WHERE id = $4`,
-      [updatedAt, updatedAt, revision, op.entityId],
-    )
-    await logChange("comment", op.entityId, "DELETE", patch, revision, updatedAt)
+    await tx.comment.update({
+      where: { id: op.entityId },
+      data: { deletedAt: now, updatedAt: now, revision },
+    }).catch(async () => {
+      await tx.comment.create({
+        data: {
+          id: op.entityId,
+          taskId: patch.taskId,
+          body: patch.body ?? "",
+          createdByUserId: patch.createdByUserId ?? userId,
+          createdAt: patch.createdAt ? new Date(patch.createdAt) : now,
+          updatedAt: now,
+          revision,
+          deletedAt: now,
+        },
+      })
+    })
+
+    await logChange(tx, userId, "comment", op.entityId, "DELETE", patch, revision, now)
     return
   }
 
-  const updatedAt = patch.updatedAt ?? new Date().toISOString()
-  const revision = `srv-${Date.now()}`
-  await query(
-    `INSERT INTO comments (
-        id, taskid, body, createdbyuserid, createdat, updatedat, revision, deletedat
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-      ON CONFLICT(id) DO UPDATE SET
-        taskid = excluded.taskid,
-        body = excluded.body,
-        createdbyuserid = excluded.createdbyuserid,
-        createdat = excluded.createdat,
-        updatedat = excluded.updatedat,
-        revision = excluded.revision,
-        deletedat = excluded.deletedat`,
-    [
-      op.entityId,
-      patch.taskId,
-      patch.body,
-      patch.createdByUserId ?? userId,
-      patch.createdAt ?? updatedAt,
-      updatedAt,
-      revision,
-      patch.deletedAt ?? null,
-    ],
-  )
+  const record = {
+    id: op.entityId,
+    taskId: patch.taskId,
+    body: patch.body,
+    createdByUserId: patch.createdByUserId ?? userId,
+    createdAt: patch.createdAt ? new Date(patch.createdAt) : now,
+    updatedAt: now,
+    revision,
+    deletedAt: patch.deletedAt ?? null,
+  }
 
-  await logChange("comment", op.entityId, "UPSERT", patch, revision, updatedAt)
+  await tx.comment.upsert({
+    where: { id: op.entityId },
+    update: record,
+    create: record,
+  })
+
+  await logChange(tx, userId, "comment", op.entityId, "UPSERT", record, revision, now)
 }
 
 async function logChange(
+  tx: typeof prisma,
+  userId: string,
   entityType: "task" | "comment",
   entityId: string,
   opType: "UPSERT" | "DELETE",
   payload: Record<string, unknown>,
   revision: string,
-  updatedAt: string,
+  updatedAt: Date,
 ) {
-  await query(
-    `INSERT INTO server_changes (entitytype, entityid, optype, payload, revision, updatedat)
-     VALUES ($1,$2,$3,$4,$5,$6)`,
-    [entityType, entityId, opType, payload, revision, updatedAt],
-  )
+  await tx.serverChange.create({
+    data: {
+      userId,
+      entityType,
+      entityId,
+      opType,
+      payload,
+      revision,
+      updatedAt,
+    },
+  })
 }
