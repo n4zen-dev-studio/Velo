@@ -195,7 +195,28 @@ async function buildDebugSnapshot() {
   const { queryAll, queryFirst } = await import("@/services/db/queries")
   const db = await getDb()
   const syncState = await queryFirst(db, "SELECT * FROM sync_state WHERE id = ?", ["singleton"])
+  const pendingCount = await queryFirst<{ count: number }>(
+    db,
+    "SELECT COUNT(1) as count FROM change_log WHERE status = 'PENDING'",
+  )
+  const failedCount = await queryFirst<{ count: number }>(
+    db,
+    "SELECT COUNT(1) as count FROM change_log WHERE status = 'FAILED'",
+  )
+  const conflictCount = await queryFirst<{ count: number }>(
+    db,
+    "SELECT COUNT(1) as count FROM conflicts WHERE status = 'OPEN'",
+  )
   const changeLog = await queryAll(db, "SELECT * FROM change_log ORDER BY createdAt DESC LIMIT 20")
   const conflicts = await queryAll(db, "SELECT * FROM conflicts ORDER BY createdAt DESC LIMIT 5")
-  return { syncState, changeLog, conflicts }
+  return {
+    syncState,
+    counts: {
+      pending: pendingCount?.count ?? 0,
+      failed: failedCount?.count ?? 0,
+      conflicts: conflictCount?.count ?? 0,
+    },
+    changeLog,
+    conflicts,
+  }
 }

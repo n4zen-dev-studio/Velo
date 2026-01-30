@@ -52,7 +52,7 @@ export async function runSync(reason?: string) {
     let appliedChanges = 0
     while (batches < MAX_BATCHES) {
       const ops = await listPendingOps(MAX_OPS_PER_BATCH)
-      if (ops.length === 0) break
+      if (ops.length === 0 && batches > 0) break
 
       const payload: SyncRequest = {
         cursor,
@@ -99,6 +99,7 @@ export async function runSync(reason?: string) {
       await pruneSentOps()
       batches += 1
       if (appliedChanges >= MAX_CHANGES_PER_RUN) break
+      if (ops.length === 0) break
       void reason
     }
   } finally {
