@@ -1,12 +1,15 @@
-import { View, ViewStyle } from "react-native"
+import { Pressable, View, ViewStyle } from "react-native"
+import { useNavigation } from "@react-navigation/native"
 
 import { Text } from "@/components/Text"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
 import { deriveSyncBadgeState, useSyncStatus } from "@/services/sync/syncStore"
+import type { AppStackScreenProps } from "@/navigators/navigationTypes"
 
 export function SyncBadge() {
   const { themed } = useAppTheme()
+  const navigation = useNavigation<AppStackScreenProps<"Home">["navigation"]>()
   const syncState = useSyncStatus()
   const badgeState = deriveSyncBadgeState(syncState)
 
@@ -20,10 +23,12 @@ export function SyncBadge() {
   })()
 
   return (
-    <View style={themed($badge)}>
-      <View style={themed($dot(badgeState))} />
-      <Text preset="formLabel" text={label} />
-    </View>
+    <Pressable onPress={() => navigation.navigate("ConflictList")}>
+      <View style={themed($badge)}>
+        <View style={themed($dot(badgeState))} />
+        <Text preset="formLabel" text={label} />
+      </View>
+    </Pressable>
   )
 }
 

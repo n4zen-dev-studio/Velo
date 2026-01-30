@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Pressable, View, ViewStyle } from "react-native"
 import { useNavigation, useRoute } from "@react-navigation/native"
 import { Controller, useForm } from "react-hook-form"
@@ -13,6 +13,7 @@ import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
 import type { AppStackScreenProps } from "@/navigators/navigationTypes"
 import { useSyncStatus } from "@/services/sync/syncStore"
+import { hasOpenConflict } from "@/services/db/repositories/conflictsRepository"
 
 import { useTaskEditorViewModel } from "./useTaskEditorViewModel"
 
@@ -24,6 +25,12 @@ export function TaskEditorScreen() {
   const { task, statuses, priorityOptions, defaultValues, saveTask, isSaving } =
     useTaskEditorViewModel(taskId, projectId)
   const syncState = useSyncStatus()
+  const [hasConflict, setHasConflict] = useState(false)
+
+  useEffect(() => {
+    if (!taskId) return
+    hasOpenConflict("task", taskId).then(setHasConflict)
+  }, [taskId])
 
   const schema = useMemo(
     () =>
@@ -77,13 +84,32 @@ export function TaskEditorScreen() {
         <Text preset="formHelper" text={task?.projectId ? "Project workspace" : "Personal workspace"} />
       </View>
 
+      {hasConflict ? (
+        <GlassCard>
+          <Text preset="subheading" text="Editing locked" />
+          <Text
+            preset="formHelper"
+            text="This item has a sync conflict and must be resolved before editing."
+          />
+          <View style={themed($buttonRow)}>
+            <Button
+              text="Resolve Conflict"
+              preset="default"
+              onPress={() =>
+                navigation.navigate("ConflictResolution", { entityType: "task", entityId: taskId ?? "" })
+              }
+            />
+          </View>
+        </GlassCard>
+      ) : null}
+
       <GlassCard>
         <Text preset="formLabel" text="Title" />
         <Controller
           control={control}
           name="title"
           render={({ field: { value, onChange } }) => (
-            <TextField value={value} onChangeText={onChange} placeholder="Task title" />
+            <TextField value={value} onChangeText={onChange} placeholder="Task title" editable={!hasConflict} />
           )}
         />
         <View style={themed($spacer)} />
@@ -98,6 +124,7 @@ export function TaskEditorScreen() {
               placeholder="Add a short summary"
               multiline
               numberOfLines={4}
+              editable={!hasConflict}
             />
           )}
         />
@@ -109,7 +136,7 @@ export function TaskEditorScreen() {
           {priorityOptions.map((priority) => (
             <Pressable
               key={priority}
-              onPress={() => setValue("priority", priority)}
+              onPress={() => !hasConflict && setValue("priority", priority)}
               style={[themed($pill), priorityValue === priority && themed($pillActive)]}
             >
               <Text text={priority} />
@@ -124,7 +151,7 @@ export function TaskEditorScreen() {
           {statuses.map((status) => (
             <Pressable
               key={`${status.projectId ?? "personal"}:${status.id}`}
-              onPress={() => setValue("statusId", status.id)}
+              onPress={() => !hasConflict && setValue("statusId", status.id)}
               style={[themed($pill), statusValue === status.id && themed($pillActive)]}
             >
               <Text text={status.name} />
@@ -134,7 +161,12 @@ export function TaskEditorScreen() {
       </GlassCard>
 
       <View style={themed($buttonRow)}>
-        <Button text={isSaving ? "Saving..." : "Save task"} preset="default" onPress={onSubmit} />
+        <Button
+          text={isSaving ? "Saving..." : "Save task"}
+          preset="default"
+          onPress={onSubmit}
+          disabled={hasConflict}
+        />
         <Button text="Discard" preset="reversed" onPress={() => navigation.goBack()} />
       </View>
       <Text

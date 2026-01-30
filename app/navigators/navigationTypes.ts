@@ -8,7 +8,8 @@ export type AppStackParamList = {
   Home: undefined
   TaskEditor: { taskId?: string; projectId?: string }
   TaskDetail: { taskId: string }
-  ConflictResolution: { conflictId: string; taskId: string }
+  ConflictList: undefined
+  ConflictResolution: { entityType: "task" | "comment"; entityId: string }
   Settings: undefined
   SyncDebug: undefined
   // 🔥 Your screens go here

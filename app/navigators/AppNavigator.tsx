@@ -10,7 +10,8 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack"
 import Config from "@/config"
 import { ErrorBoundary } from "@/screens/ErrorScreen/ErrorBoundary"
 import { AuthScreen } from "@/screens/AuthScreen"
-import { ConflictResolutionScreen } from "@/screens/ConflictResolutionScreen"
+import { ConflictResolutionScreen } from "@/screens/ConflictResolution"
+import { ConflictListScreen } from "@/screens/ConflictListScreen"
 import { HomeScreen } from "@/screens/HomeScreen"
 import { SettingsScreen } from "@/screens/SettingsScreen"
 import { TaskDetailScreen } from "@/screens/TaskDetailScreen"
@@ -50,6 +51,7 @@ const AppStack = () => {
       <Stack.Screen name="Home" component={HomeScreen} />
       <Stack.Screen name="TaskEditor" component={TaskEditorScreen} />
       <Stack.Screen name="TaskDetail" component={TaskDetailScreen} />
+      <Stack.Screen name="ConflictList" component={ConflictListScreen} />
       <Stack.Screen name="ConflictResolution" component={ConflictResolutionScreen} />
       <Stack.Screen name="Settings" component={SettingsScreen} />
       <Stack.Screen name="SyncDebug" component={SyncDebugScreen} />
