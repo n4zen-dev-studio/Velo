@@ -1,6 +1,11 @@
 import { getDb } from "@/services/db/db"
 import { execute, executeTransaction, queryFirst } from "@/services/db/queries"
-import { listPendingOps, markOpsSent } from "@/services/db/repositories/changeLogRepository"
+import {
+  listPendingOps,
+  markOpsSent,
+  markOpFailed,
+  pruneSentOps,
+} from "@/services/db/repositories/changeLogRepository"
 import {
   getTaskById,
   markTaskDeletedFromSync,
@@ -18,48 +23,82 @@ import type { SyncChange, SyncRequest } from "@/services/sync/syncContract"
 import { getDeviceId } from "@/services/sync/identity"
 import { refreshLocalCounts } from "@/services/sync/syncStore"
 import { BASE_URL } from "@/config/api"
+import { delay } from "@/utils/delay"
 
 const SYNC_STATE_ID = "singleton"
+const MAX_OPS_PER_BATCH = 50
+const MAX_BATCHES = 5
+let isSyncRunning = false
+let consecutiveFailures = 0
 
-export async function runSync() {
+export async function runSync(reason?: string) {
+  if (isSyncRunning) return
+  isSyncRunning = true
   const db = await getDb()
 
-  const cursorRow = await queryFirst<{ lastCursor: string | null }>(
-    db,
-    "SELECT lastCursor FROM sync_state WHERE id = ?",
-    [SYNC_STATE_ID],
-  )
-
-  const ops = await listPendingOps(100)
-  const deviceId = await getDeviceId()
-
-  const payload: SyncRequest = {
-    cursor: cursorRow?.lastCursor ?? null,
-    deviceId,
-    ops: ops.map(mapChangeLogToOp),
-  }
-
-  const client = createHttpClient(BASE_URL)
-  const response = await syncApi(client, payload)
-
-  await executeTransaction(db, async (txDb) => {
-    await markOpsSent(response.ackOpIds, txDb)
-
-    for (const change of response.changes) {
-      await applyRemoteChange(txDb, change)
-    }
-
-    const newCursor = response.newCursor ?? payload.cursor
-    await execute(
-      txDb,
-      `INSERT INTO sync_state (id, lastCursor, lastSyncedAt)
-       VALUES (?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET lastCursor = excluded.lastCursor, lastSyncedAt = excluded.lastSyncedAt`,
-      [SYNC_STATE_ID, newCursor, new Date().toISOString()],
+  try {
+    const cursorRow = await queryFirst<{ lastCursor: string | null }>(
+      db,
+      "SELECT lastCursor FROM sync_state WHERE id = ?",
+      [SYNC_STATE_ID],
     )
-  })
 
-  await refreshLocalCounts()
+    const deviceId = await getDeviceId()
+    const client = createHttpClient(BASE_URL)
+    let batches = 0
+    let cursor = cursorRow?.lastCursor ?? null
+
+    while (batches < MAX_BATCHES) {
+      const ops = await listPendingOps(MAX_OPS_PER_BATCH)
+      if (ops.length === 0) break
+
+      const payload: SyncRequest = {
+        cursor,
+        deviceId,
+        ops: ops.map(mapChangeLogToOp),
+      }
+
+      let response
+      try {
+        response = await syncApi(client, payload)
+        consecutiveFailures = 0
+      } catch (error) {
+        consecutiveFailures += 1
+        await delay(getBackoffMs(consecutiveFailures))
+        throw error
+      }
+
+      await executeTransaction(db, async (txDb) => {
+        if (response.ackOpIds.length > 0) {
+          await markOpsSent(response.ackOpIds, txDb)
+        }
+        for (const failed of response.failed ?? []) {
+          await markOpFailed(failed.opId, failed.message, txDb)
+        }
+
+        for (const change of response.changes) {
+          await applyRemoteChange(txDb, change)
+        }
+
+        const newCursor = response.newCursor ?? cursor
+        await execute(
+          txDb,
+          `INSERT INTO sync_state (id, lastCursor, lastSyncedAt)
+           VALUES (?, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET lastCursor = excluded.lastCursor, lastSyncedAt = excluded.lastSyncedAt`,
+          [SYNC_STATE_ID, newCursor, new Date().toISOString()],
+        )
+        cursor = newCursor
+      })
+
+      await pruneSentOps()
+      batches += 1
+      void reason
+    }
+  } finally {
+    isSyncRunning = false
+    await refreshLocalCounts()
+  }
 }
 
 function mapChangeLogToOp(op: { opId: string; entityType: string; entityId: string; opType: string; patch: string; baseRevision: string; createdAt: string; projectId: string | null }) {
@@ -84,6 +123,14 @@ async function applyRemoteChange(db: SqliteDb, change: SyncChange) {
       ? await getTaskById(change.entityId)
       : await getCommentById(change.entityId)
     await createConflict(db, change, localPayload)
+    return
+  }
+
+  const local = change.entityType === "task"
+    ? await getTaskById(change.entityId)
+    : await getCommentById(change.entityId)
+  if (local && isLocalNewer(local.updatedAt, change.updatedAt)) {
+    await createConflict(db, change, local)
     return
   }
 
@@ -117,7 +164,7 @@ async function hasPendingOpsForEntity(db: SqliteDb, entityType: string, entityId
 
 async function createConflict(db: SqliteDb, change: SyncChange, localPayload?: Task | Comment | null) {
   const localRevision = localPayload?.revision ?? ""
-  const conflictId = `conflict-${change.entityType}-${change.entityId}-${Date.now()}`
+  const conflictId = `${change.entityType}:${change.entityId}`
 
   await execute(
     db,
@@ -133,7 +180,14 @@ async function createConflict(db: SqliteDb, change: SyncChange, localPayload?: T
       createdAt,
       resolvedAt
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO NOTHING`,
+    ON CONFLICT(id) DO UPDATE SET
+      localRevision = excluded.localRevision,
+      remoteRevision = excluded.remoteRevision,
+      localPayload = excluded.localPayload,
+      remotePayload = excluded.remotePayload,
+      status = 'OPEN',
+      createdAt = excluded.createdAt,
+      resolvedAt = NULL`,
     [
       conflictId,
       change.entityType,
@@ -147,4 +201,17 @@ async function createConflict(db: SqliteDb, change: SyncChange, localPayload?: T
       null,
     ],
   )
+}
+
+function isLocalNewer(localUpdatedAt: string, remoteUpdatedAt: string) {
+  const local = Date.parse(localUpdatedAt)
+  const remote = Date.parse(remoteUpdatedAt)
+  if (Number.isNaN(local) || Number.isNaN(remote)) return false
+  return local > remote
+}
+
+function getBackoffMs(attemptCount: number) {
+  const base = Math.min(30000, Math.pow(2, attemptCount) * 1000)
+  const jitter = Math.floor(Math.random() * 250)
+  return base + jitter
 }

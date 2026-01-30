@@ -25,21 +25,41 @@ export async function syncRoutes(app: FastifyInstance) {
     const body = request.body as SyncRequest
 
     const ackOpIds: string[] = []
+    const failed: Array<{ opId: string; message: string }> = []
 
     await prisma.$transaction(async (tx) => {
       for (const op of body.ops) {
-        ackOpIds.push(op.opId)
+        if (!op.opId || !op.entityId || !op.entityType || !op.opType) {
+          failed.push({ opId: op.opId ?? "unknown", message: "Invalid op envelope" })
+          continue
+        }
         const existing = await tx.opDedup.findUnique({ where: { opId: op.opId } })
-        if (existing) continue
+        if (existing) {
+          ackOpIds.push(op.opId)
+          continue
+        }
 
         if (op.entityType === "task") {
+          const validation = validateTaskOp(op)
+          if (!validation.ok) {
+            failed.push({ opId: op.opId, message: validation.message })
+            continue
+          }
           await applyTaskOp(tx, userId, op)
-        }
-        if (op.entityType === "comment") {
+        } else if (op.entityType === "comment") {
+          const validation = validateCommentOp(op)
+          if (!validation.ok) {
+            failed.push({ opId: op.opId, message: validation.message })
+            continue
+          }
           await applyCommentOp(tx, userId, op)
+        } else {
+          failed.push({ opId: op.opId, message: "Unknown entityType" })
+          continue
         }
 
         await tx.opDedup.create({ data: { opId: op.opId, userId } })
+        ackOpIds.push(op.opId)
       }
     })
 
@@ -55,6 +75,7 @@ export async function syncRoutes(app: FastifyInstance) {
     return reply.send({
       newCursor,
       ackOpIds,
+      failed,
       changes: changes.map((row) => ({
         entityType: row.entityType as "task" | "comment",
         entityId: row.entityId,
@@ -73,28 +94,26 @@ async function applyTaskOp(tx: typeof prisma, userId: string, op: SyncOp) {
   const revision = `srv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
   if (op.opType === "DELETE") {
-    await tx.task.update({
+    const record = {
+      id: op.entityId,
+      projectId: patch.projectId ?? null,
+      title: patch.title ?? "",
+      description: patch.description ?? "",
+      statusId: patch.statusId ?? "todo",
+      priority: patch.priority ?? "medium",
+      assigneeUserId: patch.assigneeUserId ?? null,
+      createdByUserId: patch.createdByUserId ?? userId,
+      updatedAt: now,
+      revision,
+      deletedAt: now,
+    }
+    await tx.task.upsert({
       where: { id: op.entityId },
-      data: { deletedAt: now, updatedAt: now, revision },
-    }).catch(async () => {
-      await tx.task.create({
-        data: {
-          id: op.entityId,
-          projectId: patch.projectId ?? null,
-          title: patch.title ?? "",
-          description: patch.description ?? "",
-          statusId: patch.statusId ?? "todo",
-          priority: patch.priority ?? "medium",
-          assigneeUserId: patch.assigneeUserId ?? null,
-          createdByUserId: patch.createdByUserId ?? userId,
-          updatedAt: now,
-          revision,
-          deletedAt: now,
-        },
-      })
+      update: record,
+      create: record,
     })
 
-    await logChange(tx, userId, "task", op.entityId, "DELETE", patch, revision, now)
+    await logChange(tx, userId, "task", op.entityId, "DELETE", record, revision, now)
     return
   }
 
@@ -127,25 +146,23 @@ async function applyCommentOp(tx: typeof prisma, userId: string, op: SyncOp) {
   const revision = `srv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
   if (op.opType === "DELETE") {
-    await tx.comment.update({
+    const record = {
+      id: op.entityId,
+      taskId: patch.taskId ?? "",
+      body: patch.body ?? "",
+      createdByUserId: patch.createdByUserId ?? userId,
+      createdAt: patch.createdAt ? new Date(patch.createdAt) : now,
+      updatedAt: now,
+      revision,
+      deletedAt: now,
+    }
+    await tx.comment.upsert({
       where: { id: op.entityId },
-      data: { deletedAt: now, updatedAt: now, revision },
-    }).catch(async () => {
-      await tx.comment.create({
-        data: {
-          id: op.entityId,
-          taskId: patch.taskId,
-          body: patch.body ?? "",
-          createdByUserId: patch.createdByUserId ?? userId,
-          createdAt: patch.createdAt ? new Date(patch.createdAt) : now,
-          updatedAt: now,
-          revision,
-          deletedAt: now,
-        },
-      })
+      update: record,
+      create: record,
     })
 
-    await logChange(tx, userId, "comment", op.entityId, "DELETE", patch, revision, now)
+    await logChange(tx, userId, "comment", op.entityId, "DELETE", record, revision, now)
     return
   }
 
@@ -179,15 +196,48 @@ async function logChange(
   revision: string,
   updatedAt: Date,
 ) {
+  const safePayload = toJsonSafe({
+    ...payload,
+    updatedAt: payload.updatedAt instanceof Date ? payload.updatedAt.toISOString() : payload.updatedAt,
+  })
   await tx.serverChange.create({
     data: {
       userId,
       entityType,
       entityId,
       opType,
-      payload,
+      payload: safePayload,
       revision,
       updatedAt,
     },
   })
+}
+
+function toJsonSafe(input: Record<string, unknown>) {
+  return JSON.parse(
+    JSON.stringify(input, (_key, value) => {
+      if (value instanceof Date) return value.toISOString()
+      return value === undefined ? null : value
+    }),
+  )
+}
+
+function validateTaskOp(op: SyncOp) {
+  if (op.opType === "UPSERT") {
+    const patch = op.patch as any
+    if (!patch.title || !patch.statusId || !patch.priority) {
+      return { ok: false, message: "Task UPSERT requires title, statusId, priority" }
+    }
+  }
+  return { ok: true, message: "" }
+}
+
+function validateCommentOp(op: SyncOp) {
+  if (op.opType === "UPSERT") {
+    const patch = op.patch as any
+    if (!patch.taskId || !patch.body) {
+      return { ok: false, message: "Comment UPSERT requires taskId and body" }
+    }
+  }
+  return { ok: true, message: "" }
 }

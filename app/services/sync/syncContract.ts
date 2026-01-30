@@ -30,5 +30,6 @@ export interface SyncChange {
 export interface SyncResponse {
   newCursor: string | null
   ackOpIds: string[]
+  failed: Array<{ opId: string; message: string }>
   changes: SyncChange[]
 }

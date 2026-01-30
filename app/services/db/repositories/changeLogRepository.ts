@@ -123,3 +123,22 @@ export async function resetFailedToPending() {
   const database = await getDb()
   await execute(database, "UPDATE change_log SET status = 'PENDING' WHERE status = 'FAILED'")
 }
+
+export async function pruneSentOps(keepLastN = 2000, olderThanDays = 7) {
+  const database = await getDb()
+  const cutoff = new Date(Date.now() - olderThanDays * 24 * 60 * 60 * 1000).toISOString()
+
+  await execute(
+    database,
+    `DELETE FROM change_log
+     WHERE status = 'SENT'
+       AND createdAt < ?
+       AND opId NOT IN (
+         SELECT opId FROM change_log
+         WHERE status = 'SENT'
+         ORDER BY createdAt DESC
+         LIMIT ?
+       )`,
+    [cutoff, keepLastN],
+  )
+}
