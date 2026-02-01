@@ -20,39 +20,30 @@ function isValidEmail(email: string) {
   return /^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(email)
 }
 
-async function createVerificationToken(userId: string) {
+function isUserVerified(user: { emailVerified: boolean; emailVerifiedAt: Date | null }) {
+  return user.emailVerified || !!user.emailVerifiedAt
+}
+
+async function setVerificationToken(userId: string) {
   const rawToken = generateToken()
   const tokenHash = hashToken(rawToken)
-  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000)
-  await prisma.emailVerificationToken.create({
-    data: {
-      userId,
-      tokenHash,
-      expiresAt,
-    },
+  await prisma.user.update({
+    where: { id: userId },
+    data: { verificationTokenHash: tokenHash },
   })
   return rawToken
 }
 
-function logVerificationUrl(rawToken: string, port: number) {
-  if (!process.env.VERIFY_EMAIL_URL && process.env.NODE_ENV === "production") return
-  const baseUrl = process.env.VERIFY_EMAIL_URL ?? `http://localhost:${port}`
+function logVerificationToken(rawToken: string) {
+  if (process.env.NODE_ENV === "production") return
   // eslint-disable-next-line no-console
-  console.log(`[auth] Verify email: ${baseUrl}/auth/verify-email?token=${rawToken}`)
+  console.log(`[auth] Verify email token: ${rawToken}`)
 }
 
 export async function authRoutes(app: FastifyInstance) {
-  // Backwards compatibility: /auth/register -> /auth/signup (no upsert)
+  // POST /auth/register
+  // curl -X POST http://localhost:8080/auth/register -H "Content-Type: application/json" -d '{"email":"dev@tasktrak.io","password":"password123"}'
   app.post("/auth/register", async (request, reply) => {
-    return app.inject({
-      method: "POST",
-      url: "/auth/signup",
-      payload: request.body,
-    }).then((res) => reply.status(res.statusCode).send(res.json()))
-  })
-  // POST /auth/signup
-  // curl -X POST http://localhost:8080/auth/signup -H "Content-Type: application/json" -d '{"email":"dev@tasktrak.io","password":"password123"}'
-  app.post("/auth/signup", async (request, reply) => {
     const { email, password } = request.body as { email: string; password: string }
     const normalized = normalizeEmail(email)
 
@@ -70,42 +61,50 @@ export async function authRoutes(app: FastifyInstance) {
 
     const passwordHash = await bcrypt.hash(password, 10)
     const user = await prisma.user.create({
-      data: { email: normalized, passwordHash, emailVerifiedAt: null },
+      data: {
+        email: normalized,
+        passwordHash,
+        emailVerified: false,
+        emailVerifiedAt: null,
+      },
     })
 
-    const rawToken = await createVerificationToken(user.id)
-    logVerificationUrl(rawToken, Number(process.env.PORT ?? 8080))
+    const rawToken = await setVerificationToken(user.id)
+    logVerificationToken(rawToken)
 
     return reply.send({ ok: true, requiresEmailVerification: true })
   })
 
-  // GET /auth/verify-email?token=...
-  app.get("/auth/verify-email", async (request, reply) => {
-    const { token } = request.query as { token?: string }
+  // POST /auth/verify-email
+  // curl -X POST http://localhost:8080/auth/verify-email -H "Content-Type: application/json" -d '{"token":"..."}'
+  app.post("/auth/verify-email", async (request, reply) => {
+    const { token } = request.body as { token?: string }
     if (!token) return reply.code(400).send({ error: "Token required" })
     const tokenHash = hashToken(token)
 
-    const tokenRow = await prisma.emailVerificationToken.findFirst({
-      where: {
-        tokenHash,
-        usedAt: null,
-        expiresAt: { gt: new Date() },
+    const user = await prisma.user.findFirst({ where: { verificationTokenHash: tokenHash } })
+    if (!user) return reply.code(400).send({ error: "Invalid token" })
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        emailVerified: true,
+        emailVerifiedAt: new Date(),
+        verificationTokenHash: null,
       },
     })
-    if (!tokenRow) {
-      return reply.code(400).send({ error: "Invalid or expired token" })
-    }
 
-    await prisma.emailVerificationToken.update({
-      where: { id: tokenRow.id },
-      data: { usedAt: new Date() },
-    })
-    await prisma.user.update({
-      where: { id: tokenRow.userId },
-      data: { emailVerifiedAt: new Date() },
+    const accessToken = app.jwt.sign({ sub: user.id }, { expiresIn: "15m" })
+    const refreshToken = generateToken()
+    await prisma.refreshToken.create({
+      data: {
+        id: crypto.randomUUID(),
+        userId: user.id,
+        tokenHash: hashToken(refreshToken),
+      },
     })
 
-    return reply.send({ ok: true })
+    return reply.send({ accessToken, refreshToken })
   })
 
   // POST /auth/resend-verification
@@ -114,9 +113,9 @@ export async function authRoutes(app: FastifyInstance) {
     const { email } = request.body as { email: string }
     const normalized = normalizeEmail(email)
     const user = await prisma.user.findUnique({ where: { email: normalized } })
-    if (user && !user.emailVerifiedAt) {
-      const rawToken = await createVerificationToken(user.id)
-      logVerificationUrl(rawToken, Number(process.env.PORT ?? 8080))
+    if (user && !isUserVerified(user)) {
+      const rawToken = await setVerificationToken(user.id)
+      logVerificationToken(rawToken)
     }
     return reply.send({ ok: true })
   })
@@ -131,7 +130,7 @@ export async function authRoutes(app: FastifyInstance) {
     const isValid = await bcrypt.compare(password, user.passwordHash)
     if (!isValid) return reply.code(401).send({ error: "Invalid credentials" })
 
-    if (!user.emailVerifiedAt) {
+    if (!isUserVerified(user)) {
       return reply.code(403).send({ error: "Email not verified", requiresEmailVerification: true })
     }
 
@@ -161,11 +160,114 @@ export async function authRoutes(app: FastifyInstance) {
     }
 
     const user = await prisma.user.findUnique({ where: { id: tokenRow.userId } })
-    if (!user || !user.emailVerifiedAt) {
+    if (!user || !isUserVerified(user)) {
       return reply.code(403).send({ error: "Email not verified", requiresEmailVerification: true })
     }
 
     const accessToken = app.jwt.sign({ sub: tokenRow.userId }, { expiresIn: "15m" })
     return reply.send({ accessToken })
+  })
+
+  // POST /auth/request-password-reset
+  // curl -X POST http://localhost:8080/auth/request-password-reset -H "Content-Type: application/json" -d '{"email":"dev@tasktrak.io"}'
+  app.post("/auth/request-password-reset", async (request, reply) => {
+    const { email } = request.body as { email: string }
+    const normalized = normalizeEmail(email)
+    const user = await prisma.user.findUnique({ where: { email: normalized } })
+    if (user) {
+      const rawToken = generateToken()
+      const tokenHash = hashToken(rawToken)
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000)
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          passwordResetTokenHash: tokenHash,
+          passwordResetExpiresAt: expiresAt,
+        },
+      })
+      if (process.env.NODE_ENV !== "production") {
+        // eslint-disable-next-line no-console
+        console.log(`[auth] Password reset token: ${rawToken}`)
+      }
+    }
+    return reply.send({ ok: true })
+  })
+
+  // POST /auth/reset-password
+  // curl -X POST http://localhost:8080/auth/reset-password -H "Content-Type: application/json" -d '{"token":"...","newPassword":"newpass123"}'
+  app.post("/auth/reset-password", async (request, reply) => {
+    const { token, newPassword } = request.body as { token: string; newPassword: string }
+    if (!token || !newPassword || newPassword.length < 8) {
+      return reply.code(400).send({ error: "Invalid request" })
+    }
+    const tokenHash = hashToken(token)
+    const user = await prisma.user.findFirst({
+      where: {
+        passwordResetTokenHash: tokenHash,
+        passwordResetExpiresAt: { gt: new Date() },
+      },
+    })
+    if (!user) return reply.code(400).send({ error: "Invalid or expired token" })
+
+    const passwordHash = await bcrypt.hash(newPassword, 10)
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash,
+        passwordResetTokenHash: null,
+        passwordResetExpiresAt: null,
+      },
+    })
+    return reply.send({ ok: true })
+  })
+
+  // POST /auth/google
+  app.post("/auth/google", async (request, reply) => {
+    const { idToken } = request.body as { idToken: string }
+    if (!idToken) return reply.code(400).send({ error: "Token required" })
+
+    const tokenInfo = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`)
+    if (!tokenInfo.ok) return reply.code(401).send({ error: "Invalid token" })
+    const payload = (await tokenInfo.json()) as {
+      email?: string
+      sub?: string
+      email_verified?: string
+    }
+
+    if (!payload.email || !payload.sub) {
+      return reply.code(401).send({ error: "Invalid token" })
+    }
+    if (payload.email_verified !== "true") {
+      return reply.code(401).send({ error: "Email not verified" })
+    }
+
+    const normalized = normalizeEmail(payload.email)
+    const user = await prisma.user.upsert({
+      where: { email: normalized },
+      update: {
+        googleSub: payload.sub,
+        emailVerified: true,
+        emailVerifiedAt: new Date(),
+        verificationTokenHash: null,
+      },
+      create: {
+        email: normalized,
+        passwordHash: await bcrypt.hash(generateToken(), 10),
+        googleSub: payload.sub,
+        emailVerified: true,
+        emailVerifiedAt: new Date(),
+      },
+    })
+
+    const accessToken = app.jwt.sign({ sub: user.id }, { expiresIn: "15m" })
+    const refreshToken = generateToken()
+    await prisma.refreshToken.create({
+      data: {
+        id: crypto.randomUUID(),
+        userId: user.id,
+        tokenHash: hashToken(refreshToken),
+      },
+    })
+    return reply.send({ accessToken, refreshToken })
   })
 }

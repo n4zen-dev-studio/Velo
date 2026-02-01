@@ -41,6 +41,19 @@ async function executeInternal(
   }
 }
 
+export async function executeSqlBatch(db: SQLiteDatabase, sqlText: string) {
+  assertSql(sqlText)
+  const statements = sqlText
+    .split(";")
+    .map((statement) => statement.trim())
+    .filter((statement) => statement.length > 0)
+    .filter((statement) => !statement.startsWith("--") && !statement.startsWith("//") && !statement.startsWith("/*"))
+
+  for (const statement of statements) {
+    await executeInternal(db, statement)
+  }
+}
+
 export async function execute(
   db: SQLiteDatabase,
   sql: string,

@@ -1,8 +1,6 @@
 export const schemaVersion = 1
 
 export const createTablesSql = `
-PRAGMA foreign_keys = ON;
-
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   displayName TEXT NOT NULL,

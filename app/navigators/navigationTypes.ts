@@ -5,7 +5,9 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack"
 // App Stack Navigator types
 export type AppStackParamList = {
   Auth: undefined
-  VerifyEmail: { email: string; password: string }
+  VerifyEmail: { email: string }
+  PasswordResetRequest: undefined
+  PasswordResetConfirm: undefined
   Home: undefined
   TaskEditor: { taskId?: string; projectId?: string }
   TaskDetail: { taskId: string }

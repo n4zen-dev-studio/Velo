@@ -50,10 +50,14 @@ export async function deriveUserIdFromEmail(email: string) {
   )}-${digest.slice(20, 32)}`
 }
 
-export async function setSessionMode(mode: "local") {
+export async function setSessionMode(mode: "local" | "remote") {
   await SecureStore.setItemAsync(LOCAL_SESSION_MODE_KEY, mode)
 }
 
 export async function getSessionMode() {
   return SecureStore.getItemAsync(LOCAL_SESSION_MODE_KEY)
+}
+
+export async function clearCurrentUserId() {
+  await SecureStore.deleteItemAsync(LOCAL_USER_ID_KEY)
 }
