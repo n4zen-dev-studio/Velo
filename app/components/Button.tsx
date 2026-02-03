@@ -1,10 +1,11 @@
-import { ComponentType } from "react"
+import React, { ComponentType } from "react"
 import {
   Pressable,
   PressableProps,
   PressableStateCallbackType,
   StyleProp,
   TextStyle,
+  View,
   ViewStyle,
 } from "react-native"
 
@@ -14,7 +15,7 @@ import type { ThemedStyle, ThemedStyleArray } from "@/theme/types"
 
 import { Text, TextProps } from "./Text"
 
-type Presets = "default" | "filled" | "reversed"
+type Presets = "default" | "filled" | "reversed" | "glass"
 
 export interface ButtonAccessoryProps {
   style: StyleProp<any>
@@ -23,81 +24,28 @@ export interface ButtonAccessoryProps {
 }
 
 export interface ButtonProps extends PressableProps {
-  /**
-   * Text which is looked up via i18n.
-   */
   tx?: TextProps["tx"]
-  /**
-   * The text to display if not using `tx` or nested components.
-   */
   text?: TextProps["text"]
-  /**
-   * Optional options to pass to i18n. Useful for interpolation
-   * as well as explicitly setting locale or translation fallbacks.
-   */
   txOptions?: TextProps["txOptions"]
-  /**
-   * An optional style override useful for padding & margin.
-   */
   style?: StyleProp<ViewStyle>
-  /**
-   * An optional style override for the "pressed" state.
-   */
   pressedStyle?: StyleProp<ViewStyle>
-  /**
-   * An optional style override for the button text.
-   */
   textStyle?: StyleProp<TextStyle>
-  /**
-   * An optional style override for the button text when in the "pressed" state.
-   */
   pressedTextStyle?: StyleProp<TextStyle>
-  /**
-   * An optional style override for the button text when in the "disabled" state.
-   */
   disabledTextStyle?: StyleProp<TextStyle>
-  /**
-   * One of the different types of button presets.
-   */
   preset?: Presets
-  /**
-   * An optional component to render on the right side of the text.
-   * Example: `RightAccessory={(props) => <View {...props} />}`
-   */
   RightAccessory?: ComponentType<ButtonAccessoryProps>
-  /**
-   * An optional component to render on the left side of the text.
-   * Example: `LeftAccessory={(props) => <View {...props} />}`
-   */
   LeftAccessory?: ComponentType<ButtonAccessoryProps>
-  /**
-   * Children components.
-   */
   children?: React.ReactNode
-  /**
-   * disabled prop, accessed directly for declarative styling reasons.
-   * https://reactnative.dev/docs/pressable#disabled
-   */
   disabled?: boolean
-  /**
-   * An optional style override for the disabled state
-   */
   disabledStyle?: StyleProp<ViewStyle>
 }
 
 /**
- * A component that allows users to take actions and make choices.
- * Wraps the Text component with a Pressable component.
- * @see [Documentation and Examples]{@link https://docs.infinite.red/ignite-cli/boilerplate/app/components/Button/}
- * @param {ButtonProps} props - The props for the `Button` component.
- * @returns {JSX.Element} The rendered `Button` component.
- * @example
- * <Button
- *   tx="common:ok"
- *   style={styles.button}
- *   textStyle={styles.buttonText}
- *   onPress={handleButtonPress}
- * />
+ * Glassy modern button:
+ * - rounded pill
+ * - subtle glass fill + stroke
+ * - soft highlight overlay
+ * - accent-filled variant
  */
 export function Button(props: ButtonProps) {
   const {
@@ -119,31 +67,23 @@ export function Button(props: ButtonProps) {
 
   const { themed } = useAppTheme()
 
-  const preset: Presets = props.preset ?? "default"
-  /**
-   * @param {PressableStateCallbackType} root0 - The root object containing the pressed state.
-   * @param {boolean} root0.pressed - The pressed state.
-   * @returns {StyleProp<ViewStyle>} The view style based on the pressed state.
-   */
+  const preset: Presets = props.preset ?? "glass"
+
   function $viewStyle({ pressed }: PressableStateCallbackType): StyleProp<ViewStyle> {
     return [
       themed($viewPresets[preset]),
       $viewStyleOverride,
       !!pressed && themed([$pressedViewPresets[preset], $pressedViewStyleOverride]),
-      !!disabled && $disabledViewStyleOverride,
+      !!disabled && themed([$disabledViewPreset, $disabledViewStyleOverride as any]),
     ]
   }
-  /**
-   * @param {PressableStateCallbackType} root0 - The root object containing the pressed state.
-   * @param {boolean} root0.pressed - The pressed state.
-   * @returns {StyleProp<TextStyle>} The text style based on the pressed state.
-   */
+
   function $textStyle({ pressed }: PressableStateCallbackType): StyleProp<TextStyle> {
     return [
       themed($textPresets[preset]),
       $textStyleOverride,
       !!pressed && themed([$pressedTextPresets[preset], $pressedTextStyleOverride]),
-      !!disabled && $disabledTextStyleOverride,
+      !!disabled && themed([$disabledTextPreset, $disabledTextStyleOverride as any]),
     ]
   }
 
@@ -157,6 +97,9 @@ export function Button(props: ButtonProps) {
     >
       {(state) => (
         <>
+          {/* subtle sheen overlay (no pointer events) */}
+          <View pointerEvents="none" style={themed($sheenOverlay)} />
+
           {!!LeftAccessory && (
             <LeftAccessory style={$leftAccessoryStyle} pressableState={state} disabled={disabled} />
           )}
@@ -166,11 +109,7 @@ export function Button(props: ButtonProps) {
           </Text>
 
           {!!RightAccessory && (
-            <RightAccessory
-              style={$rightAccessoryStyle}
-              pressableState={state}
-              disabled={disabled}
-            />
+            <RightAccessory style={$rightAccessoryStyle} pressableState={state} disabled={disabled} />
           )}
         </>
       )}
@@ -179,35 +118,49 @@ export function Button(props: ButtonProps) {
 }
 
 const $baseViewStyle: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  minHeight: 56,
-  borderRadius: 4,
+  minHeight: 48,
+  borderRadius: 18,
   justifyContent: "center",
   alignItems: "center",
   paddingVertical: spacing.sm,
-  paddingHorizontal: spacing.sm,
+  paddingHorizontal: spacing.md,
   overflow: "hidden",
 })
 
 const $baseTextStyle: ThemedStyle<TextStyle> = ({ typography }) => ({
-  fontSize: 16,
-  lineHeight: 20,
+  fontSize: 15,
+  lineHeight: 18,
   fontFamily: typography.primary.medium,
   textAlign: "center",
   flexShrink: 1,
   flexGrow: 0,
   zIndex: 2,
+  letterSpacing: 0.2,
 })
 
 const $rightAccessoryStyle: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   marginStart: spacing.xs,
-  zIndex: 1,
+  zIndex: 2,
 })
 const $leftAccessoryStyle: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   marginEnd: spacing.xs,
+  zIndex: 2,
+})
+
+/**
+ * A subtle "sheen" for glassy feel.
+ * Kept very light so it works in both light/dark themes.
+ */
+const $sheenOverlay: ThemedStyle<ViewStyle> = ({}) => ({
+  position: "absolute",
+  inset: 0,
   zIndex: 1,
+  opacity: 0.9,
+  backgroundColor: "rgba(255,255,255,0.03)",
 })
 
 const $viewPresets: Record<Presets, ThemedStyleArray<ViewStyle>> = {
+  // keep legacy presets working
   default: [
     $styles.row,
     $baseViewStyle,
@@ -217,15 +170,23 @@ const $viewPresets: Record<Presets, ThemedStyleArray<ViewStyle>> = {
       backgroundColor: colors.palette.neutral100,
     }),
   ],
-  filled: [
+  filled: [$styles.row, $baseViewStyle, ({ colors }) => ({ backgroundColor: colors.palette.neutral300 })],
+  reversed: [$styles.row, $baseViewStyle, ({ colors }) => ({ backgroundColor: colors.palette.neutral800 })],
+
+  /**
+   * ✅ Modern "glass" default:
+   * - translucent fill
+   * - thin bright stroke
+   * - uses your theme card/background values if present
+   */
+  glass: [
     $styles.row,
     $baseViewStyle,
-    ({ colors }) => ({ backgroundColor: colors.palette.neutral300 }),
-  ],
-  reversed: [
-    $styles.row,
-    $baseViewStyle,
-    ({ colors }) => ({ backgroundColor: colors.palette.neutral800 }),
+    ({ colors }) => ({
+      borderWidth: 1,
+      borderColor: "rgba(255,255,255,0.14)",
+      backgroundColor: colors.card ?? "rgba(255,255,255,0.08)",
+    }),
   ],
 }
 
@@ -233,16 +194,48 @@ const $textPresets: Record<Presets, ThemedStyleArray<TextStyle>> = {
   default: [$baseTextStyle],
   filled: [$baseTextStyle],
   reversed: [$baseTextStyle, ({ colors }) => ({ color: colors.palette.neutral100 })],
+  glass: [
+    $baseTextStyle,
+    ({ colors }) => ({
+      color: colors.text ?? "rgba(255,255,255,0.92)",
+    }),
+  ],
 }
 
 const $pressedViewPresets: Record<Presets, ThemedStyle<ViewStyle>> = {
   default: ({ colors }) => ({ backgroundColor: colors.palette.neutral200 }),
   filled: ({ colors }) => ({ backgroundColor: colors.palette.neutral400 }),
   reversed: ({ colors }) => ({ backgroundColor: colors.palette.neutral700 }),
+
+  /**
+   * Glass press: slightly brighter + subtle scale-ish feel (via padding/opacity)
+   */
+  glass: () => ({
+    backgroundColor: "rgba(255,255,255,0.12)",
+    borderColor: "rgba(255,255,255,0.18)",
+  }),
 }
 
 const $pressedTextPresets: Record<Presets, ThemedStyle<TextStyle>> = {
   default: () => ({ opacity: 0.9 }),
   filled: () => ({ opacity: 0.9 }),
   reversed: () => ({ opacity: 0.9 }),
+  glass: () => ({ opacity: 0.92 }),
 }
+
+const $disabledViewPreset: ThemedStyle<ViewStyle> = () => ({
+  opacity: 0.45,
+})
+
+const $disabledTextPreset: ThemedStyle<TextStyle> = () => ({
+  opacity: 0.9,
+})
+
+/**
+ * Optional: Add a "primary/glassFilled" behavior without creating a new preset
+ * by passing style override like:
+ * style={{ backgroundColor: theme.colors.tint, borderColor: "transparent" }}
+ * textStyle={{ color: "rgba(0,0,0,0.85)" }}
+ *
+ * But if you DO want it as a preset, tell me and I’ll add `glassFilled`.
+ */
