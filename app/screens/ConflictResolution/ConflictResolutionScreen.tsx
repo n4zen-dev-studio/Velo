@@ -6,7 +6,7 @@ import { GlassCard } from "@/components/GlassCard"
 import { Screen } from "@/components/Screen"
 import { Text } from "@/components/Text"
 import { TextField } from "@/components/TextField"
-import type { AppStackScreenProps } from "@/navigators/navigationTypes"
+import type { HomeStackScreenProps } from "@/navigators/navigationTypes"
 import {
   getConflict,
   resolveConflictKeepLocal,
@@ -19,15 +19,20 @@ import type { ThemedStyle } from "@/theme/types"
 
 export function ConflictResolutionScreen() {
   const { themed } = useAppTheme()
-  const navigation = useNavigation<AppStackScreenProps<"ConflictResolution">["navigation"]>()
-  const route = useRoute<AppStackScreenProps<"ConflictResolution">["route"]>()
-  const { entityType, entityId } = route.params
+  const navigation = useNavigation<HomeStackScreenProps<"ConflictResolution">["navigation"]>()
+  const route = useRoute<HomeStackScreenProps<"ConflictResolution">["route"]>()
+  const { conflictId } = route.params ?? {}
+  const [entityType, entityId] = (conflictId ?? "").split(":") as [
+    "task" | "comment" | "",
+    string | undefined,
+  ]
 
   const [localPayload, setLocalPayload] = useState<Task | Comment | null>(null)
   const [remotePayload, setRemotePayload] = useState<Task | Comment | null>(null)
   const [mergePayload, setMergePayload] = useState<Task | Comment | null>(null)
 
   useEffect(() => {
+    if (!entityType || !entityId) return
     getConflict(entityType, entityId).then((conflict) => {
       if (!conflict) return
       const local = JSON.parse(conflict.localPayload) as Task | Comment
@@ -47,6 +52,7 @@ export function ConflictResolutionScreen() {
   }
 
   const handleResolve = async (mode: "local" | "remote" | "merge") => {
+    if (!entityType || !entityId) return
     if (mode === "local") {
       await resolveConflictKeepLocal(entityType, entityId)
     }

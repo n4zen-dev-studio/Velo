@@ -5,7 +5,7 @@ import { useNavigation } from "@react-navigation/native"
 import { GlassCard } from "@/components/GlassCard"
 import { Screen } from "@/components/Screen"
 import { Text } from "@/components/Text"
-import type { AppStackScreenProps } from "@/navigators/navigationTypes"
+import type { HomeStackScreenProps } from "@/navigators/navigationTypes"
 import { listOpenConflicts } from "@/services/db/repositories/conflictsRepository"
 import type { ConflictRecord } from "@/services/db/types"
 import { useAppTheme } from "@/theme/context"
@@ -13,7 +13,7 @@ import type { ThemedStyle } from "@/theme/types"
 
 export function ConflictListScreen() {
   const { themed } = useAppTheme()
-  const navigation = useNavigation<AppStackScreenProps<"ConflictList">["navigation"]>()
+  const navigation = useNavigation<HomeStackScreenProps<"ConflictList">["navigation"]>()
   const [conflicts, setConflicts] = useState<ConflictRecord[]>([])
 
   useEffect(() => {
@@ -37,8 +37,7 @@ export function ConflictListScreen() {
             key={conflict.id}
             onPress={() =>
               navigation.navigate("ConflictResolution", {
-                entityType: conflict.entityType as "task" | "comment",
-                entityId: conflict.entityId,
+                conflictId: conflict.id,
               })
             }
           >

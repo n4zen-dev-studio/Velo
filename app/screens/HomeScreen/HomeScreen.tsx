@@ -8,14 +8,15 @@ import { Text } from "@/components/Text"
 import { WorkspaceSwitcher } from "@/components/WorkspaceSwitcher"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
-import type { AppStackScreenProps } from "@/navigators/navigationTypes"
+import type { HomeStackScreenProps } from "@/navigators/navigationTypes"
+import { goToSettingsTab, goToDebugTab } from "@/navigation/navigationActions"
 import { SyncBadge } from "@/components/SyncBadge"
 
 import { useHomeViewModel } from "./useHomeViewModel"
 
 export function HomeScreen() {
   const { themed } = useAppTheme()
-  const navigation = useNavigation<AppStackScreenProps<"Home">["navigation"]>()
+  const navigation = useNavigation<HomeStackScreenProps<"Home">["navigation"]>()
   const { workspaces, activeWorkspaceId, setActiveWorkspaceId, tasksByStatus, refreshAll, isRefreshing, activeProjectId } =
     useHomeViewModel()
 
@@ -33,10 +34,10 @@ export function HomeScreen() {
           <Text preset="formHelper" text="Personal workspace by default" />
         </View>
         <View style={themed($headerActions)}>
-          <Pressable onPress={() => navigation.navigate("Settings")}>
+          <Pressable onPress={goToSettingsTab}>
             <Text preset="formLabel" text="Settings" />
           </Pressable>
-          <Pressable onPress={() => navigation.navigate("SyncDebug")}>
+          <Pressable onPress={goToDebugTab}>
             <Text preset="formLabel" text="Debug" />
           </Pressable>
           <SyncBadge />

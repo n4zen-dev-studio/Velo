@@ -36,6 +36,7 @@ import * as storage from "./utils/storage"
 import { syncController } from "./services/sync/SyncController"
 import { registerBackgroundSync } from "./services/sync/backgroundSync"
 import { BASE_URL } from "./config/api"
+import { GestureHandlerRootView } from "react-native-gesture-handler"
 
 WebBrowser.maybeCompleteAuthSession()
 
@@ -45,14 +46,34 @@ export const NAVIGATION_PERSISTENCE_KEY = "NAVIGATION_STATE"
 const prefix = Linking.createURL("/")
 const config = {
   screens: {
-    Auth: "",
-    Home: "home",
-    TaskEditor: "task-editor/:taskId?",
-    TaskDetail: "task/:taskId",
-    ConflictList: "conflicts",
-    ConflictResolution: "conflicts/:entityType/:entityId",
-    Settings: "settings",
-    SyncDebug: "sync-debug",
+    Onboarding: "onboarding",
+    AuthGate: {
+      screens: {
+        AuthStack: {
+          screens: {
+            Auth: "",
+            VerifyEmail: "verify-email",
+            PasswordResetRequest: "password-reset",
+            PasswordResetConfirm: "password-reset/confirm",
+          },
+        },
+        MainTabs: {
+          screens: {
+            HomeTab: {
+              screens: {
+                Home: "home",
+                TaskEditor: "task-editor/:taskId?",
+                TaskDetail: "task/:taskId",
+                ConflictList: "conflicts",
+                ConflictResolution: "conflicts/:conflictId",
+              },
+            },
+            SettingsTab: "settings",
+            DebugTab: "sync-debug",
+          },
+        },
+      },
+    },
   },
 }
 
@@ -111,11 +132,13 @@ export function App() {
     <SafeAreaProvider initialMetrics={initialWindowMetrics}>
       <KeyboardProvider>
         <ThemeProvider>
+           <GestureHandlerRootView style={{ flex: 1 }}>
           <AppNavigator
             linking={linking}
             initialState={initialNavigationState}
             onStateChange={onNavigationStateChange}
           />
+          </GestureHandlerRootView>
         </ThemeProvider>
       </KeyboardProvider>
     </SafeAreaProvider>
