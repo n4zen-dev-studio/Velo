@@ -9,7 +9,7 @@ datasource db {
 
 model User {
   id           String         @id @default(uuid()) @db.Uuid
-  email        String         @unique
+  email        String?        @unique
   passwordHash String         @map("password_hash")
   emailVerified Boolean       @default(false) @map("email_verified")
   emailVerifiedAt DateTime?   @map("email_verified_at")
@@ -17,7 +17,13 @@ model User {
   passwordResetTokenHash String? @map("password_reset_token_hash")
   passwordResetExpiresAt DateTime? @map("password_reset_expires_at")
   googleSub    String?        @unique @map("google_sub")
+  username     String?        @map("username")
+  displayName  String?        @map("display_name")
+  avatarUrl    String?        @map("avatar_url")
   createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+  deletedAt    DateTime?      @map("deleted_at")
+  revision     String         @default("rev-0") @map("revision")
   refreshTokens RefreshToken[]
   serverChanges ServerChange[]
 
@@ -64,6 +70,22 @@ model Comment {
   deletedAt      DateTime? @map("deletedat")
 
   @@map("comments")
+}
+
+model WorkspaceMember {
+  id          String   @id @db.Uuid
+  workspaceId String   @map("workspace_id") @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  role        String
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+  revision    String
+
+  @@index([workspaceId])
+  @@index([userId])
+  @@unique([workspaceId, userId])
+  @@map("workspace_members")
 }
 
 model OpDedup {

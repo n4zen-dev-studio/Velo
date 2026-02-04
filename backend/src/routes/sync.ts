@@ -4,7 +4,7 @@ import { prisma } from "../prisma"
 
 interface SyncOp {
   opId: string
-  entityType: "task" | "comment"
+  entityType: "task" | "comment" | "user" | "workspace_member"
   entityId: string
   opType: "UPSERT" | "DELETE"
   patch: Record<string, unknown>
@@ -53,6 +53,20 @@ export async function syncRoutes(app: FastifyInstance) {
             continue
           }
           await applyCommentOp(tx, userId, op)
+        } else if (op.entityType === "user") {
+          const validation = validateUserOp(op)
+          if (!validation.ok) {
+            failed.push({ opId: op.opId, message: validation.message })
+            continue
+          }
+          await applyUserOp(tx, userId, op)
+        } else if (op.entityType === "workspace_member") {
+          const validation = validateWorkspaceMemberOp(op)
+          if (!validation.ok) {
+            failed.push({ opId: op.opId, message: validation.message })
+            continue
+          }
+          await applyWorkspaceMemberOp(tx, userId, op)
         } else {
           failed.push({ opId: op.opId, message: "Unknown entityType" })
           continue
@@ -77,7 +91,7 @@ export async function syncRoutes(app: FastifyInstance) {
       ackOpIds,
       failed,
       changes: changes.map((row) => ({
-        entityType: row.entityType as "task" | "comment",
+        entityType: row.entityType as "task" | "comment" | "user" | "workspace_member",
         entityId: row.entityId,
         opType: row.opType as "UPSERT" | "DELETE",
         payload: row.payload as Record<string, unknown>,
@@ -186,10 +200,65 @@ async function applyCommentOp(tx: typeof prisma, userId: string, op: SyncOp) {
   await logChange(tx, userId, "comment", op.entityId, "UPSERT", record, revision, now)
 }
 
+async function applyUserOp(tx: typeof prisma, userId: string, op: SyncOp) {
+  const patch = op.patch as any
+  const now = new Date()
+  const revision = patch.revision ?? `srv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+
+  const record = {
+    id: op.entityId,
+    email: patch.email ?? null,
+    username: patch.username ?? null,
+    displayName: patch.displayName ?? null,
+    avatarUrl: patch.avatarUrl ?? null,
+    createdAt: patch.createdAt ? new Date(patch.createdAt) : now,
+    updatedAt: now,
+    deletedAt: op.opType === "DELETE" ? now : patch.deletedAt ? new Date(patch.deletedAt) : null,
+    revision,
+  }
+
+  await tx.user.upsert({
+    where: { id: op.entityId },
+    update: record,
+    create: {
+      ...record,
+      passwordHash: patch.passwordHash ?? "sync-placeholder",
+      emailVerified: patch.emailVerified ?? false,
+    },
+  })
+
+  await logChange(tx, userId, "user", op.entityId, op.opType, record, revision, now)
+}
+
+async function applyWorkspaceMemberOp(tx: typeof prisma, userId: string, op: SyncOp) {
+  const patch = op.patch as any
+  const now = new Date()
+  const revision = patch.revision ?? `srv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+
+  const record = {
+    id: op.entityId,
+    workspaceId: patch.workspaceId,
+    userId: patch.userId,
+    role: patch.role ?? "MEMBER",
+    createdAt: patch.createdAt ? new Date(patch.createdAt) : now,
+    updatedAt: now,
+    deletedAt: op.opType === "DELETE" ? now : patch.deletedAt ? new Date(patch.deletedAt) : null,
+    revision,
+  }
+
+  await tx.workspaceMember.upsert({
+    where: { id: op.entityId },
+    update: record,
+    create: record,
+  })
+
+  await logChange(tx, userId, "workspace_member", op.entityId, op.opType, record, revision, now)
+}
+
 async function logChange(
   tx: typeof prisma,
   userId: string,
-  entityType: "task" | "comment",
+  entityType: "task" | "comment" | "user" | "workspace_member",
   entityId: string,
   opType: "UPSERT" | "DELETE",
   payload: Record<string, unknown>,
@@ -237,6 +306,20 @@ function validateCommentOp(op: SyncOp) {
     const patch = op.patch as any
     if (!patch.taskId || !patch.body) {
       return { ok: false, message: "Comment UPSERT requires taskId and body" }
+    }
+  }
+  return { ok: true, message: "" }
+}
+
+function validateUserOp(_op: SyncOp) {
+  return { ok: true, message: "" }
+}
+
+function validateWorkspaceMemberOp(op: SyncOp) {
+  if (op.opType === "UPSERT") {
+    const patch = op.patch as any
+    if (!patch.workspaceId || !patch.userId) {
+      return { ok: false, message: "WorkspaceMember UPSERT requires workspaceId and userId" }
     }
   }
   return { ok: true, message: "" }

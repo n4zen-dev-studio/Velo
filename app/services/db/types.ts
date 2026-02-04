@@ -5,10 +5,14 @@ export type ChangeLogOpType = "UPSERT" | "DELETE"
 
 export interface User {
   id: string
-  displayName: string
-  email?: string | null
-  avatarUrl?: string | null
+  displayName: string | null
+  username: string | null
+  email: string | null
+  avatarUrl: string | null
+  createdAt: string
   updatedAt: string
+  revision: string
+  deletedAt: string | null
 }
 
 export interface Project {
@@ -65,6 +69,17 @@ export interface Comment {
   taskId: string
   body: string
   createdByUserId: string
+  createdAt: string
+  updatedAt: string
+  revision: string
+  deletedAt: string | null
+}
+
+export interface WorkspaceMember {
+  id: string
+  workspaceId: string
+  userId: string
+  role: "OWNER" | "MEMBER" | string
   createdAt: string
   updatedAt: string
   revision: string

@@ -1,12 +1,16 @@
-export const schemaVersion = 2
+export const schemaVersion = 3
 
 export const createTablesSql = `
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
-  displayName TEXT NOT NULL,
+  displayName TEXT,
+  username TEXT,
   email TEXT,
   avatarUrl TEXT,
-  updatedAt TEXT NOT NULL
+  createdAt TEXT NOT NULL,
+  updatedAt TEXT NOT NULL,
+  revision TEXT NOT NULL,
+  deletedAt TEXT
 );
 
 CREATE TABLE IF NOT EXISTS workspaces (
@@ -76,6 +80,18 @@ CREATE TABLE IF NOT EXISTS comments (
   deletedAt TEXT
 );
 
+CREATE TABLE IF NOT EXISTS workspace_members (
+  id TEXT PRIMARY KEY,
+  workspaceId TEXT NOT NULL,
+  userId TEXT NOT NULL,
+  role TEXT NOT NULL,
+  createdAt TEXT NOT NULL,
+  updatedAt TEXT NOT NULL,
+  revision TEXT NOT NULL,
+  deletedAt TEXT,
+  UNIQUE(workspaceId, userId)
+);
+
 CREATE TABLE IF NOT EXISTS task_events (
   id TEXT PRIMARY KEY,
   taskId TEXT NOT NULL,
@@ -123,6 +139,7 @@ CREATE TABLE IF NOT EXISTS sync_state (
 `
 
 export const createIndexesSql = `
+CREATE INDEX IF NOT EXISTS idx_users_email ON users (email);
 CREATE INDEX IF NOT EXISTS idx_projects_workspace ON projects (workspaceId);
 CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks (projectId);
 CREATE INDEX IF NOT EXISTS idx_tasks_workspace ON tasks (workspaceId);
@@ -130,6 +147,8 @@ CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks (statusId);
 CREATE INDEX IF NOT EXISTS idx_tasks_updated ON tasks (updatedAt);
 CREATE INDEX IF NOT EXISTS idx_statuses_workspace ON statuses (workspaceId, projectId);
 CREATE INDEX IF NOT EXISTS idx_comments_task ON comments (taskId);
+CREATE INDEX IF NOT EXISTS idx_workspace_members_workspace ON workspace_members (workspaceId);
+CREATE INDEX IF NOT EXISTS idx_workspace_members_user ON workspace_members (userId);
 CREATE INDEX IF NOT EXISTS idx_change_log_status ON change_log (status);
 CREATE INDEX IF NOT EXISTS idx_change_log_workspace ON change_log (workspaceId);
 CREATE INDEX IF NOT EXISTS idx_conflicts_entity ON conflicts (entityType, entityId);

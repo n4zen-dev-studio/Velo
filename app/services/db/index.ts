@@ -10,6 +10,8 @@ export * from "./repositories/taskEventsRepository"
 export * from "./repositories/statusesRepository"
 export * from "./repositories/tasksRepository"
 export * from "./repositories/workspacesRepository"
+export * from "./repositories/usersRepository"
+export * from "./repositories/workspaceMembersRepository"
 
 import { getDb } from "./db"
 import { execute, executeTransaction } from "./queries"

@@ -5,7 +5,7 @@ import { execute, queryAll, queryFirst } from "@/services/db/queries"
 import type { ChangeLogEntry, ChangeLogOpType, ChangeLogStatus } from "@/services/db/types"
 import { getCurrentUserId, getDeviceId, generateUuidV4 } from "@/services/sync/identity"
 
-export type EntityType = "task" | "comment" | "project" | "status" | "member"
+export type EntityType = "task" | "comment" | "project" | "status" | "member" | "user" | "workspace_member"
 export type OpType = ChangeLogOpType
 export type ChangeStatus = ChangeLogStatus
 
