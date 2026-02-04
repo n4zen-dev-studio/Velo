@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { useFocusEffect } from "@react-navigation/native"
 
 import {
   getTaskById,
@@ -9,36 +8,44 @@ import {
   markTaskDeleted,
 } from "@/services/db"
 import type { Comment, Task, TaskEvent } from "@/services/db/types"
+import { resolveAuthorLabel } from "@/services/users/resolveAuthorLabel"
 import { refreshLocalCounts } from "@/services/sync/syncStore"
-import { generateUuidV4, getCurrentUserId } from "@/services/sync/identity"
+import { generateUuidV4, getCurrentUserId, getSessionMode } from "@/services/sync/identity"
+import { ANON_USER_ID } from "@/services/constants/identity"
+
+export type CommentVM = Comment & { authorLabel: string }
 
 export const useTaskDetailViewModel = (taskId: string) => {
   const [task, setTask] = useState<Task | null>(null)
-  const [comments, setComments] = useState<Comment[]>([])
+  const [comments, setComments] = useState<CommentVM[]>([])
   const [events, setEvents] = useState<TaskEvent[]>([])
   const [isSavingComment, setIsSavingComment] = useState(false)
   const [commentError, setCommentError] = useState<string | null>(null)
 
+  const loadComments = useCallback(async () => {
+    const commentRows = await listCommentsByTaskId(taskId)
+    const withAuthors = await Promise.all(
+      commentRows.map(async (comment) => ({
+        ...comment,
+        authorLabel: await resolveAuthorLabel(comment.createdByUserId),
+      })),
+    )
+    setComments(withAuthors)
+  }, [taskId])
+
   const load = useCallback(async () => {
-    const [taskRow, commentRows, eventRows] = await Promise.all([
+    const [taskRow, eventRows] = await Promise.all([
       getTaskById(taskId),
-      listCommentsByTaskId(taskId),
       listTaskEventsByTask(taskId),
     ])
     setTask(taskRow)
-    setComments(commentRows)
     setEvents(eventRows)
-  }, [taskId])
+    await loadComments()
+  }, [taskId, loadComments])
 
   useEffect(() => {
     void load()
   }, [load])
-
-  useFocusEffect(
-    useCallback(() => {
-      void load()
-    }, [load]),
-  )
 
   const addComment = useCallback(
     async (body: string) => {
@@ -47,19 +54,22 @@ export const useTaskDetailViewModel = (taskId: string) => {
       setIsSavingComment(true)
       setCommentError(null)
       const now = new Date().toISOString()
-      const currentUserId = await getCurrentUserId()
+      const sessionMode = await getSessionMode()
+      const currentUserId = sessionMode === "remote" ? await getCurrentUserId() : null
+      const createdByUserId = currentUserId ?? ANON_USER_ID
+      const authorLabel = await resolveAuthorLabel(createdByUserId)
       const optimistic: Comment = {
         id: await generateUuidV4(),
         taskId,
         body: trimmed,
-        createdByUserId: currentUserId,
+        createdByUserId,
         createdAt: now,
         updatedAt: now,
         revision: `rev-${Date.now()}`,
         deletedAt: null,
       }
 
-      setComments((prev) => [...prev, optimistic])
+      setComments((prev) => [...prev, { ...optimistic, authorLabel }])
       try {
         await insertComment(optimistic)
         await refreshLocalCounts()
