@@ -15,10 +15,10 @@ export async function refreshToken(client: AxiosInstance, refreshToken: string) 
   return response.data.accessToken
 }
 
-export async function signup(client: AxiosInstance, email: string, password: string) {
+export async function signup(client: AxiosInstance, email: string, password: string, username?: string) {
   const response = await client.post<{ ok: boolean; requiresEmailVerification: boolean }>(
     "/auth/register",
-    { email, password },
+    { email, password, username },
   )
   return response.data
 }

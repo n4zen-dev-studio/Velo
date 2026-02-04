@@ -39,6 +39,7 @@ export function AuthScreen() {
     loginWithApple,
   } = useAuthViewModel()
   const [email, setEmail] = useState("")
+  const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [signupMessage, setSignupMessage] = useState<string | null>(null)
@@ -103,12 +104,23 @@ export function AuthScreen() {
     setError(null)
     setSignupMessage(null)
     const normalizedEmail = email.trim().toLowerCase()
+    const trimmedUsername = username.trim()
     if (!normalizedEmail || !password) {
       setError("Email and password are required.")
       return
     }
+    if (trimmedUsername) {
+      if (trimmedUsername.length < 3 || trimmedUsername.length > 20) {
+        setError("Username must be 3-20 characters.")
+        return
+      }
+      if (!/^[a-zA-Z0-9._-]+$/.test(trimmedUsername)) {
+        setError("Username can only use letters, numbers, dots, underscores, and dashes.")
+        return
+      }
+    }
     try {
-      const result = await signupWithEmail(normalizedEmail, password)
+      const result = await signupWithEmail(normalizedEmail, password, trimmedUsername || undefined)
       if (result.needsVerification) {
         setSignupMessage("Check your email to verify your account.")
       }
@@ -237,6 +249,14 @@ export function AuthScreen() {
           placeholder="you@company.com"
           autoCapitalize="none"
           keyboardType="email-address"
+        />
+        <View style={themed($spacer)} />
+        <Text preset="formLabel" text="Username (optional)" />
+        <TextField
+          value={username}
+          onChangeText={setUsername}
+          placeholder="your_handle"
+          autoCapitalize="none"
         />
         <View style={themed($spacer)} />
         <Text preset="formLabel" text="Password" />

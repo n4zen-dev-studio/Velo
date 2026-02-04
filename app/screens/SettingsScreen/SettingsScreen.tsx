@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Modal, Pressable, View, ViewStyle, TextStyle } from "react-native"
+import { useFocusEffect } from "@react-navigation/native"
 
 import { Button } from "@/components/Button"
 import { GlassCard } from "@/components/GlassCard"
@@ -7,10 +8,11 @@ import { Screen } from "@/components/Screen"
 import { Text } from "@/components/Text"
 import { TextField } from "@/components/TextField"
 import { Switch } from "@/components/Toggle/Switch"
+import { HeaderAvatar } from "@/components/HeaderAvatar"
 import { clearLocalData } from "@/services/db"
 import { clearCurrentUserId, getCurrentUserId, setSessionMode } from "@/services/sync/identity"
 import { clearOfflineMode } from "@/services/storage/session"
-import { goToAuth } from "@/navigation/navigationActions"
+import { goToAuth, goToProfile } from "@/navigation/navigationActions"
 import { goToInvites } from "@/navigation/navigationActions"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
@@ -27,8 +29,10 @@ import {
 } from "@/services/api/invitesApi"
 import { BASE_URL } from "@/config/api"
 import { listByWorkspaceId as listMembers } from "@/services/db/repositories/workspaceMembersRepository"
-import { getUserLabelById } from "@/services/db/repositories/usersRepository"
 import { syncController } from "@/services/sync/SyncController"
+import { useSyncStatus } from "@/services/sync/syncStore"
+import { formatDateTime } from "@/utils/dateFormat"
+import { resolveUserLabel } from "@/utils/userLabel"
 
 import { useSettingsViewModel } from "./useSettingsViewModel"
 
@@ -43,6 +47,7 @@ export function SettingsScreen() {
 
   const { logoutUser } = useAuthViewModel()
   const { workspaces, createWorkspace, renameWorkspace, deleteWorkspace } = useWorkspaceStore()
+  const syncStatus = useSyncStatus()
 
   const [showLogoutModal, setShowLogoutModal] = useState(false)
 
@@ -152,8 +157,7 @@ export function SettingsScreen() {
     const rows = await listMembers(workspaceId)
     const labeled = await Promise.all(
       rows.map(async (member) => {
-        const resolved = await getUserLabelById(member.userId)
-        const label = member.userId === currentUserId ? "You" : resolved ?? `User · ${member.userId.slice(-4)}`
+        const label = await resolveUserLabel(member.userId)
         return {
           id: member.id,
           userId: member.userId,
@@ -163,7 +167,7 @@ export function SettingsScreen() {
       }),
     )
     setMembersByWorkspaceId((prev) => ({ ...prev, [workspaceId]: labeled }))
-  }, [currentUserId])
+  }, [])
 
   const loadInvitesForWorkspace = useCallback(async (workspaceId: string) => {
     setInviteListStatusByWorkspaceId((prev) => ({
@@ -211,7 +215,18 @@ export function SettingsScreen() {
     workspaces.forEach((workspace) => {
       void loadMembersForWorkspace(workspace.id)
     })
-  }, [loadMembersForWorkspace, workspaces])
+  }, [loadMembersForWorkspace, workspaces, syncStatus.lastSyncedAt])
+
+  useFocusEffect(
+    useCallback(() => {
+      workspaces.forEach((workspace) => {
+        void loadMembersForWorkspace(workspace.id)
+        if (expandedWorkspaceIds.has(workspace.id)) {
+          void loadInvitesForWorkspace(workspace.id)
+        }
+      })
+    }, [expandedWorkspaceIds, loadInvitesForWorkspace, loadMembersForWorkspace, workspaces]),
+  )
 
   const updateInviteEmail = useCallback((workspaceId: string, value: string) => {
     setInviteEmailByWorkspaceId((prev) => ({ ...prev, [workspaceId]: value }))
@@ -321,8 +336,13 @@ export function SettingsScreen() {
   return (
     <Screen preset="scroll" safeAreaEdges={["top", "bottom"]} contentContainerStyle={themed($screen)}>
       <View style={themed($header)}>
-        <Text preset="heading" text="Settings" />
-        <Text preset="formHelper" text="Control sync and offline preferences" />
+        <View style={themed($headerRow)}>
+          <View style={themed($headerText)}>
+            <Text preset="heading" text="Settings" />
+            <Text preset="formHelper" text="Control sync and offline preferences" />
+          </View>
+          <HeaderAvatar onPress={goToProfile} />
+        </View>
       </View>
 
       {/* Preferences */}
@@ -455,7 +475,7 @@ export function SettingsScreen() {
                                 <Text preset="formLabel" text={invite.email} />
                                 <Text
                                   preset="formHelper"
-                                  text={`Expires ${invite.expiresAt.slice(0, 10)}`}
+                                  text={`Expires ${formatDateTime(invite.expiresAt)}`}
                                   style={themed($muted)}
                                 />
                               </View>
@@ -690,6 +710,18 @@ const $screen: ThemedStyle<ViewStyle> = ({ spacing }) => ({
 })
 
 const $header: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: spacing.xs,
+})
+
+const $headerRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: spacing.sm,
+})
+
+const $headerText: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flex: 1,
   gap: spacing.xs,
 })
 

@@ -5,6 +5,7 @@ import {
   insertComment,
   listCommentsByTaskId,
   listTaskEventsByTask,
+  listStatuses,
   markTaskDeleted,
 } from "@/services/db"
 import type { Comment, Task, TaskEvent } from "@/services/db/types"
@@ -14,11 +15,13 @@ import { generateUuidV4, getCurrentUserId, getSessionMode } from "@/services/syn
 import { ANON_USER_ID } from "@/services/constants/identity"
 
 export type CommentVM = Comment & { authorLabel: string }
+export type TaskEventVM = TaskEvent & { authorLabel: string }
 
 export const useTaskDetailViewModel = (taskId: string) => {
   const [task, setTask] = useState<Task | null>(null)
   const [comments, setComments] = useState<CommentVM[]>([])
-  const [events, setEvents] = useState<TaskEvent[]>([])
+  const [events, setEvents] = useState<TaskEventVM[]>([])
+  const [statusMap, setStatusMap] = useState<Record<string, string>>({})
   const [isSavingComment, setIsSavingComment] = useState(false)
   const [commentError, setCommentError] = useState<string | null>(null)
 
@@ -38,12 +41,32 @@ export const useTaskDetailViewModel = (taskId: string) => {
   }, [taskId])
 
   const load = useCallback(async () => {
-    const [taskRow, eventRows] = await Promise.all([
-      getTaskById(taskId),
-      listTaskEventsByTask(taskId),
-    ])
+    const taskRow = await getTaskById(taskId)
     setTask(taskRow)
-    setEvents(eventRows)
+
+    const [eventRows, statuses] = await Promise.all([
+      listTaskEventsByTask(taskId),
+      taskRow ? listStatuses(taskRow.workspaceId, taskRow.projectId ?? null) : Promise.resolve([]),
+    ])
+
+    const nextMap: Record<string, string> = {}
+    statuses.forEach((status) => {
+      nextMap[status.id] = status.name
+    })
+    setStatusMap(nextMap)
+
+    const currentUserId = await getCurrentUserId()
+    const withAuthors = await Promise.all(
+      eventRows.map(async (event) => ({
+        ...event,
+        authorLabel: await resolveAuthorLabel({
+          createdByUserId: event.createdByUserId,
+          currentUserId,
+        }),
+      })),
+    )
+    setEvents(withAuthors)
+
     await loadComments()
   }, [taskId, loadComments])
 
@@ -107,6 +130,7 @@ export const useTaskDetailViewModel = (taskId: string) => {
     task,
     comments: commentsByCreatedAt,
     events,
+    statusMap,
     deleteTask,
     refresh: load,
     addComment,

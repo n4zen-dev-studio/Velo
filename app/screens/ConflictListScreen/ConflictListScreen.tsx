@@ -10,6 +10,7 @@ import { listOpenConflicts } from "@/services/db/repositories/conflictsRepositor
 import type { ConflictRecord } from "@/services/db/types"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
+import { formatDateTime } from "@/utils/dateFormat"
 
 export function ConflictListScreen() {
   const { themed } = useAppTheme()
@@ -43,8 +44,7 @@ export function ConflictListScreen() {
           >
             <GlassCard>
               <Text preset="subheading" text={`${conflict.entityType} conflict`} />
-              <Text preset="formHelper" text={`ID: ${conflict.entityId}`} />
-              <Text preset="formHelper" text={`Updated: ${conflict.createdAt}`} />
+              <Text preset="formHelper" text={`Updated: ${formatDateTime(conflict.createdAt)}`} />
             </GlassCard>
           </Pressable>
         ))

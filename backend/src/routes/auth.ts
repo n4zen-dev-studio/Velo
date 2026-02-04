@@ -45,8 +45,13 @@ export async function authRoutes(app: FastifyInstance) {
   // POST /auth/register
   // curl -X POST http://localhost:8080/auth/register -H "Content-Type: application/json" -d '{"email":"dev@tasktrak.io","password":"password123"}'
   app.post("/auth/register", async (request, reply) => {
-    const { email, password } = request.body as { email: string; password: string }
+    const { email, password, username } = request.body as {
+      email: string
+      password: string
+      username?: string
+    }
     const normalized = normalizeEmail(email)
+    const normalizedUsername = username?.trim()
 
     if (!isValidEmail(normalized)) {
       return reply.code(400).send({ error: "Invalid email" })
@@ -54,10 +59,26 @@ export async function authRoutes(app: FastifyInstance) {
     if (!password || password.length < 8) {
       return reply.code(400).send({ error: "Password must be at least 8 characters" })
     }
+    if (normalizedUsername) {
+      if (normalizedUsername.length < 3 || normalizedUsername.length > 20) {
+        return reply.code(400).send({ error: "Username must be 3-20 characters" })
+      }
+      if (!/^[a-zA-Z0-9._-]+$/.test(normalizedUsername)) {
+        return reply
+          .code(400)
+          .send({ error: "Username can only use letters, numbers, dots, underscores, and dashes" })
+      }
+    }
 
     const existing = await prisma.user.findUnique({ where: { email: normalized } })
     if (existing) {
       return reply.code(409).send({ error: "Email already in use" })
+    }
+    if (normalizedUsername) {
+      const existingUsername = await prisma.user.findFirst({ where: { username: normalizedUsername } })
+      if (existingUsername) {
+        return reply.code(409).send({ error: "Username already in use" })
+      }
     }
 
     const passwordHash = await bcrypt.hash(password, 10)
@@ -66,6 +87,7 @@ export async function authRoutes(app: FastifyInstance) {
       data: {
         email: normalized,
         passwordHash,
+        username: normalizedUsername ?? null,
         emailVerified: false,
         emailVerifiedAt: null,
         createdAt: now,

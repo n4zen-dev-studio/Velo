@@ -16,6 +16,8 @@ import {
 import type { Comment, Task } from "@/services/db/types"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
+import { formatDateTime } from "@/utils/dateFormat"
+import { resolveUserLabel } from "@/utils/userLabel"
 
 export function ConflictResolutionScreen() {
   const { themed } = useAppTheme()
@@ -30,6 +32,7 @@ export function ConflictResolutionScreen() {
   const [localPayload, setLocalPayload] = useState<Task | Comment | null>(null)
   const [remotePayload, setRemotePayload] = useState<Task | Comment | null>(null)
   const [mergePayload, setMergePayload] = useState<Task | Comment | null>(null)
+  const [assigneeLabels, setAssigneeLabels] = useState<{ local?: string; remote?: string }>({})
 
   useEffect(() => {
     if (!entityType || !entityId) return
@@ -42,6 +45,19 @@ export function ConflictResolutionScreen() {
       setMergePayload({ ...local })
     })
   }, [entityType, entityId])
+
+  useEffect(() => {
+    if (!localPayload || !remotePayload || entityType !== "task") return
+    const localTask = localPayload as Task
+    const remoteTask = remotePayload as Task
+    void (async () => {
+      const [localLabel, remoteLabel] = await Promise.all([
+        resolveUserLabel(localTask.assigneeUserId),
+        resolveUserLabel(remoteTask.assigneeUserId),
+      ])
+      setAssigneeLabels({ local: localLabel, remote: remoteLabel })
+    })()
+  }, [entityType, localPayload, remotePayload])
 
   if (!localPayload || !remotePayload || !mergePayload) {
     return (
@@ -72,8 +88,7 @@ export function ConflictResolutionScreen() {
         <>
           <Text preset="formLabel" text="Body" />
           <Text preset="formHelper" text={comment.body} />
-          <Text preset="formHelper" text={`Task: ${comment.taskId}`} />
-          <Text preset="formHelper" text={`Updated: ${comment.updatedAt}`} />
+          <Text preset="formHelper" text={`Updated: ${formatDateTime(comment.updatedAt)}`} />
         </>
       )
     }
@@ -85,8 +100,13 @@ export function ConflictResolutionScreen() {
         <Text preset="formHelper" text={task.title} />
         <Text preset="formHelper" text={`Status: ${task.statusId}`} />
         <Text preset="formHelper" text={`Priority: ${task.priority}`} />
-        <Text preset="formHelper" text={`Assignee: ${task.assigneeUserId ?? "Unassigned"}`} />
-        <Text preset="formHelper" text={`Updated: ${task.updatedAt}`} />
+        <Text
+          preset="formHelper"
+          text={`Assignee: ${
+            payload === localPayload ? assigneeLabels.local ?? "Unassigned" : assigneeLabels.remote ?? "Unassigned"
+          }`}
+        />
+        <Text preset="formHelper" text={`Updated: ${formatDateTime(task.updatedAt)}`} />
         <Text preset="formLabel" text="Description" />
         <Text preset="formHelper" text={task.description} />
       </>
@@ -97,7 +117,7 @@ export function ConflictResolutionScreen() {
     <Screen preset="scroll" contentContainerStyle={themed($screen)}>
       <View style={themed($header)}>
         <Text preset="heading" text="Resolve Conflict" />
-        <Text preset="formHelper" text={`${entityType} · ${entityId}`} />
+        <Text preset="formHelper" text={`${entityType} conflict`} />
       </View>
 
       <View style={themed($grid)}>
@@ -146,12 +166,7 @@ export function ConflictResolutionScreen() {
               }
             />
             <Text preset="formLabel" text="Assignee" />
-            <TextField
-              value={(mergePayload as Task).assigneeUserId ?? ""}
-              onChangeText={(value) =>
-                setMergePayload((prev) => ({ ...(prev as Task), assigneeUserId: value || null }))
-              }
-            />
+            <Text preset="formHelper" text={assigneeLabels.local ?? "Unassigned"} />
           </>
         ) : (
           <>
