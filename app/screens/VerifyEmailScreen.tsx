@@ -16,6 +16,7 @@ import { claimOfflineData, markOfflineClaimHandled, shouldPromptOfflineClaim } f
 import { syncController } from "@/services/sync/SyncController"
 import { goToHome } from "@/navigation/navigationActions"
 import { clearOfflineMode } from "@/services/storage/session"
+import { refreshAuthSession } from "@/services/auth/session"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
 
@@ -68,6 +69,7 @@ export function VerifyEmailScreen() {
     await setCurrentUserId(userId)
     await setSessionMode("remote")
     await clearOfflineMode()
+    await refreshAuthSession()
     goToHome()
   }
 
@@ -79,6 +81,7 @@ export function VerifyEmailScreen() {
     markOfflineClaimHandled()
     setShowClaimModal(false)
     await clearOfflineMode()
+    await refreshAuthSession()
     goToHome()
     void syncController.triggerSync("manual")
   }
@@ -90,6 +93,7 @@ export function VerifyEmailScreen() {
     markOfflineClaimHandled()
     setShowClaimModal(false)
     await clearOfflineMode()
+    await refreshAuthSession()
     goToHome()
   }
 

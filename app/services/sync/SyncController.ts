@@ -10,7 +10,8 @@ import {
 } from "@/services/sync/syncStore"
 import { runSync } from "@/services/sync/SyncEngine"
 import { normalizeSyncError } from "@/services/sync/syncErrors"
-import { getSessionMode } from "@/services/sync/identity"
+import { getSessionMode, getStoredUserId } from "@/services/sync/identity"
+import { getAccessToken } from "@/services/api/tokenStore"
 
 export type SyncTriggerReason = "app_open" | "manual" | "net_regain" | "background" | "app_resume"
 
@@ -73,6 +74,12 @@ class SyncController {
       this.lastTriggerAt = now
       const sessionMode = await getSessionMode()
       if (sessionMode === "local") {
+        setPhase("idle")
+        return
+      }
+      const accessToken = await getAccessToken()
+      const userId = await getStoredUserId()
+      if (!accessToken || !userId) {
         setPhase("idle")
         return
       }

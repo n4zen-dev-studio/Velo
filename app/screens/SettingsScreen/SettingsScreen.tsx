@@ -14,6 +14,7 @@ import { clearCurrentUserId, getCurrentUserId, setSessionMode } from "@/services
 import { clearOfflineMode } from "@/services/storage/session"
 import { goToAuth, goToProfile } from "@/navigation/navigationActions"
 import { goToInvites } from "@/navigation/navigationActions"
+import { clearTokens } from "@/services/api/tokenStore"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
 import { useAuthViewModel } from "@/screens/AuthScreen/useAuthViewModel"
@@ -31,6 +32,7 @@ import { BASE_URL } from "@/config/api"
 import { listByWorkspaceId as listMembers } from "@/services/db/repositories/workspaceMembersRepository"
 import { syncController } from "@/services/sync/SyncController"
 import { useSyncStatus } from "@/services/sync/syncStore"
+import { clearAuthSession, refreshAuthSession, useAuthSession } from "@/services/auth/session"
 import { formatDateTime } from "@/utils/dateFormat"
 import { resolveUserLabel } from "@/utils/userLabel"
 
@@ -48,8 +50,11 @@ export function SettingsScreen() {
   const { logoutUser } = useAuthViewModel()
   const { workspaces, createWorkspace, renameWorkspace, deleteWorkspace } = useWorkspaceStore()
   const syncStatus = useSyncStatus()
+  const authSession = useAuthSession()
 
   const [showLogoutModal, setShowLogoutModal] = useState(false)
+  const [logoutError, setLogoutError] = useState<string | null>(null)
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
 
   const [createExpanded, setCreateExpanded] = useState(false)
   const [newWorkspaceLabel, setNewWorkspaceLabel] = useState("")
@@ -99,24 +104,91 @@ export function SettingsScreen() {
   }
 
   const handleLogout = async () => {
-    await logoutUser()
+    setLogoutError(null)
+    await refreshAuthSession()
     setShowLogoutModal(true)
   }
 
-  const handleKeepLocal = async () => {
-    await setSessionMode("local")
-    setShowLogoutModal(false)
-    await clearOfflineMode()
-    goToAuth()
+  const handleOnlineSyncAndWipe = async () => {
+    setLogoutError(null)
+    setIsLoggingOut(true)
+    try {
+      if (syncStatus.pendingCount > 0) {
+        await syncController.triggerSync("manual")
+      }
+      await logoutUser()
+      await clearLocalData()
+      await clearCurrentUserId()
+      await setSessionMode("local")
+      await clearOfflineMode()
+      clearAuthSession()
+      setShowLogoutModal(false)
+      goToAuth()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Sync failed. Please try again."
+      setLogoutError(message)
+    } finally {
+      setIsLoggingOut(false)
+    }
   }
 
-  const handleWipeLocal = async () => {
-    await clearLocalData()
-    await clearCurrentUserId()
-    await setSessionMode("local")
-    setShowLogoutModal(false)
-    await clearOfflineMode()
-    goToAuth()
+  const handleOnlineWipe = async () => {
+    setLogoutError(null)
+    setIsLoggingOut(true)
+    try {
+      await logoutUser()
+      await clearLocalData()
+      await clearCurrentUserId()
+      await setSessionMode("local")
+      await clearOfflineMode()
+      clearAuthSession()
+      setShowLogoutModal(false)
+      goToAuth()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Sign out failed. Please try again."
+      setLogoutError(message)
+    } finally {
+      setIsLoggingOut(false)
+    }
+  }
+
+  const handleOfflineKeepLocal = async () => {
+    setLogoutError(null)
+    setIsLoggingOut(true)
+    try {
+      await clearTokens()
+      await clearCurrentUserId()
+      await setSessionMode("local")
+      await clearOfflineMode()
+      clearAuthSession()
+      setShowLogoutModal(false)
+      goToAuth()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Sign out failed. Please try again."
+      setLogoutError(message)
+    } finally {
+      setIsLoggingOut(false)
+    }
+  }
+
+  const handleOfflineWipe = async () => {
+    setLogoutError(null)
+    setIsLoggingOut(true)
+    try {
+      await clearLocalData()
+      await clearTokens()
+      await clearCurrentUserId()
+      await setSessionMode("local")
+      await clearOfflineMode()
+      clearAuthSession()
+      setShowLogoutModal(false)
+      goToAuth()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Sign out failed. Please try again."
+      setLogoutError(message)
+    } finally {
+      setIsLoggingOut(false)
+    }
   }
 
   const handleCreateWorkspace = async () => {
@@ -602,12 +674,58 @@ export function SettingsScreen() {
         <View style={themed($backdrop)}>
           <GlassCard style={themed($modalCard)}>
             <Text preset="heading" text="Sign out" />
-            <Text preset="formHelper" text="Choose what to do with your local data on this device." />
+            <Text
+              preset="formHelper"
+              text={
+                authSession.isAuthenticated
+                  ? syncStatus.isOnline
+                    ? syncStatus.pendingCount > 0
+                      ? `You have ${syncStatus.pendingCount} pending changes. Syncing will push them before signing out.`
+                      : "No pending changes. You can sign out safely."
+                    : "You are offline. Sign out will wipe this device; sync can’t run right now."
+                  : "You’re offline or unauthenticated. Keeping local data lets you sign in later and sync from this device."
+              }
+            />
+            {logoutError ? <Text preset="formHelper" text={logoutError} style={themed($errorText)} /> : null}
 
             <View style={themed($modalButtons)}>
-              <Button text="Keep local data" preset="glass" onPress={handleKeepLocal} />
-              <Button text="Wipe local data" preset="glass" onPress={handleWipeLocal} />
-              <Button text="Cancel" preset="glass" onPress={() => setShowLogoutModal(false)} />
+              {authSession.isAuthenticated ? (
+                <>
+                  <Button
+                    text={isLoggingOut ? "Syncing..." : "Sync now & sign out (wipe device)"}
+                    preset="glass"
+                    onPress={handleOnlineSyncAndWipe}
+                    disabled={isLoggingOut || (!syncStatus.isOnline && syncStatus.pendingCount > 0)}
+                  />
+                  <Button
+                    text={isLoggingOut ? "Signing out..." : "Sign out now (wipe device)"}
+                    preset="glass"
+                    onPress={handleOnlineWipe}
+                    disabled={isLoggingOut}
+                  />
+                </>
+              ) : (
+                <>
+                  <Button
+                    text={isLoggingOut ? "Signing out..." : "Keep local data & sign out"}
+                    preset="glass"
+                    onPress={handleOfflineKeepLocal}
+                    disabled={isLoggingOut}
+                  />
+                  <Button
+                    text={isLoggingOut ? "Signing out..." : "Wipe local data & sign out"}
+                    preset="glass"
+                    onPress={handleOfflineWipe}
+                    disabled={isLoggingOut}
+                  />
+                </>
+              )}
+              <Button
+                text="Cancel"
+                preset="glass"
+                onPress={() => setShowLogoutModal(false)}
+                disabled={isLoggingOut}
+              />
             </View>
           </GlassCard>
         </View>

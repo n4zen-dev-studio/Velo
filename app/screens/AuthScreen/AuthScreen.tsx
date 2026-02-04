@@ -20,6 +20,7 @@ import {
   setSessionMode,
 } from "@/services/sync/identity"
 import { setTokens } from "@/services/api/tokenStore"
+import { refreshAuthSession } from "@/services/auth/session"
 import { claimOfflineData, markOfflineClaimHandled, shouldPromptOfflineClaim } from "@/services/sync/offlineClaim"
 import { syncController } from "@/services/sync/SyncController"
 import { googleOauth, isValidGoogleClientId } from "@/config/oauth"
@@ -186,6 +187,7 @@ export function AuthScreen() {
     await setCurrentUserId(userId)
     await setSessionMode("local")
     await setOfflineMode(true)
+    await refreshAuthSession()
     goToHome()
   }
 
@@ -209,6 +211,7 @@ export function AuthScreen() {
     await setCurrentUserId(userId)
     await setSessionMode("remote")
     await clearOfflineMode()
+    await refreshAuthSession()
     goToHome()
   }
 
@@ -220,6 +223,7 @@ export function AuthScreen() {
     markOfflineClaimHandled()
     setShowClaimModal(false)
     await clearOfflineMode()
+    await refreshAuthSession()
     goToHome()
     void syncController.triggerSync("manual")
   }
@@ -231,6 +235,7 @@ export function AuthScreen() {
     markOfflineClaimHandled()
     setShowClaimModal(false)
     await clearOfflineMode()
+    await refreshAuthSession()
     goToHome()
   }
 

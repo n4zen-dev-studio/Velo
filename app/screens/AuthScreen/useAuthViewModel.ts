@@ -12,6 +12,7 @@ import {
   verifyEmail,
 } from "@/services/api/authApi"
 import { clearTokens, getRefreshToken } from "@/services/api/tokenStore"
+import { clearAuthSession } from "@/services/auth/session"
 
 export const useAuthViewModel = () => {
   const client = createHttpClient(BASE_URL)
@@ -49,6 +50,7 @@ export const useAuthViewModel = () => {
       }
     }
     await clearTokens()
+    clearAuthSession()
   }
 
   const requestPasswordResetEmail = async (email: string) => {

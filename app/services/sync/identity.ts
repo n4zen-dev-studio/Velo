@@ -38,6 +38,10 @@ export async function getCurrentUserId() {
   return nextId
 }
 
+export async function getStoredUserId() {
+  return SecureStore.getItemAsync(LOCAL_USER_ID_KEY)
+}
+
 export async function setCurrentUserId(userId: string) {
   await SecureStore.setItemAsync(LOCAL_USER_ID_KEY, userId)
 }
