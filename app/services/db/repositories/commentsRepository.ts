@@ -124,6 +124,15 @@ export async function listCommentsByTask(taskId: string) {
   return listComments(taskId)
 }
 
+export async function listCommentsByTaskId(taskId: string) {
+  return listComments(taskId)
+}
+
+export async function insertComment(comment: Comment) {
+  await upsertComment(comment)
+  return comment
+}
+
 export async function getCommentById(commentId: string) {
   const database = await getDb()
   const row = await queryFirst<CommentRow>(database, "SELECT * FROM comments WHERE id = ?", [

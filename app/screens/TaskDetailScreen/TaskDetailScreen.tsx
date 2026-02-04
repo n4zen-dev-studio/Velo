@@ -1,14 +1,16 @@
-import { View, ViewStyle, TextStyle, Pressable } from "react-native"
+import { View, ViewStyle, TextStyle } from "react-native"
 import { useNavigation, useRoute } from "@react-navigation/native"
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 
 import { Button } from "@/components/Button"
 import { GlassCard } from "@/components/GlassCard"
 import { Screen } from "@/components/Screen"
 import { Text } from "@/components/Text"
+import { TextField } from "@/components/TextField"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
 import type { HomeStackScreenProps } from "@/navigators/navigationTypes"
+import { formatDate } from "@/utils/formatDate"
 
 import { useTaskDetailViewModel } from "./useTaskDetailViewModel"
 
@@ -17,10 +19,13 @@ export function TaskDetailScreen() {
   const navigation = useNavigation<HomeStackScreenProps<"TaskDetail">["navigation"]>()
   const route = useRoute<HomeStackScreenProps<"TaskDetail">["route"]>()
   const { taskId } = route.params
-  const { task, comments, events, deleteTask } = useTaskDetailViewModel(taskId)
+  const { task, comments, events, deleteTask, addComment, isSavingComment, commentError } =
+    useTaskDetailViewModel(taskId)
+  const [commentDraft, setCommentDraft] = useState("")
 
   const statusLabel = useMemo(() => (task ? task.statusId : "—"), [task])
   const priorityLabel = useMemo(() => (task ? task.priority : "—"), [task])
+  const canSend = commentDraft.trim().length > 0 && !isSavingComment
 
   if (!task) {
     return (
@@ -88,19 +93,33 @@ export function TaskDetailScreen() {
             <Text preset="subheading" text="Comments" />
             <Text preset="formHelper" text={`${comments.length} total`} style={themed($muted)} />
           </View>
+        </View>
 
-          {/* ✅ Add comment entry-point (no behavior change required if you already have a screen/route later) */}
-          <Pressable
-            style={themed($chipButton)}
-            onPress={() => {
-              // If you don’t have a comment composer screen yet, this keeps the app consistent:
-              // You can route this to a modal/screen later without changing the UI again.
-              console.warn("[TaskDetail] Add comment not implemented yet")
-            }}
-          >
-            <Text preset="formHelper" text="Add" style={themed($chipText)} />
-            <Text preset="formHelper" text="+" style={themed($chipText)} />
-          </Pressable>
+        <View style={themed($composer)}>
+          <TextField
+            value={commentDraft}
+            onChangeText={setCommentDraft}
+            placeholder="Write a comment..."
+            multiline
+            numberOfLines={3}
+            editable={!isSavingComment}
+          />
+          {commentError ? (
+            <Text preset="formHelper" text={commentError} style={themed($errorText)} />
+          ) : null}
+          <View style={themed($composerActions)}>
+            <Button
+              text={isSavingComment ? "Sending..." : "Send"}
+              preset="glass"
+              onPress={async () => {
+                const created = await addComment(commentDraft)
+                if (created) {
+                  setCommentDraft("")
+                }
+              }}
+              disabled={!canSend}
+            />
+          </View>
         </View>
 
         <View style={themed($stack)}>
@@ -110,8 +129,12 @@ export function TaskDetailScreen() {
             comments.map((comment) => (
               <View key={comment.id} style={themed($commentCard)}>
                 <View style={themed($commentHeader)}>
-                  <Text preset="formLabel" text={comment.createdByUserId} />
-                  {/* if you have createdAt, show it here later */}
+                  <Text preset="formLabel" text={`Comment by: ${comment.createdByUserId}`} />
+                  <Text
+                    preset="formHelper"
+                    text={formatDate(comment.createdAt, "MMM dd, yyyy")}
+                    style={themed($muted)}
+                  />
                 </View>
                 <Text preset="formHelper" text={comment.body} style={themed($muted)} />
               </View>
@@ -191,6 +214,17 @@ const $sectionHeaderBetween: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   marginBottom: spacing.sm,
 })
 
+const $composer: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: spacing.sm,
+  marginBottom: spacing.md,
+})
+
+const $composerActions: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  justifyContent: "flex-end",
+  gap: spacing.sm,
+})
+
 const $stack: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.sm,
 })
@@ -204,7 +238,7 @@ const $commentCard: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
 })
 
 const $commentHeader: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  flexDirection: "row",
+  flexDirection: "column",
   justifyContent: "space-between",
   alignItems: "baseline",
   marginBottom: spacing.xs,
@@ -215,22 +249,10 @@ const $eventRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   paddingVertical: spacing.xs,
 })
 
-const $chipButton: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
-  flexDirection: "row",
-  alignItems: "center",
-  gap: spacing.xs,
-  paddingHorizontal: spacing.sm,
-  paddingVertical: spacing.xxs,
-  borderRadius: 999,
-  borderWidth: 1,
-  borderColor: "rgba(255,255,255,0.14)",
-  backgroundColor: colors.card ?? "rgba(255,255,255,0.06)",
-})
-
-const $chipText: ThemedStyle<TextStyle> = () => ({
-  opacity: 0.92,
-})
-
 const $muted: ThemedStyle<TextStyle> = () => ({
   opacity: 0.85,
+})
+
+const $errorText: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.error,
 })
