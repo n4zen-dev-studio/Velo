@@ -65,14 +65,19 @@ export function Button(props: ButtonProps) {
     ...rest
   } = props
 
-  const { themed } = useAppTheme()
+  const { themed, theme } = useAppTheme()
+  const isDark = theme.isDark
 
   const preset: Presets = props.preset ?? "glass"
 
   function $viewStyle({ pressed }: PressableStateCallbackType): StyleProp<ViewStyle> {
+      const isGlass = preset === "glass"
+
     return [
       themed($viewPresets[preset]),
       $viewStyleOverride,
+      isGlass && !isDark && $glassLightBoost,
+
       !!pressed && themed([$pressedViewPresets[preset], $pressedViewStyleOverride]),
       !!disabled && themed([$disabledViewPreset, $disabledViewStyleOverride as any]),
     ]
@@ -159,6 +164,19 @@ const $sheenOverlay: ThemedStyle<ViewStyle> = ({}) => ({
   backgroundColor: "rgba(255,255,255,0.03)",
 })
 
+const $glassLightBoost: ViewStyle = {
+  // More visible glass on light backgrounds
+  backgroundColor: "rgba(0,0,0,0.05)",
+  borderColor: "rgba(0,0,0,0.04)",
+
+  // subtle lift so it reads like a component, not flat text
+  shadowColor: "#000",
+  shadowOpacity: 0.08,
+  shadowRadius: 14,
+  shadowOffset: { width: 0, height: 8 },
+  elevation: 5,
+}
+
 const $viewPresets: Record<Presets, ThemedStyleArray<ViewStyle>> = {
   // keep legacy presets working
   default: [
@@ -211,7 +229,7 @@ const $pressedViewPresets: Record<Presets, ThemedStyle<ViewStyle>> = {
    * Glass press: slightly brighter + subtle scale-ish feel (via padding/opacity)
    */
   glass: () => ({
-    backgroundColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(0,0,0,0.12)",
     borderColor: "rgba(255,255,255,0.18)",
   }),
 }

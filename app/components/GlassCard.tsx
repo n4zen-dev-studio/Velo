@@ -15,14 +15,14 @@ export function GlassCard({ children, style }: PropsWithChildren<GlassCardProps>
 }
 
 const $card: ThemedStyle<ViewStyle> = ({ colors, spacing, isDark }) => ({
-  backgroundColor: isDark ? "rgba(30, 26, 36, 0.85)" : "rgba(255, 255, 255, 0.82)",
+  backgroundColor: isDark ? colors.palette.neutral300 : colors.palette.neutral200,
   borderColor: isDark ? colors.palette.neutral300 : colors.palette.neutral200,
   borderRadius: 20,
   borderWidth: 1,
   padding: spacing.md,
-  shadowColor: colors.palette.neutral900,
+  shadowColor: colors.palette.neutral800,
   shadowOpacity: 0.1,
   shadowRadius: 16,
-  shadowOffset: { width: 0, height: 8 },
+  shadowOffset: { width: 0, height: 9 },
   elevation: 6,
 })

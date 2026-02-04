@@ -207,6 +207,7 @@ export function SyncDebugScreen() {
 const $screen: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   padding: spacing.lg,
   gap: spacing.lg,
+  paddingBottom: 50
 })
 
 const $header: ThemedStyle<ViewStyle> = ({ spacing }) => ({
