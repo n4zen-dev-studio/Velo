@@ -85,9 +85,9 @@ export function TaskEditorScreen() {
   })
 
   return (
-    <Screen preset="scroll" contentContainerStyle={themed($screen)}>
+    <Screen preset="scroll" safeAreaEdges={['top', 'bottom']} contentContainerStyle={themed($screen)}>
       <View style={themed($header)}>
-        <Text preset="heading" text={task ? "Edit task" : "Create task"} />
+        <Text preset="heading" text={task ? "Edit Task" : "Create Task"} />
         <Text preset="formHelper" text={`Workspace: ${workspaceLabel}`} />
       </View>
 
@@ -174,7 +174,7 @@ export function TaskEditorScreen() {
           onPress={onSubmit}
           disabled={hasConflict}
         />
-        <Button text="Discard" preset="reversed" onPress={() => navigation.goBack()} />
+        <Button text="Cancel" preset="reversed" onPress={() => navigation.goBack()} />
       </View>
       <Text
         preset="formHelper"

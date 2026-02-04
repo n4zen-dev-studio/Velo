@@ -56,14 +56,16 @@ function SwitchInput(props: SwitchInputProps) {
     themed,
   } = useAppTheme()
 
-  const animate = useRef(new Animated.Value(on ? 1 : 0)) // Initial value is set based on isActive
+  // Animated values
+  const animate = useRef(new Animated.Value(on ? 1 : 0))
   const opacity = useRef(new Animated.Value(0))
 
   useEffect(() => {
     Animated.timing(animate.current, {
       toValue: on ? 1 : 0,
       duration: 300,
-      useNativeDriver: true, // Enable native driver for smoother animations
+      // ✅ Use JS driver so layout-derived translate values are always respected
+      useNativeDriver: false,
     }).start()
   }, [on])
 
@@ -71,19 +73,27 @@ function SwitchInput(props: SwitchInputProps) {
     Animated.timing(opacity.current, {
       toValue: on ? 1 : 0,
       duration: 300,
-      useNativeDriver: true,
+      useNativeDriver: false,
     }).start()
   }, [on])
 
-  const knobSizeFallback = 2
+  // Track dimensions (the switch background)
+  const trackWidthFallback = 56
+  const trackHeightFallback = 32
 
+  const trackWidth =
+    (typeof $outerStyleOverride?.width === "number" ? $outerStyleOverride.width : undefined) ?? trackWidthFallback
+  const trackHeight =
+    (typeof $outerStyleOverride?.height === "number" ? $outerStyleOverride.height : undefined) ?? trackHeightFallback
+
+  // Knob dimensions
+  const knobSizeFallback = 24
   const knobWidth = [$detailStyleOverride?.width, $switchDetail?.width, knobSizeFallback].find(
     (v) => typeof v === "number",
-  )
-
+  ) as number
   const knobHeight = [$detailStyleOverride?.height, $switchDetail?.height, knobSizeFallback].find(
     (v) => typeof v === "number",
-  )
+  ) as number
 
   const offBackgroundColor = [
     disabled && colors.palette.neutral400,
@@ -118,24 +128,34 @@ function SwitchInput(props: SwitchInputProps) {
   const rtlAdjustment = isRTL ? -1 : 1
   const $themedSwitchInner = useMemo(() => themed([$styles.toggleInner, $switchInner]), [themed])
 
-  const offsetLeft = ($innerStyleOverride?.paddingStart ||
-    $innerStyleOverride?.paddingLeft ||
-    $themedSwitchInner?.paddingStart ||
-    $themedSwitchInner?.paddingLeft ||
-    0) as number
+  // Offsets define the padding inside the track that the knob respects
+  const offsetLeft =
+    ($innerStyleOverride?.paddingStart ??
+      $innerStyleOverride?.paddingLeft ??
+      ($themedSwitchInner as any)?.paddingStart ??
+      ($themedSwitchInner as any)?.paddingLeft ??
+      4) as number
 
-  const offsetRight = ($innerStyleOverride?.paddingEnd ||
-    $innerStyleOverride?.paddingRight ||
-    $themedSwitchInner?.paddingEnd ||
-    $themedSwitchInner?.paddingRight ||
-    0) as number
+  const offsetRight =
+    ($innerStyleOverride?.paddingEnd ??
+      $innerStyleOverride?.paddingRight ??
+      ($themedSwitchInner as any)?.paddingEnd ??
+      ($themedSwitchInner as any)?.paddingRight ??
+      4) as number
+
+  // ✅ Correct travel distance: trackWidth - knobWidth - (left+right padding)
+  const maxTranslate = Math.max(0, trackWidth - (knobWidth || 0) - offsetLeft - offsetRight)
+
+  // Start/end positions (also handle RTL)
+  const startX = isRTL ? offsetRight : offsetLeft
+  const endX = startX + maxTranslate
 
   const outputRange =
     Platform.OS === "web"
       ? isRTL
-        ? [+(knobWidth || 0) + offsetRight, offsetLeft]
-        : [offsetLeft, +(knobWidth || 0) + offsetRight]
-      : [rtlAdjustment * offsetLeft, rtlAdjustment * (+(knobWidth || 0) + offsetRight)]
+        ? [endX, startX]
+        : [startX, endX]
+      : [rtlAdjustment * startX, rtlAdjustment * endX]
 
   const $animatedSwitchKnob = animate.current.interpolate({
     inputRange: [0, 1],
@@ -143,7 +163,13 @@ function SwitchInput(props: SwitchInputProps) {
   })
 
   return (
-    <View style={[$inputOuter, { backgroundColor: offBackgroundColor }, $outerStyleOverride]}>
+    <View
+      style={[
+        $inputOuter,
+        { backgroundColor: offBackgroundColor, width: trackWidth, height: trackHeight },
+        $outerStyleOverride,
+      ]}
+    >
       <Animated.View
         style={[
           $themedSwitchInner,
