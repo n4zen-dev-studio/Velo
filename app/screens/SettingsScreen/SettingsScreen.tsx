@@ -17,10 +17,18 @@ import type { ThemedStyle } from "@/theme/types"
 import { useAuthViewModel } from "@/screens/AuthScreen/useAuthViewModel"
 import { useWorkspaceStore } from "@/stores/workspaceStore"
 import { createHttpClient } from "@/services/api/httpClient"
-import { inviteToWorkspace } from "@/services/api/invitesApi"
+import {
+  deleteWorkspace as deleteWorkspaceApi,
+  inviteToWorkspace,
+  listWorkspaceInvites,
+  removeWorkspaceMember,
+  revokeWorkspaceInvite,
+  type WorkspaceInvite,
+} from "@/services/api/invitesApi"
 import { BASE_URL } from "@/config/api"
 import { listByWorkspaceId as listMembers } from "@/services/db/repositories/workspaceMembersRepository"
 import { getUserLabelById } from "@/services/db/repositories/usersRepository"
+import { syncController } from "@/services/sync/SyncController"
 
 import { useSettingsViewModel } from "./useSettingsViewModel"
 
@@ -34,7 +42,7 @@ export function SettingsScreen() {
   // so this screen can remain dumb UI.
 
   const { logoutUser } = useAuthViewModel()
-  const { workspaces, createWorkspace, renameWorkspace } = useWorkspaceStore()
+  const { workspaces, createWorkspace, renameWorkspace, deleteWorkspace } = useWorkspaceStore()
 
   const [showLogoutModal, setShowLogoutModal] = useState(false)
 
@@ -55,6 +63,26 @@ export function SettingsScreen() {
     Record<string, Array<{ id: string; label: string; role: string; userId: string }>>
   >({})
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const [sentInvitesByWorkspaceId, setSentInvitesByWorkspaceId] = useState<
+    Record<string, WorkspaceInvite[]>
+  >({})
+  const [inviteListStatusByWorkspaceId, setInviteListStatusByWorkspaceId] = useState<
+    Record<string, { isLoading?: boolean; error?: string }>
+  >({})
+  const [confirmRemove, setConfirmRemove] = useState<{
+    workspaceId: string
+    userId: string
+    label: string
+  } | null>(null)
+  const [confirmRevoke, setConfirmRevoke] = useState<{
+    workspaceId: string
+    inviteId: string
+    email: string
+  } | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState<{
+    workspaceId: string
+    label: string
+  } | null>(null)
 
   const validateWorkspaceLabel = (label: string, excludeId?: string | null) => {
     const trimmed = label.trim()
@@ -137,6 +165,31 @@ export function SettingsScreen() {
     setMembersByWorkspaceId((prev) => ({ ...prev, [workspaceId]: labeled }))
   }, [currentUserId])
 
+  const loadInvitesForWorkspace = useCallback(async (workspaceId: string) => {
+    setInviteListStatusByWorkspaceId((prev) => ({
+      ...prev,
+      [workspaceId]: { ...prev[workspaceId], isLoading: true, error: undefined },
+    }))
+    try {
+      const client = createHttpClient(BASE_URL)
+      const invites = await listWorkspaceInvites(client, workspaceId)
+      setSentInvitesByWorkspaceId((prev) => ({ ...prev, [workspaceId]: invites }))
+    } catch (err) {
+      const message =
+        (err as any)?.response?.data?.error?.message ??
+        (err instanceof Error ? err.message : "Failed to load invites")
+      setInviteListStatusByWorkspaceId((prev) => ({
+        ...prev,
+        [workspaceId]: { ...prev[workspaceId], error: message },
+      }))
+    } finally {
+      setInviteListStatusByWorkspaceId((prev) => ({
+        ...prev,
+        [workspaceId]: { ...prev[workspaceId], isLoading: false },
+      }))
+    }
+  }, [])
+
   const toggleWorkspaceExpanded = useCallback(
     (workspaceId: string) => {
       setExpandedWorkspaceIds((prev) => {
@@ -146,11 +199,12 @@ export function SettingsScreen() {
         } else {
           next.add(workspaceId)
           void loadMembersForWorkspace(workspaceId)
+          void loadInvitesForWorkspace(workspaceId)
         }
         return next
       })
     },
-    [loadMembersForWorkspace],
+    [loadMembersForWorkspace, loadInvitesForWorkspace],
   )
 
   useEffect(() => {
@@ -189,21 +243,80 @@ export function SettingsScreen() {
           ...prev,
           [workspaceId]: { ...prev[workspaceId], success: "Invite sent.", isInviting: false },
         }))
+        void loadInvitesForWorkspace(workspaceId)
       } catch (err) {
-        const message = err instanceof Error ? err.message : "Failed to send invite"
+        const message =
+          (err as any)?.response?.data?.error?.message ??
+          (err instanceof Error ? err.message : "Failed to send invite")
         setInviteStatusByWorkspaceId((prev) => ({
           ...prev,
           [workspaceId]: { ...prev[workspaceId], error: message, isInviting: false },
         }))
       }
     },
-    [inviteEmailByWorkspaceId],
+    [inviteEmailByWorkspaceId, loadInvitesForWorkspace],
   )
 
   const workspaceSubtitle = useMemo(() => {
     const customCount = workspaces.filter((w) => w.kind !== "personal").length
     return customCount === 0 ? "Personal only" : `${customCount} custom`
   }, [workspaces])
+
+  const handleRemoveMember = useCallback(async () => {
+    if (!confirmRemove) return
+    try {
+      const client = createHttpClient(BASE_URL)
+      await removeWorkspaceMember(client, confirmRemove.workspaceId, confirmRemove.userId)
+      await syncController.triggerSync("manual")
+      await loadMembersForWorkspace(confirmRemove.workspaceId)
+    } catch (err) {
+      const message =
+        (err as any)?.response?.data?.error?.message ??
+        (err instanceof Error ? err.message : "Failed to remove member")
+      setInviteStatusByWorkspaceId((prev) => ({
+        ...prev,
+        [confirmRemove.workspaceId]: { ...prev[confirmRemove.workspaceId], error: message },
+      }))
+    } finally {
+      setConfirmRemove(null)
+    }
+  }, [confirmRemove, loadMembersForWorkspace])
+
+  const handleRevokeInvite = useCallback(async () => {
+    if (!confirmRevoke) return
+    try {
+      const client = createHttpClient(BASE_URL)
+      await revokeWorkspaceInvite(client, confirmRevoke.workspaceId, confirmRevoke.inviteId)
+      await loadInvitesForWorkspace(confirmRevoke.workspaceId)
+    } catch (err) {
+      const message =
+        (err as any)?.response?.data?.error?.message ??
+        (err instanceof Error ? err.message : "Failed to revoke invite")
+      setInviteListStatusByWorkspaceId((prev) => ({
+        ...prev,
+        [confirmRevoke.workspaceId]: { ...prev[confirmRevoke.workspaceId], error: message },
+      }))
+    } finally {
+      setConfirmRevoke(null)
+    }
+  }, [confirmRevoke, loadInvitesForWorkspace])
+
+  const handleDeleteWorkspace = useCallback(async () => {
+    if (!confirmDelete) return
+    try {
+      const client = createHttpClient(BASE_URL)
+      await deleteWorkspaceApi(client, confirmDelete.workspaceId)
+      await deleteWorkspace(confirmDelete.workspaceId)
+      await syncController.triggerSync("manual")
+    } catch (err) {
+      const message =
+        (err as any)?.response?.data?.error?.message ??
+        (err instanceof Error ? err.message : "Failed to delete workspace")
+      setCreateError(message)
+    } finally {
+      setConfirmDelete(null)
+    }
+  }, [confirmDelete, deleteWorkspace])
 
   return (
     <Screen preset="scroll" safeAreaEdges={["top", "bottom"]} contentContainerStyle={themed($screen)}>
@@ -262,8 +375,12 @@ export function SettingsScreen() {
           {workspaces.map((workspace) => {
             const isExpanded = expandedWorkspaceIds.has(workspace.id)
             const members = membersByWorkspaceId[workspace.id] ?? []
+            const ownerCount = members.filter((member) => member.role === "OWNER").length
+            const isOwner = !!currentUserId && members.some((member) => member.userId === currentUserId && member.role === "OWNER")
             const inviteStatus = inviteStatusByWorkspaceId[workspace.id]
             const inviteEmail = inviteEmailByWorkspaceId[workspace.id] ?? ""
+            const sentInvites = sentInvitesByWorkspaceId[workspace.id] ?? []
+            const inviteListStatus = inviteListStatusByWorkspaceId[workspace.id]
             return (
               <View key={workspace.id} style={themed($accordionCard)}>
                 <Pressable
@@ -290,14 +407,6 @@ export function SettingsScreen() {
                   <View style={themed($accordionBody)}>
                     <View style={themed($accordionRow)}>
                       <Text preset="formLabel" text="Members" />
-                      {workspace.kind === "personal" ? null : (
-                        <Button
-                          text="Rename"
-                          preset="glass"
-                          onPress={() => openRenameModal(workspace.id, workspace.label)}
-                          style={themed($smallButton)}
-                        />
-                      )}
                     </View>
 
                     {members.length === 0 ? (
@@ -309,14 +418,71 @@ export function SettingsScreen() {
                             <Text preset="formLabel" text={member.label} />
                             <Text preset="formHelper" text={member.role} style={themed($muted)} />
                           </View>
+                          {isOwner &&
+                          member.userId !== currentUserId &&
+                          !(member.role === "OWNER" && ownerCount <= 1) ? (
+                            <Button
+                              text="Remove"
+                              preset="glass"
+                              style={themed($dangerButton)}
+                              onPress={() =>
+                                setConfirmRemove({
+                                  workspaceId: workspace.id,
+                                  userId: member.userId,
+                                  label: member.label,
+                                })
+                              }
+                            />
+                          ) : null}
                         </View>
                       ))
                     )}
 
                     <View style={themed($divider)} />
+                    {workspace.kind === "personal" || !isOwner ? null : (
+                      <View style={themed($stack)}>
+                        <Text preset="formLabel" text="Sent invites" />
+                        {inviteListStatus?.isLoading ? (
+                          <Text preset="formHelper" text="Loading invites..." />
+                        ) : inviteListStatus?.error ? (
+                          <Text preset="formHelper" text={inviteListStatus.error} style={themed($errorText)} />
+                        ) : sentInvites.length === 0 ? (
+                          <Text preset="formHelper" text="No pending invites." style={themed($muted)} />
+                        ) : (
+                          sentInvites.map((invite) => (
+                            <View key={invite.id} style={themed($inviteRow)}>
+                              <View style={themed($rowLeft)}>
+                                <Text preset="formLabel" text={invite.email} />
+                                <Text
+                                  preset="formHelper"
+                                  text={`Expires ${invite.expiresAt.slice(0, 10)}`}
+                                  style={themed($muted)}
+                                />
+                              </View>
+                              <Button
+                                text="Revoke"
+                                preset="glass"
+                                style={themed($dangerButton)}
+                                onPress={() =>
+                                  setConfirmRevoke({
+                                    workspaceId: workspace.id,
+                                    inviteId: invite.id,
+                                    email: invite.email,
+                                  })
+                                }
+                              />
+                            </View>
+                          ))
+                        )}
+                        <View style={themed($divider)} />
+                      </View>
+                    )}
+
                     <Text preset="formLabel" text="Invite member" />
                     {workspace.kind === "personal" ? (
                       <Text preset="formHelper" text="Personal workspace cannot be shared." style={themed($muted)} />
+                    ) : !isOwner ? (
+                      <Text preset="formHelper" text="Owner permission required to invite members." style={themed($muted)} />
                     ) : (
                       <>
                         <TextField
@@ -341,6 +507,29 @@ export function SettingsScreen() {
                         </View>
                       </>
                     )}
+
+                    <View style={themed($divider)} />
+                    <View style={themed($accordionRow)}>
+                      <Text preset="formLabel" text="Workspace actions" />
+                    </View>
+                    <View style={themed($actionsRow)}>
+                      {workspace.kind === "personal" ? null : (
+                        <Button
+                          text="Rename"
+                          preset="glass"
+                          onPress={() => openRenameModal(workspace.id, workspace.label)}
+                          style={themed($smallButton)}
+                        />
+                      )}
+                      {workspace.kind !== "personal" && isOwner ? (
+                        <Button
+                          text="Delete"
+                          preset="glass"
+                          style={themed($dangerButton)}
+                          onPress={() => setConfirmDelete({ workspaceId: workspace.id, label: workspace.label })}
+                        />
+                      ) : null}
+                    </View>
                   </View>
                 ) : null}
               </View>
@@ -440,6 +629,57 @@ export function SettingsScreen() {
           </GlassCard>
         </View>
       </Modal>
+
+      {/* Remove member confirm */}
+      <Modal visible={!!confirmRemove} transparent animationType="fade">
+        <View style={themed($backdrop)}>
+          <GlassCard style={themed($modalCard)}>
+            <Text preset="heading" text="Remove member?" />
+            <Text
+              preset="formHelper"
+              text={confirmRemove ? `Remove ${confirmRemove.label} from this workspace?` : ""}
+            />
+            <View style={themed($actionsRow)}>
+              <Button text="Cancel" preset="glass" onPress={() => setConfirmRemove(null)} />
+              <Button text="Remove" preset="glass" style={themed($dangerButton)} onPress={handleRemoveMember} />
+            </View>
+          </GlassCard>
+        </View>
+      </Modal>
+
+      {/* Revoke invite confirm */}
+      <Modal visible={!!confirmRevoke} transparent animationType="fade">
+        <View style={themed($backdrop)}>
+          <GlassCard style={themed($modalCard)}>
+            <Text preset="heading" text="Revoke invite?" />
+            <Text
+              preset="formHelper"
+              text={confirmRevoke ? `Revoke invite for ${confirmRevoke.email}?` : ""}
+            />
+            <View style={themed($actionsRow)}>
+              <Button text="Cancel" preset="glass" onPress={() => setConfirmRevoke(null)} />
+              <Button text="Revoke" preset="glass" style={themed($dangerButton)} onPress={handleRevokeInvite} />
+            </View>
+          </GlassCard>
+        </View>
+      </Modal>
+
+      {/* Delete workspace confirm */}
+      <Modal visible={!!confirmDelete} transparent animationType="fade">
+        <View style={themed($backdrop)}>
+          <GlassCard style={themed($modalCard)}>
+            <Text preset="heading" text="Delete workspace?" />
+            <Text
+              preset="formHelper"
+              text={confirmDelete ? `Delete ${confirmDelete.label}? This cannot be undone.` : ""}
+            />
+            <View style={themed($actionsRow)}>
+              <Button text="Cancel" preset="glass" onPress={() => setConfirmDelete(null)} />
+              <Button text="Delete" preset="glass" style={themed($dangerButton)} onPress={handleDeleteWorkspace} />
+            </View>
+          </GlassCard>
+        </View>
+      </Modal>
     </Screen>
   )
 }
@@ -532,6 +772,13 @@ const $memberRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.sm,
 })
 
+const $inviteRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: spacing.sm,
+})
+
 const $divider: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
   height: 1,
   backgroundColor: colors.border,
@@ -590,6 +837,10 @@ const $modalButtons: ThemedStyle<ViewStyle> = ({ spacing }) => ({
 
 const $errorText: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.error,
+})
+
+const $dangerButton: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  borderColor: colors.error,
 })
 
 const $successText: ThemedStyle<TextStyle> = ({ colors }) => ({
