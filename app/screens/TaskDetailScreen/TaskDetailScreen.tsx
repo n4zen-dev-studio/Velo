@@ -1,6 +1,6 @@
 import { View, ViewStyle, TextStyle } from "react-native"
 import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native"
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 
 import { Button } from "@/components/Button"
 import { GlassCard } from "@/components/GlassCard"
@@ -10,7 +10,8 @@ import { TextField } from "@/components/TextField"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
 import type { HomeStackScreenProps } from "@/navigators/navigationTypes"
-import { formatDate } from "@/utils/formatDate"
+import { formatDateTime } from "@/utils/dateFormat"
+import { resolveUserLabel } from "@/utils/userLabel"
 
 import { useTaskDetailViewModel } from "./useTaskDetailViewModel"
 
@@ -19,11 +20,15 @@ export function TaskDetailScreen() {
   const navigation = useNavigation<HomeStackScreenProps<"TaskDetail">["navigation"]>()
   const route = useRoute<HomeStackScreenProps<"TaskDetail">["route"]>()
   const { taskId } = route.params
-  const { task, comments, events, deleteTask, addComment, isSavingComment, commentError, refresh } =
+  const { task, comments, events, statusMap, deleteTask, addComment, isSavingComment, commentError, refresh } =
     useTaskDetailViewModel(taskId)
   const [commentDraft, setCommentDraft] = useState("")
+  const [assigneeLabel, setAssigneeLabel] = useState<string>("Unassigned")
 
-  const statusLabel = useMemo(() => (task ? task.statusId : "—"), [task])
+  const statusLabel = useMemo(() => {
+    if (!task) return "—"
+    return statusMap[task.statusId] ?? task.statusId
+  }, [statusMap, task])
   const priorityLabel = useMemo(() => (task ? task.priority : "—"), [task])
   const canSend = commentDraft.trim().length > 0 && !isSavingComment
 
@@ -32,6 +37,47 @@ export function TaskDetailScreen() {
       void refresh()
     }, [refresh]),
   )
+
+  useEffect(() => {
+    void (async () => {
+      if (!task?.assigneeUserId) {
+        setAssigneeLabel("Unassigned")
+        return
+      }
+      const label = await resolveUserLabel(task.assigneeUserId)
+      setAssigneeLabel(label)
+    })()
+  }, [task?.assigneeUserId])
+
+  const timelineItems = useMemo(() => {
+    return events.map((event) => {
+      let title = event.type || "Activity"
+      let detail = ""
+      try {
+        const payload = event.payload ? JSON.parse(event.payload) : null
+        const fromStatusId = payload?.fromStatusId ?? payload?.fromStatus ?? payload?.from
+        const toStatusId = payload?.toStatusId ?? payload?.toStatus ?? payload?.to
+        if (event.type === "STATUS_CHANGED" || (fromStatusId && toStatusId)) {
+          title = "Status changed"
+          const fromLabel = statusMap[fromStatusId] ?? String(fromStatusId ?? "—")
+          const toLabel = statusMap[toStatusId] ?? String(toStatusId ?? "—")
+          detail = `From ${fromLabel} → To ${toLabel}`
+        } else if (payload?.message) {
+          detail = String(payload.message)
+        }
+      } catch {
+        // ignore malformed payloads
+      }
+
+      return {
+        id: event.id,
+        title,
+        detail,
+        authorLabel: event.authorLabel,
+        createdAt: event.createdAt,
+      }
+    })
+  }, [events, statusMap])
 
   if (!task) {
     return (
@@ -57,7 +103,7 @@ export function TaskDetailScreen() {
           <View style={themed($metaPill)}>
             <Text
               preset="formHelper"
-              text={`Assignee: ${task.assigneeUserId ?? "Unassigned"}`}
+              text={`Assignee: ${assigneeLabel}`}
               style={themed($metaText)}
             />
           </View>
@@ -138,7 +184,7 @@ export function TaskDetailScreen() {
                   <Text preset="formLabel" text={comment.authorLabel} />
                   <Text
                     preset="formHelper"
-                    text={formatDate(comment.createdAt, "MMM dd, yyyy")}
+                    text={formatDateTime(comment.createdAt)}
                     style={themed($muted)}
                   />
                 </View>
@@ -162,10 +208,15 @@ export function TaskDetailScreen() {
           {events.length === 0 ? (
             <Text preset="formHelper" text="No events yet." style={themed($muted)} />
           ) : (
-            events.map((event) => (
-              <View key={event.id} style={themed($eventRow)}>
-                <Text preset="formLabel" text={event.type} />
-                <Text preset="formHelper" text={event.payload} style={themed($muted)} />
+            timelineItems.map((item) => (
+              <View key={item.id} style={themed($eventCard)}>
+                <Text preset="formLabel" text={item.title} />
+                {item.detail ? <Text preset="formHelper" text={item.detail} style={themed($muted)} /> : null}
+                <Text
+                  preset="formHelper"
+                  text={`by ${item.authorLabel} · ${formatDateTime(item.createdAt)}`}
+                  style={themed($muted)}
+                />
               </View>
             ))
           )}
@@ -251,9 +302,13 @@ const $commentHeader: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   marginBottom: spacing.xs,
 })
 
-const $eventRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+const $eventCard: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
   gap: spacing.xxs,
-  paddingVertical: spacing.xs,
+  padding: spacing.sm,
+  borderRadius: 16,
+  borderWidth: 1,
+  borderColor: "rgba(255,255,255,0.14)",
+  backgroundColor: colors.card ?? "rgba(255,255,255,0.06)",
 })
 
 const $muted: ThemedStyle<TextStyle> = () => ({

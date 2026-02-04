@@ -17,10 +17,11 @@ import { PriorityDot } from "@/components/PriorityDot"
 import { Screen } from "@/components/Screen"
 import { SyncBadge } from "@/components/SyncBadge"
 import { Text } from "@/components/Text"
+import { HeaderAvatar } from "@/components/HeaderAvatar"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
 import type { HomeStackScreenProps } from "@/navigators/navigationTypes"
-import { goToInvites, goToSettingsTab } from "@/navigation/navigationActions"
+import { goToInvites, goToProfile, goToSettingsTab } from "@/navigation/navigationActions"
 import { createHttpClient } from "@/services/api/httpClient"
 import { listMyInvites } from "@/services/api/invitesApi"
 import { BASE_URL } from "@/config/api"
@@ -69,6 +70,9 @@ export function HomeScreen() {
     <Screen preset="fixed" safeAreaEdges={["top", "bottom"]} contentContainerStyle={themed($screen)}>
       {/* Header */}
       <View style={themed($header)}>
+         <View style={themed($headerActions)}>
+          <HeaderAvatar onPress={goToProfile} size={50} />
+        </View>
         <View style={themed($titleBlock)}>
           <Text preset="heading" text="Home" />
           {/* Single workspace indicator (button opens dropdown) */}

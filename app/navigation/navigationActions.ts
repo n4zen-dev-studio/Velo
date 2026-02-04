@@ -121,6 +121,17 @@ export function goToInviteAccept(token?: string) {
   } as never)
 }
 
+export function goToProfile() {
+  if (!navigationRef.isReady()) return
+  navigationRef.navigate("AuthGate" as never, {
+    screen: "MainTabs",
+    params: {
+      screen: "HomeTab",
+      params: { screen: "Profile" },
+    },
+  } as never)
+}
+
 export function goToAuth() {
   if (!navigationRef.isReady()) return
   navigationRef.resetRoot({

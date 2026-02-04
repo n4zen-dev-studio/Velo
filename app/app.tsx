@@ -69,6 +69,7 @@ const config = {
                 ConflictResolution: "conflicts/:conflictId",
                 InviteAccept: "invite/:token?",
                 Invites: "invites",
+                Profile: "profile",
               },
             },
             SettingsTab: "settings",

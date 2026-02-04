@@ -30,8 +30,8 @@ export const useAuthViewModel = () => {
     }
   }
 
-  const signupWithEmail = async (email: string, password: string) => {
-    const result = await signup(client, email, password)
+  const signupWithEmail = async (email: string, password: string, username?: string) => {
+    const result = await signup(client, email, password, username)
     return { needsVerification: !!result.requiresEmailVerification }
   }
 

@@ -32,6 +32,7 @@ export type HomeStackParamList = {
   ConflictResolution: { conflictId?: string } | undefined
   Invites: undefined
   InviteAccept: { token?: string } | undefined
+  Profile: undefined
 }
 
 export type MainTabParamList = {
