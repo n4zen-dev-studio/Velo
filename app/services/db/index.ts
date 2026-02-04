@@ -24,16 +24,53 @@ export async function initializeDatabase() {
   await bootstrapWorkspaces(db)
 }
 
+// export async function clearLocalData() {
+//   const db = await getDb()
+//   await executeTransaction(db, async (txDb) => {
+//     await execute(txDb, "DELETE FROM comments")
+//     await execute(txDb, "DELETE FROM tasks")
+//     await execute(txDb, "DELETE FROM task_events")
+//     await execute(txDb, "DELETE FROM change_log")
+//     await execute(txDb, "DELETE FROM conflicts")
+//     await execute(txDb, "DELETE FROM sync_state")
+//     await execute(txDb, "DELETE FROM workspace_state")
+//     await execute(txDb, "DELETE FROM workspaces")
+//   })
+// }
+
 export async function clearLocalData() {
   const db = await getDb()
+
   await executeTransaction(db, async (txDb) => {
+    // If you have foreign keys enabled, order matters: delete children first.
+
+    // Collaboration / membership
+    await execute(txDb, "DELETE FROM workspace_members")
+    // If you cache invites locally at any point:
+    // await execute(txDb, "DELETE FROM workspace_invites")
+
+    // Task-related
     await execute(txDb, "DELETE FROM comments")
-    await execute(txDb, "DELETE FROM tasks")
     await execute(txDb, "DELETE FROM task_events")
-    await execute(txDb, "DELETE FROM change_log")
+    await execute(txDb, "DELETE FROM tasks")
+
+    // Statuses / projects (if statuses reference workspace/project)
+    await execute(txDb, "DELETE FROM statuses")
+    await execute(txDb, "DELETE FROM projects")
+
+    // Sync + conflicts
     await execute(txDb, "DELETE FROM conflicts")
+    await execute(txDb, "DELETE FROM change_log")
     await execute(txDb, "DELETE FROM sync_state")
     await execute(txDb, "DELETE FROM workspace_state")
+
+    // Users (so UUID -> username/email doesn’t leak between sessions)
+    await execute(txDb, "DELETE FROM users")
+
+    // Finally workspaces
     await execute(txDb, "DELETE FROM workspaces")
   })
+
+  // Recreate required baseline state (personal workspace, default statuses, active workspace id)
+  await initializeDatabase()
 }

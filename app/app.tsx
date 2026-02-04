@@ -38,6 +38,7 @@ import { syncController } from "./services/sync/SyncController"
 import { registerBackgroundSync } from "./services/sync/backgroundSync"
 import { BASE_URL } from "./config/api"
 import { GestureHandlerRootView } from "react-native-gesture-handler"
+import { refreshAuthSession } from "./services/auth/session"
 
 WebBrowser.maybeCompleteAuthSession()
 
@@ -112,6 +113,7 @@ export function App() {
       return
     }
     initializeDatabase().catch((error) => console.error("Failed to init DB", error))
+    refreshAuthSession().catch((error) => console.warn("Failed to load auth session", error))
   }, [])
 
   useEffect(() => {
