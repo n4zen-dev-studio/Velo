@@ -1,0 +1,121 @@
+import { useCallback, useEffect, useState } from "react"
+import { View, ViewStyle, TextStyle } from "react-native"
+import { useNavigation, useRoute } from "@react-navigation/native"
+
+import { Button } from "@/components/Button"
+import { GlassCard } from "@/components/GlassCard"
+import { Screen } from "@/components/Screen"
+import { Text } from "@/components/Text"
+import { createHttpClient } from "@/services/api/httpClient"
+import { acceptInvite, getInvite } from "@/services/api/invitesApi"
+import { BASE_URL } from "@/config/api"
+import { syncController } from "@/services/sync/SyncController"
+import { useWorkspaceStore } from "@/stores/workspaceStore"
+import { useAppTheme } from "@/theme/context"
+import type { ThemedStyle } from "@/theme/types"
+import type { HomeStackScreenProps } from "@/navigators/navigationTypes"
+
+interface InviteDetails {
+  workspace: { id: string; label: string }
+  email: string
+  status: string
+  expiresAt: string
+}
+
+export function InviteAcceptScreen() {
+  const { themed } = useAppTheme()
+  const navigation = useNavigation<HomeStackScreenProps<"InviteAccept">["navigation"]>()
+  const route = useRoute<HomeStackScreenProps<"InviteAccept">["route"]>()
+  const { token } = route.params ?? {}
+  const { setActiveWorkspaceId } = useWorkspaceStore()
+  const [invite, setInvite] = useState<InviteDetails | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [isAccepting, setIsAccepting] = useState(false)
+
+  const loadInvite = useCallback(async () => {
+    if (!token) return
+    setIsLoading(true)
+    setError(null)
+    try {
+      const client = createHttpClient(BASE_URL)
+      const data = await getInvite(client, token)
+      setInvite(data)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to load invite"
+      setError(message)
+    } finally {
+      setIsLoading(false)
+    }
+  }, [token])
+
+  useEffect(() => {
+    void loadInvite()
+  }, [loadInvite])
+
+  const handleAccept = useCallback(async () => {
+    if (!token || !invite) return
+    setIsAccepting(true)
+    setError(null)
+    try {
+      const client = createHttpClient(BASE_URL)
+      const response = await acceptInvite(client, token)
+      await syncController.triggerSync("manual")
+      await setActiveWorkspaceId(response.workspaceId)
+      navigation.navigate("Home")
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to accept invite"
+      setError(message)
+    } finally {
+      setIsAccepting(false)
+    }
+  }, [invite, navigation, setActiveWorkspaceId, token])
+
+  return (
+    <Screen preset="scroll" contentContainerStyle={themed($screen)}>
+      <View style={themed($header)}>
+        <Text preset="heading" text="Workspace Invite" />
+        <Text preset="formHelper" text="Accept your invitation to collaborate" />
+      </View>
+
+      <GlassCard>
+        {isLoading ? (
+          <Text preset="formHelper" text="Loading invite..." />
+        ) : error ? (
+          <Text preset="formHelper" text={error} style={themed($errorText)} />
+        ) : invite ? (
+          <View style={themed($stack)}>
+            <Text preset="subheading" text={invite.workspace.label} />
+            <Text preset="formHelper" text={`Invited email: ${invite.email}`} />
+            <Text preset="formHelper" text={`Status: ${invite.status}`} />
+            <Button
+              text={isAccepting ? "Accepting..." : "Accept invite"}
+              preset="glass"
+              onPress={handleAccept}
+              disabled={isAccepting || invite.status !== "PENDING"}
+            />
+          </View>
+        ) : (
+          <Text preset="formHelper" text="Invite not found." />
+        )}
+      </GlassCard>
+    </Screen>
+  )
+}
+
+const $screen: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  padding: spacing.lg,
+  gap: spacing.lg,
+})
+
+const $header: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: spacing.xs,
+})
+
+const $stack: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: spacing.sm,
+})
+
+const $errorText: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.error,
+})

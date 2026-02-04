@@ -4,7 +4,8 @@ import { getDb } from "@/services/db/db"
 import { execute, executeTransaction, queryAll, queryFirst } from "@/services/db/queries"
 import type { Workspace } from "@/services/db/types"
 import { seedDefaultStatusesForWorkspace, ensureDefaultStatusesForWorkspace } from "@/services/db/repositories/statusesRepository"
-import { generateUuidV4 } from "@/services/sync/identity"
+import { generateUuidV4, getCurrentUserId } from "@/services/sync/identity"
+import { upsertWorkspaceMember } from "@/services/db/repositories/workspaceMembersRepository"
 
 export const PERSONAL_WORKSPACE_ID = "personal"
 export const PERSONAL_WORKSPACE_LABEL = "Personal"
@@ -42,6 +43,21 @@ export async function createWorkspace(label: string, db?: SQLiteDatabase) {
      VALUES (?, ?, ?, ?, ?, ?)`,
     [workspace.id, workspace.label, workspace.kind, workspace.createdAt, workspace.updatedAt, workspace.remoteId],
   )
+
+  const userId = await getCurrentUserId()
+  if (userId) {
+    const timestamp = new Date().toISOString()
+    await upsertWorkspaceMember({
+      id: await generateUuidV4(),
+      workspaceId: workspace.id,
+      userId,
+      role: "OWNER",
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      revision: `local-${Date.now()}`,
+      deletedAt: null,
+    })
+  }
 
   await seedDefaultStatusesForWorkspace(workspace.id, database)
   return workspace

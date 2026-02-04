@@ -235,11 +235,21 @@ async function applyWorkspaceMemberOp(tx: typeof prisma, userId: string, op: Syn
   const now = new Date()
   const revision = patch.revision ?? `srv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
+  let role = patch.role ?? "MEMBER"
+  if (op.opType === "UPSERT") {
+    const existingOwner = await tx.workspaceMember.findFirst({
+      where: { workspaceId: patch.workspaceId, role: "OWNER", deletedAt: null },
+    })
+    if (!existingOwner && patch.userId === userId) {
+      role = "OWNER"
+    }
+  }
+
   const record = {
     id: op.entityId,
     workspaceId: patch.workspaceId,
     userId: patch.userId,
-    role: patch.role ?? "MEMBER",
+    role,
     createdAt: patch.createdAt ? new Date(patch.createdAt) : now,
     updatedAt: now,
     deletedAt: op.opType === "DELETE" ? now : patch.deletedAt ? new Date(patch.deletedAt) : null,
