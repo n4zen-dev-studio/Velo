@@ -104,7 +104,7 @@ const { options, setOption } = useSettingsViewModel()
   }, [workspaces])
 
   return (
-    <Screen preset="scroll" contentContainerStyle={themed($screen)}>
+    <Screen preset="scroll" safeAreaEdges={['top', 'bottom']} contentContainerStyle={themed($screen)}>
       <View style={themed($header)}>
         <Text preset="heading" text="Settings" />
         <Text preset="formHelper" text="Control sync and offline preferences" />

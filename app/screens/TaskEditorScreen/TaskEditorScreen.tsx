@@ -81,7 +81,7 @@ export function TaskEditorScreen() {
 
   const onSubmit = handleSubmit(async (values) => {
     const saved = await saveTask(values)
-    navigation.replace("TaskDetail", { taskId: saved.id })
+    task ? navigation.replace("TaskDetail", { taskId: saved.id }): navigation.goBack()
   })
 
   return (

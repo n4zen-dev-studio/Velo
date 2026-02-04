@@ -1,6 +1,6 @@
 import { View, ViewStyle, TextStyle } from "react-native"
-import { useNavigation, useRoute } from "@react-navigation/native"
-import { useMemo, useState } from "react"
+import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native"
+import { useCallback, useMemo, useState } from "react"
 
 import { Button } from "@/components/Button"
 import { GlassCard } from "@/components/GlassCard"
@@ -19,13 +19,19 @@ export function TaskDetailScreen() {
   const navigation = useNavigation<HomeStackScreenProps<"TaskDetail">["navigation"]>()
   const route = useRoute<HomeStackScreenProps<"TaskDetail">["route"]>()
   const { taskId } = route.params
-  const { task, comments, events, deleteTask, addComment, isSavingComment, commentError } =
+  const { task, comments, events, deleteTask, addComment, isSavingComment, commentError, refresh } =
     useTaskDetailViewModel(taskId)
   const [commentDraft, setCommentDraft] = useState("")
 
   const statusLabel = useMemo(() => (task ? task.statusId : "—"), [task])
   const priorityLabel = useMemo(() => (task ? task.priority : "—"), [task])
   const canSend = commentDraft.trim().length > 0 && !isSavingComment
+
+  useFocusEffect(
+    useCallback(() => {
+      void refresh()
+    }, [refresh]),
+  )
 
   if (!task) {
     return (
@@ -129,7 +135,7 @@ export function TaskDetailScreen() {
             comments.map((comment) => (
               <View key={comment.id} style={themed($commentCard)}>
                 <View style={themed($commentHeader)}>
-                  <Text preset="formLabel" text={`Comment by: ${comment.createdByUserId}`} />
+                  <Text preset="formLabel" text={comment.authorLabel} />
                   <Text
                     preset="formHelper"
                     text={formatDate(comment.createdAt, "MMM dd, yyyy")}
@@ -172,6 +178,7 @@ export function TaskDetailScreen() {
 const $screen: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   padding: spacing.lg,
   gap: spacing.lg,
+  paddingBottom: spacing.xxl,
 })
 
 const $header: ThemedStyle<ViewStyle> = ({ spacing }) => ({

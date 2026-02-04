@@ -25,6 +25,7 @@ import { refreshLocalCounts } from "@/services/sync/syncStore"
 import { BASE_URL } from "@/config/api"
 import { delay } from "@/utils/delay"
 import { PERSONAL_WORKSPACE_ID } from "@/services/db/repositories/workspacesRepository"
+import { ANON_USER_ID } from "@/services/constants/identity"
 
 const SYNC_STATE_ID = "singleton"
 const MAX_OPS_PER_BATCH = 50
@@ -109,13 +110,22 @@ export async function runSync(reason?: string) {
   }
 }
 
+function sanitizePatch(entityType: string, patch: Record<string, unknown>) {
+  if (entityType !== "comment") return patch
+  if (patch.createdByUserId === "anonymous") {
+    return { ...patch, createdByUserId: ANON_USER_ID }
+  }
+  return patch
+}
+
 function mapChangeLogToOp(op: ChangeLogEntry) {
+  const parsedPatch = JSON.parse(op.patch) as Record<string, unknown>
   return {
     opId: op.opId,
     entityType: op.entityType,
     entityId: op.entityId,
     opType: op.opType,
-    patch: JSON.parse(op.patch),
+    patch: sanitizePatch(op.entityType, parsedPatch),
     baseRevision: op.baseRevision,
     createdAt: op.createdAt,
     projectId: op.projectId ?? null,
