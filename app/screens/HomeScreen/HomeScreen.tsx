@@ -200,21 +200,22 @@ export function HomeScreen() {
                   goToSettingsTab()
                 }}
               />
+                {pendingInvitesCount > 0 ? (
               <View style={themed($menuFooterRow)}>
                 <Button
-                  text="Invites"
+                  text="Workspace Invites"
                   preset="reversed"
                   onPress={() => {
                     setWorkspaceMenuOpen(false)
                     goToInvites()
                   }}
+                  style={{ marginTop:  10, flex: 1 }}
                 />
-                {pendingInvitesCount > 0 ? (
                   <View style={themed($inviteBadge)}>
                     <Text preset="formHelper" text={`${pendingInvitesCount}`} style={themed($inviteBadgeText)} />
                   </View>
-                ) : null}
               </View>
+                ) : null}
             </View>
           </Pressable>
         </Pressable>
@@ -402,8 +403,10 @@ const $inviteBadge: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
   backgroundColor: colors.tint,
   alignItems: "center",
   justifyContent: "center",
+  marginTop: 10,
 })
 
 const $inviteBadgeText: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.background,
+  padding: 3,
 })

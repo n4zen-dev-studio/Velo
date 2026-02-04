@@ -9,6 +9,16 @@ export interface InviteSummary {
   invitedBy: { id: string; email: string }
 }
 
+export interface WorkspaceInvite {
+  id: string
+  email: string
+  role: string
+  status: string
+  expiresAt: string
+  createdAt: string
+  invitedById: string
+}
+
 export async function inviteToWorkspace(
   client: AxiosInstance,
   workspaceId: string,
@@ -41,5 +51,37 @@ export async function acceptInvite(client: AxiosInstance, token: string) {
 
 export async function listMyInvites(client: AxiosInstance) {
   const response = await client.get<InviteSummary[]>("/me/invites")
+  return response.data
+}
+
+export async function listWorkspaceInvites(client: AxiosInstance, workspaceId: string) {
+  const response = await client.get<WorkspaceInvite[]>(`/workspaces/${workspaceId}/invites`)
+  return response.data
+}
+
+export async function revokeWorkspaceInvite(
+  client: AxiosInstance,
+  workspaceId: string,
+  inviteId: string,
+) {
+  const response = await client.post<{ ok: boolean }>(
+    `/workspaces/${workspaceId}/invites/${inviteId}/revoke`,
+  )
+  return response.data
+}
+
+export async function removeWorkspaceMember(
+  client: AxiosInstance,
+  workspaceId: string,
+  userId: string,
+) {
+  const response = await client.delete<{ ok: boolean }>(
+    `/workspaces/${workspaceId}/members/${userId}`,
+  )
+  return response.data
+}
+
+export async function deleteWorkspace(client: AxiosInstance, workspaceId: string) {
+  const response = await client.delete<{ ok: boolean }>(`/workspaces/${workspaceId}`)
   return response.data
 }

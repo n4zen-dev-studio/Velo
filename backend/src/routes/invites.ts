@@ -3,6 +3,10 @@ import crypto from "node:crypto"
 
 import { prisma } from "../prisma"
 
+function sendError(reply: any, status: number, code: string, message: string) {
+  return reply.code(status).send({ error: { code, message } })
+}
+
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase()
 }
@@ -41,47 +45,254 @@ export async function inviteRoutes(app: FastifyInstance) {
     "/workspaces/:workspaceId/invites",
     { preHandler: [app.authenticate] },
     async (request, reply) => {
-      const { workspaceId } = request.params as { workspaceId: string }
-      const { email, workspaceLabel } = request.body as { email: string; workspaceLabel?: string }
-      const inviterId = (request.user as { sub: string }).sub
+      try {
+        const { workspaceId } = request.params as { workspaceId: string }
+        const { email, workspaceLabel } = request.body as { email: string; workspaceLabel?: string }
+        const inviterId = (request.user as { sub: string }).sub
 
-      const normalized = normalizeEmail(email)
-      if (!isValidEmail(normalized)) {
-        return reply.code(400).send({ error: "Invalid email" })
+        const normalized = normalizeEmail(email ?? "")
+        if (!isValidEmail(normalized)) {
+          return sendError(reply, 400, "INVALID_EMAIL", "Please enter a valid email address.")
+        }
+
+        const workspaceExists = await prisma.workspaceMember.findFirst({
+          where: { workspaceId, deletedAt: null },
+        })
+        if (!workspaceExists) {
+          return sendError(reply, 404, "WORKSPACE_NOT_FOUND", "Workspace not found.")
+        }
+
+        const isOwner = await requireWorkspaceOwner(inviterId, workspaceId)
+        if (!isOwner) {
+          return sendError(reply, 403, "NOT_WORKSPACE_OWNER", "Only workspace owners can invite members.")
+        }
+
+        const existingUser = await prisma.user.findUnique({
+          where: { email: normalized },
+          select: { id: true },
+        })
+        if (existingUser) {
+          const existingMember = await prisma.workspaceMember.findFirst({
+            where: { workspaceId, userId: existingUser.id, deletedAt: null },
+          })
+          if (existingMember) {
+            return sendError(reply, 409, "ALREADY_MEMBER", "This user is already a member of the workspace.")
+          }
+        }
+
+        const existingInvite = await prisma.workspaceInvite.findFirst({
+          where: {
+            workspaceId,
+            email: normalized,
+            status: "PENDING",
+            expiresAt: { gt: new Date() },
+          },
+        })
+        if (existingInvite) {
+          return sendError(reply, 409, "INVITE_ALREADY_SENT", "An invite has already been sent to this email.")
+        }
+
+        const token = generateToken()
+        const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+
+        const invite = await prisma.workspaceInvite.create({
+          data: {
+            id: crypto.randomUUID(),
+            workspaceId,
+            workspaceLabel: workspaceLabel ?? workspaceId,
+            email: normalized,
+            token,
+            role: "MEMBER",
+            invitedById: inviterId,
+            status: "PENDING",
+            expiresAt,
+          },
+        })
+
+        const links = buildInviteLink(invite.token)
+        // eslint-disable-next-line no-console
+        console.log(`[invite] Send invite to ${invite.email}: ${links.web} (deep: ${links.deepLink})`)
+
+        return reply.send({ ok: true })
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error("[invite] create failed", error)
+        return sendError(reply, 500, "INTERNAL_ERROR", "Something went wrong. Please try again.")
+      }
+    },
+  )
+
+  app.get(
+    "/workspaces/:workspaceId/invites",
+    { preHandler: [app.authenticate] },
+    async (request, reply) => {
+      const { workspaceId } = request.params as { workspaceId: string }
+      const userId = (request.user as { sub: string }).sub
+
+      const workspaceExists = await prisma.workspaceMember.findFirst({
+        where: { workspaceId, deletedAt: null },
+      })
+      if (!workspaceExists) {
+        return sendError(reply, 404, "WORKSPACE_NOT_FOUND", "Workspace not found.")
+      }
+
+      const isOwner = await requireWorkspaceOwner(userId, workspaceId)
+      if (!isOwner) {
+        return sendError(reply, 403, "NOT_WORKSPACE_OWNER", "Only workspace owners can view invites.")
+      }
+
+      const invites = await prisma.workspaceInvite.findMany({
+        where: {
+          workspaceId,
+          status: "PENDING",
+          expiresAt: { gt: new Date() },
+        },
+        orderBy: { createdAt: "desc" },
+      })
+
+      return reply.send(
+        invites.map((invite) => ({
+          id: invite.id,
+          email: invite.email,
+          role: invite.role,
+          status: invite.status,
+          expiresAt: invite.expiresAt.toISOString(),
+          createdAt: invite.createdAt.toISOString(),
+          invitedById: invite.invitedById,
+        })),
+      )
+    },
+  )
+
+  app.post(
+    "/workspaces/:workspaceId/invites/:inviteId/revoke",
+    { preHandler: [app.authenticate] },
+    async (request, reply) => {
+      const { workspaceId, inviteId } = request.params as { workspaceId: string; inviteId: string }
+      const userId = (request.user as { sub: string }).sub
+
+      const workspaceExists = await prisma.workspaceMember.findFirst({
+        where: { workspaceId, deletedAt: null },
+      })
+      if (!workspaceExists) {
+        return sendError(reply, 404, "WORKSPACE_NOT_FOUND", "Workspace not found.")
+      }
+
+      const isOwner = await requireWorkspaceOwner(userId, workspaceId)
+      if (!isOwner) {
+        return sendError(reply, 403, "NOT_WORKSPACE_OWNER", "Only workspace owners can revoke invites.")
+      }
+
+      const invite = await prisma.workspaceInvite.findFirst({
+        where: { id: inviteId, workspaceId },
+      })
+      if (!invite) {
+        return sendError(reply, 404, "INVITE_NOT_FOUND", "Invite not found.")
+      }
+      if (invite.status === "REVOKED") {
+        return reply.send({ ok: true })
+      }
+
+      await prisma.workspaceInvite.update({
+        where: { id: invite.id },
+        data: { status: "REVOKED", updatedAt: new Date() },
+      })
+
+      return reply.send({ ok: true })
+    },
+  )
+
+  app.delete(
+    "/workspaces/:workspaceId/members/:userId",
+    { preHandler: [app.authenticate] },
+    async (request, reply) => {
+      const { workspaceId, userId } = request.params as { workspaceId: string; userId: string }
+      const requesterId = (request.user as { sub: string }).sub
+
+      const workspaceExists = await prisma.workspaceMember.findFirst({
+        where: { workspaceId, deletedAt: null },
+      })
+      if (!workspaceExists) {
+        return sendError(reply, 404, "WORKSPACE_NOT_FOUND", "Workspace not found.")
+      }
+
+      const isOwner = await requireWorkspaceOwner(requesterId, workspaceId)
+      if (!isOwner) {
+        return sendError(reply, 403, "NOT_WORKSPACE_OWNER", "Only workspace owners can remove members.")
+      }
+
+      if (userId === requesterId) {
+        return sendError(reply, 409, "CANNOT_REMOVE_SELF", "You cannot remove yourself.")
+      }
+
+      const membership = await prisma.workspaceMember.findFirst({
+        where: { workspaceId, userId, deletedAt: null },
+      })
+      if (!membership) {
+        return sendError(reply, 404, "MEMBER_NOT_FOUND", "Member not found.")
+      }
+
+      if (membership.role === "OWNER") {
+        const ownerCount = await prisma.workspaceMember.count({
+          where: { workspaceId, role: "OWNER", deletedAt: null },
+        })
+        if (ownerCount <= 1) {
+          return sendError(reply, 409, "LAST_OWNER", "You must keep at least one owner.")
+        }
+      }
+
+      await prisma.workspaceMember.update({
+        where: { id: membership.id },
+        data: {
+          deletedAt: new Date(),
+          updatedAt: new Date(),
+          revision: `srv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        },
+      })
+
+      return reply.send({ ok: true })
+    },
+  )
+
+  app.delete(
+    "/workspaces/:workspaceId",
+    { preHandler: [app.authenticate] },
+    async (request, reply) => {
+      const { workspaceId } = request.params as { workspaceId: string }
+      const userId = (request.user as { sub: string }).sub
+
+      if (workspaceId === "personal") {
+        return sendError(reply, 400, "CANNOT_DELETE_PERSONAL", "Personal workspace cannot be deleted.")
       }
 
       const workspaceExists = await prisma.workspaceMember.findFirst({
         where: { workspaceId, deletedAt: null },
       })
       if (!workspaceExists) {
-        return reply.code(404).send({ error: "WORKSPACE_NOT_FOUND" })
+        return sendError(reply, 404, "WORKSPACE_NOT_FOUND", "Workspace not found.")
       }
 
-      const isOwner = await requireWorkspaceOwner(inviterId, workspaceId)
+      const isOwner = await requireWorkspaceOwner(userId, workspaceId)
       if (!isOwner) {
-        return reply.code(403).send({ error: "NOT_OWNER" })
+        return sendError(reply, 403, "NOT_WORKSPACE_OWNER", "Only workspace owners can delete workspaces.")
       }
 
-      const token = generateToken()
-      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+      const now = new Date()
+      await prisma.$transaction(async (tx) => {
+        await tx.workspaceMember.updateMany({
+          where: { workspaceId, deletedAt: null },
+          data: {
+            deletedAt: now,
+            updatedAt: now,
+            revision: `srv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          },
+        })
 
-      const invite = await prisma.workspaceInvite.create({
-        data: {
-          id: crypto.randomUUID(),
-          workspaceId,
-          workspaceLabel: workspaceLabel ?? workspaceId,
-          email: normalized,
-          token,
-          role: "MEMBER",
-          invitedById: inviterId,
-          status: "PENDING",
-          expiresAt,
-        },
+        await tx.workspaceInvite.updateMany({
+          where: { workspaceId, status: "PENDING" },
+          data: { status: "REVOKED", updatedAt: now },
+        })
       })
-
-      const links = buildInviteLink(invite.token)
-      // eslint-disable-next-line no-console
-      console.log(`[invite] Send invite to ${invite.email}: ${links.web} (deep: ${links.deepLink})`)
 
       return reply.send({ ok: true })
     },
