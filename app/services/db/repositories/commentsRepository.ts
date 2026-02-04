@@ -5,6 +5,7 @@ import { execute, executeTransaction, queryAll, queryFirst } from "@/services/db
 import type { Comment } from "@/services/db/types"
 import { decryptText, encryptText } from "@/utils/crypto"
 import { enqueueOp } from "@/services/db/repositories/changeLogRepository"
+import { PERSONAL_WORKSPACE_ID } from "@/services/db/repositories/workspacesRepository"
 
 interface CommentRow {
   id: string
@@ -35,6 +36,12 @@ async function upsertCommentInternal(
     const existing = await queryFirst<CommentRow>(txDb, "SELECT * FROM comments WHERE id = ?", [
       comment.id,
     ])
+    const taskRow = await queryFirst<{ workspaceId: string }>(
+      txDb,
+      "SELECT workspaceId FROM tasks WHERE id = ?",
+      [comment.taskId],
+    )
+    const workspaceId = taskRow?.workspaceId ?? PERSONAL_WORKSPACE_ID
     const encryptedBody = await encryptText(comment.body)
 
     await execute(
@@ -88,6 +95,7 @@ async function upsertCommentInternal(
           },
           baseRevision: existing?.revision ?? "",
           projectId: null,
+          workspaceId,
           createdAt: new Date().toISOString(),
         },
         txDb,
@@ -149,6 +157,12 @@ async function markCommentDeletedInternal(
       commentId,
     ])
     if (!existing) return
+    const taskRow = await queryFirst<{ workspaceId: string }>(
+      txDb,
+      "SELECT workspaceId FROM tasks WHERE id = ?",
+      [existing.taskId],
+    )
+    const workspaceId = taskRow?.workspaceId ?? PERSONAL_WORKSPACE_ID
 
     const nextRevision = `${existing.revision}-deleted-${Date.now()}`
     await execute(
@@ -176,6 +190,7 @@ async function markCommentDeletedInternal(
           },
           baseRevision: existing.revision ?? "",
           projectId: null,
+          workspaceId,
           createdAt: new Date().toISOString(),
         },
         txDb,

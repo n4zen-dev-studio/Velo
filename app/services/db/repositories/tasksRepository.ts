@@ -10,6 +10,7 @@ import { generateUuidV4, getCurrentUserId } from "@/services/sync/identity"
 interface TaskRow {
   id: string
   projectId: string | null
+  workspaceId: string
   title: string
   description: string
   statusId: string
@@ -58,6 +59,7 @@ async function upsertTaskInternal(
       `INSERT INTO tasks (
           id,
           projectId,
+          workspaceId,
           title,
           description,
           statusId,
@@ -67,9 +69,10 @@ async function upsertTaskInternal(
           updatedAt,
           revision,
           deletedAt
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           projectId = excluded.projectId,
+          workspaceId = excluded.workspaceId,
           title = excluded.title,
           description = excluded.description,
           statusId = excluded.statusId,
@@ -82,6 +85,7 @@ async function upsertTaskInternal(
       [
         task.id,
         task.projectId,
+        task.workspaceId,
         task.title,
         encryptedDescription,
         task.statusId,
@@ -106,6 +110,7 @@ async function upsertTaskInternal(
           patch: {
             id: task.id,
             projectId: task.projectId,
+            workspaceId: task.workspaceId,
             title: task.title,
             description: task.description,
             statusId: task.statusId,
@@ -117,6 +122,7 @@ async function upsertTaskInternal(
           },
           baseRevision,
           projectId: task.projectId ?? null,
+          workspaceId: task.workspaceId,
           createdAt: new Date().toISOString(),
         },
         txDb,
@@ -146,12 +152,20 @@ async function upsertTaskInternal(
   }
 }
 
-export async function listTasksByWorkspace(projectId: string | null) {
+export async function listTasksByWorkspace(workspaceId: string, projectId?: string | null) {
   const database = await getDb()
-  const sql = projectId
-    ? "SELECT * FROM tasks WHERE projectId = ? AND deletedAt IS NULL ORDER BY updatedAt DESC"
-    : "SELECT * FROM tasks WHERE projectId IS NULL AND deletedAt IS NULL ORDER BY updatedAt DESC"
-  const rows = await queryAll<TaskRow>(database, sql, projectId ? [projectId] : [])
+  const isProjectScoped = projectId !== undefined
+  const sql = isProjectScoped
+    ? projectId
+      ? "SELECT * FROM tasks WHERE workspaceId = ? AND projectId = ? AND deletedAt IS NULL ORDER BY updatedAt DESC"
+      : "SELECT * FROM tasks WHERE workspaceId = ? AND projectId IS NULL AND deletedAt IS NULL ORDER BY updatedAt DESC"
+    : "SELECT * FROM tasks WHERE workspaceId = ? AND deletedAt IS NULL ORDER BY updatedAt DESC"
+  const params = isProjectScoped
+    ? projectId
+      ? [workspaceId, projectId]
+      : [workspaceId]
+    : [workspaceId]
+  const rows = await queryAll<TaskRow>(database, sql, params)
   return Promise.all(rows.map(mapTaskRow))
 }
 
@@ -190,6 +204,7 @@ async function markTaskDeletedInternal(
           patch: {
             id: taskId,
             projectId: existing.projectId,
+            workspaceId: existing.workspaceId,
             title: existing.title,
             description: plaintextDescription,
             statusId: existing.statusId,
@@ -201,6 +216,7 @@ async function markTaskDeletedInternal(
           },
           baseRevision: existing.revision ?? "",
           projectId: existing.projectId ?? null,
+          workspaceId: existing.workspaceId,
           createdAt: new Date().toISOString(),
         },
         txDb,

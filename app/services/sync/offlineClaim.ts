@@ -1,6 +1,7 @@
 import { getDb } from "@/services/db/db"
 import { queryFirst } from "@/services/db/queries"
 import { listTasksByWorkspace, upsertTask } from "@/services/db/repositories/tasksRepository"
+import { PERSONAL_WORKSPACE_ID } from "@/services/db/repositories/workspacesRepository"
 import { listCommentsByTask, upsertComment } from "@/services/db/repositories/commentsRepository"
 import type { Comment, Task } from "@/services/db/types"
 import { getSessionMode } from "@/services/sync/identity"
@@ -25,8 +26,8 @@ export async function shouldPromptOfflineClaim() {
 
   const row = await queryFirst<{ count: number }>(
     db,
-    "SELECT COUNT(1) as count FROM tasks WHERE projectId IS NULL AND deletedAt IS NULL",
-    [],
+    "SELECT COUNT(1) as count FROM tasks WHERE workspaceId = ? AND projectId IS NULL AND deletedAt IS NULL",
+    [PERSONAL_WORKSPACE_ID],
   )
 
   return (row?.count ?? 0) > 0
@@ -37,7 +38,7 @@ export function markOfflineClaimHandled() {
 }
 
 export async function claimOfflineData(remoteUserId: string) {
-  const tasks = await listTasksByWorkspace(null)
+  const tasks = await listTasksByWorkspace(PERSONAL_WORKSPACE_ID, null)
   if (tasks.length === 0) return
 
   const nowBase = Date.now()

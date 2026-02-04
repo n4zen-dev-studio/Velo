@@ -16,7 +16,7 @@ import {
   markCommentDeletedFromSync,
   upsertCommentFromSync,
 } from "@/services/db/repositories/commentsRepository"
-import type { Comment, Task } from "@/services/db/types"
+import type { ChangeLogEntry, Comment, Task } from "@/services/db/types"
 import { createHttpClient } from "@/services/api/httpClient"
 import { sync as syncApi } from "@/services/api/syncApi"
 import type { SyncChange, SyncRequest } from "@/services/sync/syncContract"
@@ -24,6 +24,7 @@ import { getDeviceId } from "@/services/sync/identity"
 import { refreshLocalCounts } from "@/services/sync/syncStore"
 import { BASE_URL } from "@/config/api"
 import { delay } from "@/utils/delay"
+import { PERSONAL_WORKSPACE_ID } from "@/services/db/repositories/workspacesRepository"
 
 const SYNC_STATE_ID = "singleton"
 const MAX_OPS_PER_BATCH = 50
@@ -108,7 +109,7 @@ export async function runSync(reason?: string) {
   }
 }
 
-function mapChangeLogToOp(op: { opId: string; entityType: string; entityId: string; opType: string; patch: string; baseRevision: string; createdAt: string; projectId: string | null }) {
+function mapChangeLogToOp(op: ChangeLogEntry) {
   return {
     opId: op.opId,
     entityType: op.entityType,
@@ -147,7 +148,8 @@ async function applyRemoteChange(db: SqliteDb, change: SyncChange) {
       return
     }
     const payload = change.payload as Task
-    await upsertTaskFromSync(payload, db)
+    const normalized = payload.workspaceId ? payload : { ...payload, workspaceId: PERSONAL_WORKSPACE_ID }
+    await upsertTaskFromSync(normalized, db)
   }
 
   if (change.entityType === "comment") {

@@ -4,6 +4,7 @@ import type { Comment, ConflictRecord, Task } from "@/services/db/types"
 import { enqueueOp } from "@/services/db/repositories/changeLogRepository"
 import { upsertTaskFromSync } from "@/services/db/repositories/tasksRepository"
 import { upsertCommentFromSync } from "@/services/db/repositories/commentsRepository"
+import { PERSONAL_WORKSPACE_ID } from "@/services/db/repositories/workspacesRepository"
 import { refreshLocalCounts } from "@/services/sync/syncStore"
 
 export async function listOpenConflicts() {
@@ -65,6 +66,7 @@ async function resolveConflict(conflict: ConflictRecord, payload: Task | Comment
     const updatedTask: Task = {
       id: task.id,
       projectId: task.projectId ?? null,
+      workspaceId: task.workspaceId ?? PERSONAL_WORKSPACE_ID,
       title: task.title ?? "",
       description: task.description ?? "",
       statusId: task.statusId ?? "todo",
@@ -84,6 +86,7 @@ async function resolveConflict(conflict: ConflictRecord, payload: Task | Comment
       patch: updatedTask,
       baseRevision: conflict.remoteRevision,
       projectId: updatedTask.projectId ?? null,
+      workspaceId: updatedTask.workspaceId,
       createdAt: now,
     }, database)
   }
@@ -102,6 +105,12 @@ async function resolveConflict(conflict: ConflictRecord, payload: Task | Comment
     }
 
     await upsertCommentFromSync(updatedComment, database)
+    const taskRow = await queryFirst<{ workspaceId: string }>(
+      database,
+      "SELECT workspaceId FROM tasks WHERE id = ?",
+      [updatedComment.taskId],
+    )
+    const workspaceId = taskRow?.workspaceId ?? PERSONAL_WORKSPACE_ID
     await enqueueOp({
       entityType: "comment",
       entityId: updatedComment.id,
@@ -109,6 +118,7 @@ async function resolveConflict(conflict: ConflictRecord, payload: Task | Comment
       patch: updatedComment,
       baseRevision: conflict.remoteRevision,
       projectId: null,
+      workspaceId,
       createdAt: now,
     }, database)
   }

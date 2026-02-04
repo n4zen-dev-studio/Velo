@@ -16,6 +16,7 @@ interface EnqueueParams {
   patch: Record<string, unknown>
   baseRevision: string
   projectId: string | null
+  workspaceId: string
   createdAt: string
 }
 
@@ -32,16 +33,17 @@ export async function enqueueOp(params: EnqueueParams, db?: SQLiteDatabase) {
         entityType,
         entityId,
         opType,
-        patch,
-        baseRevision,
-        createdAt,
-        deviceId,
-        userId,
-        projectId,
-        status,
-        attemptCount,
-        lastAttemptAt
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      patch,
+      baseRevision,
+      createdAt,
+      deviceId,
+      userId,
+      projectId,
+      workspaceId,
+      status,
+      attemptCount,
+      lastAttemptAt
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     [
       opId,
@@ -54,6 +56,7 @@ export async function enqueueOp(params: EnqueueParams, db?: SQLiteDatabase) {
       deviceId,
       userId,
       params.projectId,
+      params.workspaceId,
       "PENDING",
       0,
       null,

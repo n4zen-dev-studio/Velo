@@ -44,7 +44,7 @@ export function HomeScreen() {
     return workspaces.find((w) => w.id === activeWorkspaceId) ?? workspaces[0]
   }, [workspaces, activeWorkspaceId])
 
-  const fabBottom = Math.max(insets.bottom, 0) + 16
+  const fabBottom = Math.max(insets.bottom, 0) + 50
 
   return (
     <Screen preset="fixed" safeAreaEdges={["top", "bottom"]} contentContainerStyle={themed($screen)}>
@@ -73,11 +73,6 @@ export function HomeScreen() {
           <SyncBadge />
         </View>
       </View>
-
-      {/* Temporary test button (keep as requested) */}
-      {/* <View style={themed($tempRow)}>
-        <Button tx="welcomeScreen:SwitchTheme" onPress={toggleTheme} />
-      </View> */}
 
       {/* Scroll content */}
       <ScrollView
@@ -293,7 +288,7 @@ const $fab: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
   borderRadius: 28,
   alignItems: "center",
   justifyContent: "center",
-  backgroundColor: colors.palette.primary500,
+  backgroundColor: colors.palette.primary,
   shadowColor: colors.palette.neutral900,
   shadowOpacity: 0.2,
   shadowRadius: 12,

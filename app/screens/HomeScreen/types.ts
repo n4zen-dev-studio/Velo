@@ -1,10 +1,4 @@
-import type { Project, Status, Task } from "@/services/db/types"
-
-export interface Workspace {
-  id: string
-  label: string
-  projectId: string | null
-}
+import type { Project, Status, Task, Workspace } from "@/services/db/types"
 
 export interface HomeData {
   workspaces: Workspace[]
