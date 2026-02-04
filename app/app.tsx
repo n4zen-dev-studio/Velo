@@ -67,6 +67,8 @@ const config = {
                 TaskDetail: "task/:taskId",
                 ConflictList: "conflicts",
                 ConflictResolution: "conflicts/:conflictId",
+                InviteAccept: "invite/:token?",
+                Invites: "invites",
               },
             },
             SettingsTab: "settings",

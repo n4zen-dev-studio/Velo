@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react"
+import React, { useCallback, useEffect, useMemo, useState } from "react"
 import {
   Modal,
   Pressable,
@@ -20,7 +20,10 @@ import { Text } from "@/components/Text"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
 import type { HomeStackScreenProps } from "@/navigators/navigationTypes"
-import { goToSettingsTab } from "@/navigation/navigationActions"
+import { goToInvites, goToSettingsTab } from "@/navigation/navigationActions"
+import { createHttpClient } from "@/services/api/httpClient"
+import { listMyInvites } from "@/services/api/invitesApi"
+import { BASE_URL } from "@/config/api"
 
 import { useHomeViewModel } from "./useHomeViewModel"
 
@@ -39,12 +42,28 @@ export function HomeScreen() {
   } = useHomeViewModel()
 
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false)
+  const [pendingInvitesCount, setPendingInvitesCount] = useState(0)
 
   const activeWorkspace = useMemo(() => {
     return workspaces.find((w) => w.id === activeWorkspaceId) ?? workspaces[0]
   }, [workspaces, activeWorkspaceId])
 
   const fabBottom = Math.max(insets.bottom, 0) + 50
+
+  const loadInvitesCount = useCallback(async () => {
+    try {
+      const client = createHttpClient(BASE_URL)
+      const invites = await listMyInvites(client)
+      setPendingInvitesCount(invites.length)
+    } catch {
+      setPendingInvitesCount(0)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!workspaceMenuOpen) return
+    void loadInvitesCount()
+  }, [loadInvitesCount, workspaceMenuOpen])
 
   return (
     <Screen preset="fixed" safeAreaEdges={["top", "bottom"]} contentContainerStyle={themed($screen)}>
@@ -181,6 +200,21 @@ export function HomeScreen() {
                   goToSettingsTab()
                 }}
               />
+              <View style={themed($menuFooterRow)}>
+                <Button
+                  text="Invites"
+                  preset="reversed"
+                  onPress={() => {
+                    setWorkspaceMenuOpen(false)
+                    goToInvites()
+                  }}
+                />
+                {pendingInvitesCount > 0 ? (
+                  <View style={themed($inviteBadge)}>
+                    <Text preset="formHelper" text={`${pendingInvitesCount}`} style={themed($inviteBadgeText)} />
+                  </View>
+                ) : null}
+              </View>
             </View>
           </Pressable>
         </Pressable>
@@ -352,4 +386,24 @@ const $menuItemLeft: ThemedStyle<ViewStyle> = ({ spacing }) => ({
 
 const $menuFooter: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   paddingTop: spacing.xs,
+})
+
+const $menuFooterRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  alignItems: "center",
+  gap: spacing.sm,
+})
+
+const $inviteBadge: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+  minWidth: 22,
+  paddingHorizontal: spacing.xs,
+  paddingVertical: 2,
+  borderRadius: 999,
+  backgroundColor: colors.tint,
+  alignItems: "center",
+  justifyContent: "center",
+})
+
+const $inviteBadgeText: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.background,
 })

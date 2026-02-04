@@ -5,6 +5,8 @@ import { TaskEditorScreen } from "@/screens/TaskEditorScreen"
 import { TaskDetailScreen } from "@/screens/TaskDetailScreen"
 import { ConflictListScreen } from "@/screens/ConflictListScreen"
 import { ConflictResolutionScreen } from "@/screens/ConflictResolution"
+import { InvitesScreen } from "@/screens/InvitesScreen"
+import { InviteAcceptScreen } from "@/screens/InviteAcceptScreen"
 import { useAppTheme } from "@/theme/context"
 import type { HomeStackParamList } from "@/navigators/navigationTypes"
 
@@ -29,6 +31,8 @@ export function HomeStack() {
       <Stack.Screen name="TaskDetail" component={TaskDetailScreen} />
       <Stack.Screen name="ConflictList" component={ConflictListScreen} />
       <Stack.Screen name="ConflictResolution" component={ConflictResolutionScreen} />
+      <Stack.Screen name="Invites" component={InvitesScreen} />
+      <Stack.Screen name="InviteAccept" component={InviteAcceptScreen} />
     </Stack.Navigator>
   )
 }

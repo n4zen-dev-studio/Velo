@@ -99,6 +99,28 @@ export function goToConflictResolution(params?: { conflictId?: string }) {
   } as never)
 }
 
+export function goToInvites() {
+  if (!navigationRef.isReady()) return
+  navigationRef.navigate("AuthGate" as never, {
+    screen: "MainTabs",
+    params: {
+      screen: "HomeTab",
+      params: { screen: "Invites" },
+    },
+  } as never)
+}
+
+export function goToInviteAccept(token?: string) {
+  if (!navigationRef.isReady()) return
+  navigationRef.navigate("AuthGate" as never, {
+    screen: "MainTabs",
+    params: {
+      screen: "HomeTab",
+      params: { screen: "InviteAccept", params: { token } },
+    },
+  } as never)
+}
+
 export function goToAuth() {
   if (!navigationRef.isReady()) return
   navigationRef.resetRoot({

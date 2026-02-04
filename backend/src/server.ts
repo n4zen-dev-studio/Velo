@@ -4,11 +4,17 @@ import dotenv from "dotenv"
 
 import { authRoutes } from "./routes/auth"
 import { syncRoutes } from "./routes/sync"
+import { inviteRoutes } from "./routes/invites"
 import { prisma } from "./prisma"
 
 dotenv.config()
 
 const app = Fastify({ logger: true })
+
+const prismaDelegates = prisma as typeof prisma & { workspaceInvite?: unknown }
+if (!prismaDelegates.workspaceInvite) {
+  app.log.error("[startup] Prisma client missing WorkspaceInvite delegate. Run prisma generate/migrate.")
+}
 
 app.register(fastifyJwt, {
   secret: process.env.JWT_SECRET ?? "dev_secret",
@@ -24,6 +30,7 @@ app.decorate("authenticate", async (request: any, reply: any) => {
 
 app.register(authRoutes)
 app.register(syncRoutes)
+app.register(inviteRoutes)
 
 app.get("/health", async () => ({ ok: true }))
 

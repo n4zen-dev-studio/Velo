@@ -30,6 +30,8 @@ export type HomeStackParamList = {
   TaskDetail: { taskId: string }
   ConflictList: undefined
   ConflictResolution: { conflictId?: string } | undefined
+  Invites: undefined
+  InviteAccept: { token?: string } | undefined
 }
 
 export type MainTabParamList = {
