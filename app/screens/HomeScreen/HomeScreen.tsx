@@ -36,7 +36,6 @@ export function HomeScreen() {
     tasksByStatus,
     refreshAll,
     isRefreshing,
-    activeProjectId,
   } = useHomeViewModel()
 
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false)
@@ -87,7 +86,10 @@ export function HomeScreen() {
         showsVerticalScrollIndicator={false}
       >
         {tasksByStatus.map(({ status, tasks }) => (
-          <View key={`${status.projectId ?? "personal"}:${status.id}`} style={themed($section)}>
+          <View
+            key={`${status.workspaceId}:${status.projectId ?? "personal"}:${status.id}`}
+            style={themed($section)}
+          >
             <View style={themed($sectionHeader)}>
               <Text preset="subheading" text={status.name} />
               <Text preset="formHelper" text={`${tasks.length} tasks`} />
@@ -101,7 +103,7 @@ export function HomeScreen() {
               <View style={themed($cardsCol)}>
                 {tasks.map((task) => (
                   <Pressable
-                    key={`${task.projectId ?? "personal"}:${task.id}`}
+                    key={`${task.workspaceId}:${task.projectId ?? "personal"}:${task.id}`}
                     onPress={() => navigation.navigate("TaskDetail", { taskId: task.id })}
                     style={themed($pressableCard)}
                   >
@@ -129,7 +131,7 @@ export function HomeScreen() {
       <Pressable
         accessibilityRole="button"
         style={[themed($fab), { bottom: fabBottom }]}
-        onPress={() => navigation.navigate("TaskEditor", { projectId: activeProjectId ?? undefined })}
+        onPress={() => navigation.navigate("TaskEditor")}
       >
         <Text preset="heading" text="+" />
       </Pressable>
@@ -152,8 +154,14 @@ export function HomeScreen() {
                   <Pressable
                     key={w.id}
                     onPress={() => {
-                      setActiveWorkspaceId(w.id)
                       setWorkspaceMenuOpen(false)
+                      void (async () => {
+                        try {
+                          await setActiveWorkspaceId(w.id)
+                        } catch (error) {
+                          console.warn("[Workspace] Failed to switch workspace", error)
+                        }
+                      })()
                     }}
                     style={themed(isActive ? $menuItemActive : $menuItem)}
                   >
