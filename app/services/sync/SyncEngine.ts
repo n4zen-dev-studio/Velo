@@ -16,6 +16,14 @@ import {
   markCommentDeletedFromSync,
   upsertCommentFromSync,
 } from "@/services/db/repositories/commentsRepository"
+import {
+  markUserDeletedFromSync,
+  upsertUserFromSync,
+} from "@/services/db/repositories/usersRepository"
+import {
+  markWorkspaceMemberDeletedFromSync,
+  upsertWorkspaceMemberFromSync,
+} from "@/services/db/repositories/workspaceMembersRepository"
 import type { ChangeLogEntry, Comment, Task } from "@/services/db/types"
 import { createHttpClient } from "@/services/api/httpClient"
 import { sync as syncApi } from "@/services/api/syncApi"
@@ -169,6 +177,24 @@ async function applyRemoteChange(db: SqliteDb, change: SyncChange) {
     }
     const payload = change.payload as Comment
     await upsertCommentFromSync(payload, db)
+  }
+
+  if (change.entityType === "user") {
+    if (change.opType === "DELETE") {
+      await markUserDeletedFromSync(change.entityId, change.updatedAt, db)
+      return
+    }
+    const payload = change.payload as any
+    await upsertUserFromSync(payload, db)
+  }
+
+  if (change.entityType === "workspace_member") {
+    if (change.opType === "DELETE") {
+      await markWorkspaceMemberDeletedFromSync(change.entityId, change.updatedAt, db)
+      return
+    }
+    const payload = change.payload as any
+    await upsertWorkspaceMemberFromSync(payload, db)
   }
 }
 

@@ -24,10 +24,14 @@ export const useTaskDetailViewModel = (taskId: string) => {
 
   const loadComments = useCallback(async () => {
     const commentRows = await listCommentsByTaskId(taskId)
+    const currentUserId = await getCurrentUserId()
     const withAuthors = await Promise.all(
       commentRows.map(async (comment) => ({
         ...comment,
-        authorLabel: await resolveAuthorLabel(comment.createdByUserId),
+        authorLabel: await resolveAuthorLabel({
+          createdByUserId: comment.createdByUserId,
+          currentUserId,
+        }),
       })),
     )
     setComments(withAuthors)
@@ -57,7 +61,10 @@ export const useTaskDetailViewModel = (taskId: string) => {
       const sessionMode = await getSessionMode()
       const currentUserId = sessionMode === "remote" ? await getCurrentUserId() : null
       const createdByUserId = currentUserId ?? ANON_USER_ID
-      const authorLabel = await resolveAuthorLabel(createdByUserId)
+      const authorLabel = await resolveAuthorLabel({
+        createdByUserId,
+        currentUserId,
+      })
       const optimistic: Comment = {
         id: await generateUuidV4(),
         taskId,

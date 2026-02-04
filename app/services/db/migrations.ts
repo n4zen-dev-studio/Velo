@@ -78,6 +78,32 @@ export async function migrate(db: SQLiteDatabase) {
 
     await ensureColumn(
       txDb,
+      "users",
+      "username",
+      "ALTER TABLE users ADD COLUMN username TEXT",
+    )
+    await ensureColumn(
+      txDb,
+      "users",
+      "createdAt",
+      "ALTER TABLE users ADD COLUMN createdAt TEXT NOT NULL DEFAULT ''",
+      "UPDATE users SET createdAt = COALESCE(createdAt, updatedAt) WHERE createdAt = ''",
+    )
+    await ensureColumn(
+      txDb,
+      "users",
+      "revision",
+      "ALTER TABLE users ADD COLUMN revision TEXT NOT NULL DEFAULT ''",
+    )
+    await ensureColumn(
+      txDb,
+      "users",
+      "deletedAt",
+      "ALTER TABLE users ADD COLUMN deletedAt TEXT",
+    )
+
+    await ensureColumn(
+      txDb,
       "projects",
       "workspaceId",
       "ALTER TABLE projects ADD COLUMN workspaceId TEXT NOT NULL DEFAULT 'personal'",
