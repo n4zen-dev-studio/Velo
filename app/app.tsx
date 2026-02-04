@@ -104,6 +104,10 @@ export function App() {
   }, [])
 
   useEffect(() => {
+    if (typeof initializeDatabase !== "function") {
+      console.error("initializeDatabase export missing - check services/db/index.ts")
+      return
+    }
     initializeDatabase().catch((error) => console.error("Failed to init DB", error))
   }, [])
 
