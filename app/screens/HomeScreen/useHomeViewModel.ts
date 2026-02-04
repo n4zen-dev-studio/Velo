@@ -1,75 +1,52 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useFocusEffect } from "@react-navigation/native"
 
-import type { WorkspaceOption } from "@/components/WorkspaceSwitcher"
-import { listProjects, listStatuses, listTasksByWorkspace } from "@/services/db"
-import type { Project, Status, Task } from "@/services/db/types"
+import { listStatuses, listTasksByWorkspace } from "@/services/db"
+import type { Status, Task } from "@/services/db/types"
 import { syncController } from "@/services/sync/SyncController"
 import { refreshLocalCounts } from "@/services/sync/syncStore"
+import { useWorkspaceStore } from "@/stores/workspaceStore"
 
 export const useHomeViewModel = () => {
-  const [workspaces, setWorkspaces] = useState<(WorkspaceOption & { projectId: string | null })[]>([
-    { id: "personal", label: "Personal", subtitle: "Personal", projectId: null },
-  ])
-  const [activeWorkspaceId, setActiveWorkspaceId] = useState("personal")
-  const [projects, setProjects] = useState<Project[]>([])
+  const { workspaces, activeWorkspaceId, setActiveWorkspaceId, refreshWorkspaces } = useWorkspaceStore()
   const [statuses, setStatuses] = useState<Status[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
   const [isRefreshing, setIsRefreshing] = useState(false)
 
-  const activeProjectId = useMemo(() => {
-    if (activeWorkspaceId === "personal") return null
-    return activeWorkspaceId
-  }, [activeWorkspaceId])
-
-  const loadWorkspaces = useCallback(async () => {
-    const projectRows = await listProjects()
-    setProjects(projectRows)
-    setWorkspaces([
-      { id: "personal", label: "Personal", subtitle: "Personal", projectId: null },
-      ...projectRows.map((project) => ({
-        id: project.id,
-        label: project.name,
-        subtitle: "Project",
-        projectId: project.id,
-      })),
-    ])
-  }, [])
-
   const loadStatuses = useCallback(async () => {
-    const rows = await listStatuses(activeProjectId)
+    if (!activeWorkspaceId) return
+    const rows = await listStatuses(activeWorkspaceId, null)
 
     const seen = new Set<string>()
     const unique = rows.filter((s) => {
-      const key = `${s.projectId ?? "personal"}:${s.id}`
+      const key = `${s.workspaceId}:${s.projectId ?? "personal"}:${s.id}`
       if (seen.has(key)) return false
       seen.add(key)
       return true
     })
 
     setStatuses(unique)
-  }, [activeProjectId])
+  }, [activeWorkspaceId])
 
   const loadTasks = useCallback(async () => {
-    const taskRows = await listTasksByWorkspace(activeProjectId)
+    if (!activeWorkspaceId) return
+    const taskRows = await listTasksByWorkspace(activeWorkspaceId)
     setTasks(taskRows)
-  }, [activeProjectId])
+  }, [activeWorkspaceId])
 
   const refreshAll = useCallback(async () => {
     setIsRefreshing(true)
     await syncController.triggerSync("manual")
-    await Promise.all([loadWorkspaces(), loadStatuses(), loadTasks(), refreshLocalCounts()])
+    await Promise.all([refreshWorkspaces(), loadStatuses(), loadTasks(), refreshLocalCounts()])
     setIsRefreshing(false)
-  }, [loadStatuses, loadTasks, loadWorkspaces])
+  }, [loadStatuses, loadTasks, refreshWorkspaces])
 
   useEffect(() => {
-    void loadWorkspaces()
-  }, [loadWorkspaces])
-
-  useEffect(() => {
+    setStatuses([])
+    setTasks([])
     void loadStatuses()
     void loadTasks()
-  }, [loadStatuses, loadTasks])
+  }, [activeWorkspaceId, loadStatuses, loadTasks])
 
   useFocusEffect(
     useCallback(() => {
@@ -87,10 +64,8 @@ export const useHomeViewModel = () => {
 
   return {
     workspaces,
-    projects,
     activeWorkspaceId,
     setActiveWorkspaceId,
-    activeProjectId,
     tasksByStatus,
     refreshAll,
     isRefreshing,
