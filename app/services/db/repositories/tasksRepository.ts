@@ -109,6 +109,14 @@ async function upsertTaskInternal(
     // baseRevision must reflect the revision before this local mutation.
     if (options.enqueue) {
       const baseRevision = existing?.revision ?? ""
+      const workspaceIdForSync = task.workspaceId.startsWith("personal:") ? null : task.workspaceId
+      if (__DEV__) {
+        console.log("[db] enqueue task", {
+          taskId: task.id,
+          workspaceId: workspaceIdForSync ?? "personal",
+          projectId: task.projectId,
+        })
+      }
       await enqueueOp(
         {
           entityType: "task",
@@ -118,7 +126,7 @@ async function upsertTaskInternal(
           patch: {
             id: task.id,
             projectId: task.projectId,
-            workspaceId: task.workspaceId,
+            workspaceId: workspaceIdForSync,
             title: task.title,
             description: task.description,
             statusId: task.statusId,
@@ -220,6 +228,9 @@ async function markTaskDeletedInternal(
 
     if (options.enqueue) {
       const plaintextDescription = await decryptText(existing.description)
+      const workspaceIdForSync = existing.workspaceId.startsWith("personal:")
+        ? null
+        : existing.workspaceId
       await enqueueOp(
         {
           entityType: "task",
@@ -228,7 +239,7 @@ async function markTaskDeletedInternal(
           patch: {
             id: taskId,
             projectId: existing.projectId,
-            workspaceId: existing.workspaceId,
+            workspaceId: workspaceIdForSync,
             title: existing.title,
             description: plaintextDescription,
             statusId: existing.statusId,

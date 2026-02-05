@@ -168,10 +168,22 @@ async function applyRemoteChange(db: SqliteDb, change: SyncChange) {
     }
     const payload = change.payload as Task
     const scopeKey = await getActiveScopeKey()
-    const normalized = payload.workspaceId
-      ? payload
-      : { ...payload, workspaceId: personalWorkspaceId(scopeKey) }
-    const scoped = normalized.scopeKey ? normalized : { ...normalized, scopeKey: await getActiveScopeKey() }
+    const resolvedWorkspaceId = payload.workspaceId ?? personalWorkspaceId(scopeKey)
+    if (!payload.workspaceId && __DEV__) {
+      console.warn("[sync] task missing workspaceId; defaulting to personal", {
+        taskId: change.entityId,
+        workspaceId: resolvedWorkspaceId,
+      })
+    }
+    const scoped = payload.scopeKey
+      ? { ...payload, workspaceId: resolvedWorkspaceId }
+      : { ...payload, workspaceId: resolvedWorkspaceId, scopeKey }
+    if (__DEV__) {
+      console.log("[sync] apply task workspaceId", {
+        taskId: payload.id,
+        workspaceId: resolvedWorkspaceId,
+      })
+    }
     await upsertTaskFromSync(scoped, db)
   }
 
