@@ -13,6 +13,7 @@ export interface User {
   updatedAt: string
   revision: string
   deletedAt: string | null
+  scopeKey: string
 }
 
 export interface Project {
@@ -22,6 +23,7 @@ export interface Project {
   createdByUserId: string
   updatedAt: string
   archivedAt: string | null
+  scopeKey: string
 }
 
 export interface ProjectMember {
@@ -29,6 +31,7 @@ export interface ProjectMember {
   userId: string
   role: ProjectRole
   joinedAt: string
+  scopeKey: string
 }
 
 export interface Status {
@@ -38,6 +41,7 @@ export interface Status {
   name: string
   orderIndex: number
   category: "todo" | "in_progress" | "done"
+  scopeKey: string
 }
 
 export interface Workspace {
@@ -47,6 +51,7 @@ export interface Workspace {
   createdAt: number
   updatedAt: number
   remoteId: string | null
+  scopeKey: string
 }
 
 export interface Task {
@@ -62,6 +67,7 @@ export interface Task {
   updatedAt: string
   revision: string
   deletedAt: string | null
+  scopeKey: string
 }
 
 export interface Comment {
@@ -73,6 +79,7 @@ export interface Comment {
   updatedAt: string
   revision: string
   deletedAt: string | null
+  scopeKey: string
 }
 
 export interface WorkspaceMember {
@@ -84,6 +91,7 @@ export interface WorkspaceMember {
   updatedAt: string
   revision: string
   deletedAt: string | null
+  scopeKey: string
 }
 
 export interface TaskEvent {
@@ -93,6 +101,7 @@ export interface TaskEvent {
   payload: string
   createdAt: string
   createdByUserId: string
+  scopeKey: string
 }
 
 export interface ChangeLogEntry {
@@ -110,6 +119,7 @@ export interface ChangeLogEntry {
   status: ChangeLogStatus
   attemptCount: number
   lastAttemptAt: string | null
+  scopeKey: string
 }
 
 export interface ConflictRecord {
@@ -123,10 +133,11 @@ export interface ConflictRecord {
   status: "OPEN" | "RESOLVED"
   createdAt: string
   resolvedAt: string | null
+  scopeKey: string
 }
 
 export interface SyncState {
-  id: string
+  scopeKey: string
   lastCursor: string | null
   lastSyncedAt: string | null
 }

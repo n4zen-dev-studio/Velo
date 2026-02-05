@@ -16,12 +16,14 @@ export * as workspaceMembersRepository from "./repositories/workspaceMembersRepo
 import { getDb } from "./db"
 import { execute, executeTransaction } from "./queries"
 import { bootstrapWorkspaces } from "./repositories/workspacesRepository"
+import { getActiveScopeKey } from "@/services/session/scope"
 
 // Workspace bootstrapping happens here via bootstrapWorkspaces (Personal + active id + default statuses).
 // When adding new user-owned entities, include a `workspaceId` column and default to the active workspace in repos + migrations.
 export async function initializeDatabase() {
   const db = await getDb()
-  await bootstrapWorkspaces(db)
+  const scopeKey = await getActiveScopeKey()
+  await bootstrapWorkspaces(scopeKey, db)
 }
 
 // export async function clearLocalData() {

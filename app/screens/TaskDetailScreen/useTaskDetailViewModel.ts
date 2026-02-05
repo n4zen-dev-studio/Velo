@@ -13,6 +13,7 @@ import { resolveAuthorLabel } from "@/services/users/resolveAuthorLabel"
 import { refreshLocalCounts } from "@/services/sync/syncStore"
 import { generateUuidV4, getCurrentUserId, getSessionMode } from "@/services/sync/identity"
 import { ANON_USER_ID } from "@/services/constants/identity"
+import { getActiveScopeKey } from "@/services/session/scope"
 
 export type CommentVM = Comment & { authorLabel: string }
 export type TaskEventVM = TaskEvent & { authorLabel: string }
@@ -84,6 +85,7 @@ export const useTaskDetailViewModel = (taskId: string) => {
       const sessionMode = await getSessionMode()
       const currentUserId = sessionMode === "remote" ? await getCurrentUserId() : null
       const createdByUserId = currentUserId ?? ANON_USER_ID
+      const scopeKey = await getActiveScopeKey()
       const authorLabel = await resolveAuthorLabel({
         createdByUserId,
         currentUserId,
@@ -97,6 +99,7 @@ export const useTaskDetailViewModel = (taskId: string) => {
         updatedAt: now,
         revision: `rev-${Date.now()}`,
         deletedAt: null,
+        scopeKey,
       }
 
       setComments((prev) => [...prev, { ...optimistic, authorLabel }])

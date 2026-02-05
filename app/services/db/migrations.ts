@@ -1,9 +1,10 @@
 import type { SQLiteDatabase } from "expo-sqlite"
 
 import { createIndexesSql, createTablesSql, schemaVersion } from "./schema"
+import { GUEST_SCOPE_KEY } from "@/services/session/scope"
 import { execute, executeSqlBatch, queryAll, queryFirst, executeTransaction } from "./queries"
 
-const PERSONAL_WORKSPACE_ID = "personal"
+const GUEST_PERSONAL_WORKSPACE_ID = `personal:${GUEST_SCOPE_KEY}`
 
 async function tableHasColumn(db: SQLiteDatabase, table: string, column: string) {
   const rows = await queryAll<{ name: string }>(db, `PRAGMA table_info(${table});`)
@@ -58,12 +59,71 @@ async function rebuildStatusesTable(db: SQLiteDatabase) {
     db,
     `
     INSERT INTO statuses_new (id, projectId, workspaceId, name, orderIndex, category)
-    SELECT id, projectId, '${PERSONAL_WORKSPACE_ID}', name, orderIndex, category
+    SELECT id, projectId, '${GUEST_PERSONAL_WORKSPACE_ID}', name, orderIndex, category
     FROM statuses;
     `,
   )
   await execute(db, "DROP TABLE statuses;")
   await execute(db, "ALTER TABLE statuses_new RENAME TO statuses;")
+}
+
+async function rebuildWorkspaceStateTable(db: SQLiteDatabase) {
+  const hasTable = await tableExists(db, "workspace_state")
+  if (!hasTable) return
+  const hasScopeKey = await tableHasColumn(db, "workspace_state", "scopeKey")
+  if (hasScopeKey) return
+
+  await execute(
+    db,
+    `
+    CREATE TABLE IF NOT EXISTS workspace_state_new (
+      scopeKey TEXT PRIMARY KEY,
+      activeWorkspaceId TEXT NOT NULL
+    );
+    `,
+  )
+  await execute(
+    db,
+    `
+    INSERT INTO workspace_state_new (scopeKey, activeWorkspaceId)
+    SELECT '${GUEST_SCOPE_KEY}', activeWorkspaceId
+    FROM workspace_state
+    WHERE id = 'singleton'
+    LIMIT 1;
+    `,
+  )
+  await execute(db, "DROP TABLE workspace_state;")
+  await execute(db, "ALTER TABLE workspace_state_new RENAME TO workspace_state;")
+}
+
+async function rebuildSyncStateTable(db: SQLiteDatabase) {
+  const hasTable = await tableExists(db, "sync_state")
+  if (!hasTable) return
+  const hasScopeKey = await tableHasColumn(db, "sync_state", "scopeKey")
+  if (hasScopeKey) return
+
+  await execute(
+    db,
+    `
+    CREATE TABLE IF NOT EXISTS sync_state_new (
+      scopeKey TEXT PRIMARY KEY,
+      lastCursor TEXT,
+      lastSyncedAt TEXT
+    );
+    `,
+  )
+  await execute(
+    db,
+    `
+    INSERT INTO sync_state_new (scopeKey, lastCursor, lastSyncedAt)
+    SELECT '${GUEST_SCOPE_KEY}', lastCursor, lastSyncedAt
+    FROM sync_state
+    WHERE id = 'singleton'
+    LIMIT 1;
+    `,
+  )
+  await execute(db, "DROP TABLE sync_state;")
+  await execute(db, "ALTER TABLE sync_state_new RENAME TO sync_state;")
 }
 
 export async function migrate(db: SQLiteDatabase) {
@@ -75,6 +135,8 @@ export async function migrate(db: SQLiteDatabase) {
   await executeTransaction(db, async (txDb) => {
     await executeSqlBatch(txDb, createTablesSql)
     await rebuildStatusesTable(txDb)
+    await rebuildWorkspaceStateTable(txDb)
+    await rebuildSyncStateTable(txDb)
 
     await ensureColumn(
       txDb,
@@ -101,6 +163,13 @@ export async function migrate(db: SQLiteDatabase) {
       "deletedAt",
       "ALTER TABLE users ADD COLUMN deletedAt TEXT",
     )
+    await ensureColumn(
+      txDb,
+      "users",
+      "scopeKey",
+      "ALTER TABLE users ADD COLUMN scopeKey TEXT NOT NULL DEFAULT 'guest'",
+      "UPDATE users SET scopeKey = 'guest' WHERE scopeKey IS NULL OR scopeKey = ''",
+    )
 
     await ensureColumn(
       txDb,
@@ -111,6 +180,13 @@ export async function migrate(db: SQLiteDatabase) {
     )
     await ensureColumn(
       txDb,
+      "projects",
+      "scopeKey",
+      "ALTER TABLE projects ADD COLUMN scopeKey TEXT NOT NULL DEFAULT 'guest'",
+      "UPDATE projects SET scopeKey = CASE WHEN createdByUserId IS NOT NULL AND createdByUserId != '' THEN 'user:' || createdByUserId ELSE 'guest' END WHERE scopeKey IS NULL OR scopeKey = ''",
+    )
+    await ensureColumn(
+      txDb,
       "tasks",
       "workspaceId",
       "ALTER TABLE tasks ADD COLUMN workspaceId TEXT NOT NULL DEFAULT 'personal'",
@@ -118,10 +194,80 @@ export async function migrate(db: SQLiteDatabase) {
     )
     await ensureColumn(
       txDb,
+      "tasks",
+      "scopeKey",
+      "ALTER TABLE tasks ADD COLUMN scopeKey TEXT NOT NULL DEFAULT 'guest'",
+      "UPDATE tasks SET scopeKey = CASE WHEN createdByUserId IS NOT NULL AND createdByUserId != '' THEN 'user:' || createdByUserId ELSE 'guest' END WHERE scopeKey IS NULL OR scopeKey = ''",
+    )
+    await ensureColumn(
+      txDb,
       "change_log",
       "workspaceId",
       "ALTER TABLE change_log ADD COLUMN workspaceId TEXT NOT NULL DEFAULT 'personal'",
       "UPDATE change_log SET workspaceId = 'personal' WHERE workspaceId IS NULL OR workspaceId = ''",
+    )
+    await ensureColumn(
+      txDb,
+      "change_log",
+      "scopeKey",
+      "ALTER TABLE change_log ADD COLUMN scopeKey TEXT NOT NULL DEFAULT 'guest'",
+      "UPDATE change_log SET scopeKey = 'user:' || userId WHERE scopeKey IS NULL OR scopeKey = ''",
+    )
+
+    await ensureColumn(
+      txDb,
+      "comments",
+      "scopeKey",
+      "ALTER TABLE comments ADD COLUMN scopeKey TEXT NOT NULL DEFAULT 'guest'",
+      "UPDATE comments SET scopeKey = CASE WHEN createdByUserId IS NOT NULL AND createdByUserId != '' THEN 'user:' || createdByUserId ELSE 'guest' END WHERE scopeKey IS NULL OR scopeKey = ''",
+    )
+
+    await ensureColumn(
+      txDb,
+      "task_events",
+      "scopeKey",
+      "ALTER TABLE task_events ADD COLUMN scopeKey TEXT NOT NULL DEFAULT 'guest'",
+      "UPDATE task_events SET scopeKey = CASE WHEN createdByUserId IS NOT NULL AND createdByUserId != '' THEN 'user:' || createdByUserId ELSE 'guest' END WHERE scopeKey IS NULL OR scopeKey = ''",
+    )
+
+    await ensureColumn(
+      txDb,
+      "workspace_members",
+      "scopeKey",
+      "ALTER TABLE workspace_members ADD COLUMN scopeKey TEXT NOT NULL DEFAULT 'guest'",
+      "UPDATE workspace_members SET scopeKey = 'user:' || userId WHERE scopeKey IS NULL OR scopeKey = ''",
+    )
+
+    await ensureColumn(
+      txDb,
+      "project_members",
+      "scopeKey",
+      "ALTER TABLE project_members ADD COLUMN scopeKey TEXT NOT NULL DEFAULT 'guest'",
+      "UPDATE project_members SET scopeKey = 'user:' || userId WHERE scopeKey IS NULL OR scopeKey = ''",
+    )
+
+    await ensureColumn(
+      txDb,
+      "workspaces",
+      "scopeKey",
+      "ALTER TABLE workspaces ADD COLUMN scopeKey TEXT NOT NULL DEFAULT 'guest'",
+      "UPDATE workspaces SET scopeKey = 'guest' WHERE scopeKey IS NULL OR scopeKey = ''",
+    )
+
+    await ensureColumn(
+      txDb,
+      "statuses",
+      "scopeKey",
+      "ALTER TABLE statuses ADD COLUMN scopeKey TEXT NOT NULL DEFAULT 'guest'",
+      "UPDATE statuses SET scopeKey = 'guest' WHERE scopeKey IS NULL OR scopeKey = ''",
+    )
+
+    await ensureColumn(
+      txDb,
+      "conflicts",
+      "scopeKey",
+      "ALTER TABLE conflicts ADD COLUMN scopeKey TEXT NOT NULL DEFAULT 'guest'",
+      "UPDATE conflicts SET scopeKey = 'guest' WHERE scopeKey IS NULL OR scopeKey = ''",
     )
 
     await executeSqlBatch(txDb, createIndexesSql)

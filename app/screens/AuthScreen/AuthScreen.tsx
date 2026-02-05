@@ -21,11 +21,18 @@ import {
 } from "@/services/sync/identity"
 import { setTokens } from "@/services/api/tokenStore"
 import { refreshAuthSession } from "@/services/auth/session"
-import { claimOfflineData, markOfflineClaimHandled, shouldPromptOfflineClaim } from "@/services/sync/offlineClaim"
+import {
+  claimOfflineData,
+  discardGuestData,
+  markOfflineClaimHandled,
+  shouldPromptOfflineClaim,
+} from "@/services/sync/offlineClaim"
 import { syncController } from "@/services/sync/SyncController"
 import { googleOauth, isValidGoogleClientId } from "@/config/oauth"
 import { goToHome } from "@/navigation/navigationActions"
 import { clearOfflineMode, setOfflineMode } from "@/services/storage/session"
+import { bootstrapWorkspaces, personalWorkspaceId, setActiveWorkspaceId } from "@/services/db/repositories/workspacesRepository"
+import { userScopeKey } from "@/services/session/scope"
 
 import { useAuthViewModel } from "./useAuthViewModel"
 
@@ -212,6 +219,9 @@ export function AuthScreen() {
     await setSessionMode("remote")
     await clearOfflineMode()
     await refreshAuthSession()
+    const scopeKey = userScopeKey(userId)
+    await bootstrapWorkspaces(scopeKey)
+    await setActiveWorkspaceId(personalWorkspaceId(scopeKey), scopeKey)
     goToHome()
   }
 
@@ -224,6 +234,9 @@ export function AuthScreen() {
     setShowClaimModal(false)
     await clearOfflineMode()
     await refreshAuthSession()
+    const scopeKey = userScopeKey(pendingRemoteUserId)
+    await bootstrapWorkspaces(scopeKey)
+    await setActiveWorkspaceId(personalWorkspaceId(scopeKey), scopeKey)
     goToHome()
     void syncController.triggerSync("manual")
   }
@@ -232,10 +245,14 @@ export function AuthScreen() {
     if (!pendingRemoteUserId) return
     await setCurrentUserId(pendingRemoteUserId)
     await setSessionMode("remote")
+    await discardGuestData()
     markOfflineClaimHandled()
     setShowClaimModal(false)
     await clearOfflineMode()
     await refreshAuthSession()
+    const scopeKey = userScopeKey(pendingRemoteUserId)
+    await bootstrapWorkspaces(scopeKey)
+    await setActiveWorkspaceId(personalWorkspaceId(scopeKey), scopeKey)
     goToHome()
   }
 

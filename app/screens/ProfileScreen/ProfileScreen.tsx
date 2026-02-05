@@ -14,6 +14,7 @@ import { getCurrentUserId } from "@/services/sync/identity"
 import type { User } from "@/services/db/types"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
+import { userScopeKey } from "@/services/session/scope"
 
 const fallbackAvatar = require("@assets/images/avatar_placeholder.jpg")
 
@@ -100,6 +101,7 @@ export function ProfileScreen() {
         updatedAt: now,
         revision: `local-${Date.now()}`,
         deletedAt: userRow?.deletedAt ?? null,
+        scopeKey: userScopeKey(userId),
       }
       await upsertUser(next)
       setUserRow(next)

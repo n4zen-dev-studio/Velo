@@ -4,32 +4,41 @@ import type { Comment, ConflictRecord, Task } from "@/services/db/types"
 import { enqueueOp } from "@/services/db/repositories/changeLogRepository"
 import { upsertTaskFromSync } from "@/services/db/repositories/tasksRepository"
 import { upsertCommentFromSync } from "@/services/db/repositories/commentsRepository"
-import { PERSONAL_WORKSPACE_ID } from "@/services/db/repositories/workspacesRepository"
+import { personalWorkspaceId } from "@/services/db/repositories/workspacesRepository"
 import { refreshLocalCounts } from "@/services/sync/syncStore"
+import { getActiveScopeKey } from "@/services/session/scope"
 
 export async function listOpenConflicts() {
   const database = await getDb()
+  const scopeKey = await getActiveScopeKey()
   return queryAll<ConflictRecord>(
     database,
-    "SELECT * FROM conflicts WHERE status = 'OPEN' ORDER BY createdAt DESC",
+    "SELECT * FROM conflicts WHERE scopeKey = ? AND status = 'OPEN' ORDER BY createdAt DESC",
+    [scopeKey],
   )
 }
 
 export async function hasOpenConflict(entityType: string, entityId: string) {
   const database = await getDb()
+  const scopeKey = await getActiveScopeKey()
   const id = `${entityType}:${entityId}`
   const row = await queryFirst<{ count: number }>(
     database,
-    "SELECT COUNT(1) as count FROM conflicts WHERE id = ? AND status = 'OPEN'",
-    [id],
+    "SELECT COUNT(1) as count FROM conflicts WHERE scopeKey = ? AND id = ? AND status = 'OPEN'",
+    [scopeKey, id],
   )
   return (row?.count ?? 0) > 0
 }
 
 export async function getConflict(entityType: string, entityId: string) {
   const database = await getDb()
+  const scopeKey = await getActiveScopeKey()
   const id = `${entityType}:${entityId}`
-  return queryFirst<ConflictRecord>(database, "SELECT * FROM conflicts WHERE id = ?", [id])
+  return queryFirst<ConflictRecord>(
+    database,
+    "SELECT * FROM conflicts WHERE scopeKey = ? AND id = ?",
+    [scopeKey, id],
+  )
 }
 
 export async function resolveConflictKeepLocal(entityType: string, entityId: string) {
@@ -60,13 +69,14 @@ async function resolveConflict(conflict: ConflictRecord, payload: Task | Comment
   const database = await getDb()
   const now = new Date().toISOString()
   const nextRevision = `rev-${Date.now()}`
+  const scopeKey = conflict.scopeKey ?? (await getActiveScopeKey())
 
   if (conflict.entityType === "task") {
     const task = payload as Task
     const updatedTask: Task = {
       id: task.id,
       projectId: task.projectId ?? null,
-      workspaceId: task.workspaceId ?? PERSONAL_WORKSPACE_ID,
+      workspaceId: task.workspaceId ?? personalWorkspaceId(scopeKey),
       title: task.title ?? "",
       description: task.description ?? "",
       statusId: task.statusId ?? "todo",
@@ -76,6 +86,7 @@ async function resolveConflict(conflict: ConflictRecord, payload: Task | Comment
       updatedAt: now,
       revision: nextRevision,
       deletedAt: task.deletedAt ?? null,
+      scopeKey,
     }
 
     await upsertTaskFromSync(updatedTask, database)
@@ -87,6 +98,7 @@ async function resolveConflict(conflict: ConflictRecord, payload: Task | Comment
       baseRevision: conflict.remoteRevision,
       projectId: updatedTask.projectId ?? null,
       workspaceId: updatedTask.workspaceId,
+      scopeKey,
       createdAt: now,
     }, database)
   }
@@ -102,15 +114,16 @@ async function resolveConflict(conflict: ConflictRecord, payload: Task | Comment
       updatedAt: now,
       revision: nextRevision,
       deletedAt: comment.deletedAt ?? null,
+      scopeKey,
     }
 
     await upsertCommentFromSync(updatedComment, database)
     const taskRow = await queryFirst<{ workspaceId: string }>(
       database,
-      "SELECT workspaceId FROM tasks WHERE id = ?",
-      [updatedComment.taskId],
+      "SELECT workspaceId FROM tasks WHERE id = ? AND scopeKey = ?",
+      [updatedComment.taskId, scopeKey],
     )
-    const workspaceId = taskRow?.workspaceId ?? PERSONAL_WORKSPACE_ID
+    const workspaceId = taskRow?.workspaceId ?? personalWorkspaceId(scopeKey)
     await enqueueOp({
       entityType: "comment",
       entityId: updatedComment.id,
@@ -119,14 +132,15 @@ async function resolveConflict(conflict: ConflictRecord, payload: Task | Comment
       baseRevision: conflict.remoteRevision,
       projectId: null,
       workspaceId,
+      scopeKey,
       createdAt: now,
     }, database)
   }
 
   await execute(
     database,
-    "UPDATE conflicts SET status = 'RESOLVED', resolvedAt = ? WHERE id = ?",
-    [now, conflict.id],
+    "UPDATE conflicts SET status = 'RESOLVED', resolvedAt = ? WHERE id = ? AND scopeKey = ?",
+    [now, conflict.id, scopeKey],
   )
 
   await refreshLocalCounts()

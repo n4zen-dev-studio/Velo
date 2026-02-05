@@ -12,13 +12,20 @@ import type { AuthStackScreenProps } from "@/navigators/navigationTypes"
 import { setTokens } from "@/services/api/tokenStore"
 import { useAuthViewModel } from "@/screens/AuthScreen/useAuthViewModel"
 import { setCurrentUserId, setSessionMode } from "@/services/sync/identity"
-import { claimOfflineData, markOfflineClaimHandled, shouldPromptOfflineClaim } from "@/services/sync/offlineClaim"
+import {
+  claimOfflineData,
+  discardGuestData,
+  markOfflineClaimHandled,
+  shouldPromptOfflineClaim,
+} from "@/services/sync/offlineClaim"
 import { syncController } from "@/services/sync/SyncController"
 import { goToHome } from "@/navigation/navigationActions"
 import { clearOfflineMode } from "@/services/storage/session"
 import { refreshAuthSession } from "@/services/auth/session"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
+import { bootstrapWorkspaces, personalWorkspaceId, setActiveWorkspaceId } from "@/services/db/repositories/workspacesRepository"
+import { userScopeKey } from "@/services/session/scope"
 
 export function VerifyEmailScreen() {
   const { themed } = useAppTheme()
@@ -70,6 +77,9 @@ export function VerifyEmailScreen() {
     await setSessionMode("remote")
     await clearOfflineMode()
     await refreshAuthSession()
+    const scopeKey = userScopeKey(userId)
+    await bootstrapWorkspaces(scopeKey)
+    await setActiveWorkspaceId(personalWorkspaceId(scopeKey), scopeKey)
     goToHome()
   }
 
@@ -82,6 +92,9 @@ export function VerifyEmailScreen() {
     setShowClaimModal(false)
     await clearOfflineMode()
     await refreshAuthSession()
+    const scopeKey = userScopeKey(pendingRemoteUserId)
+    await bootstrapWorkspaces(scopeKey)
+    await setActiveWorkspaceId(personalWorkspaceId(scopeKey), scopeKey)
     goToHome()
     void syncController.triggerSync("manual")
   }
@@ -90,10 +103,14 @@ export function VerifyEmailScreen() {
     if (!pendingRemoteUserId) return
     await setCurrentUserId(pendingRemoteUserId)
     await setSessionMode("remote")
+    await discardGuestData()
     markOfflineClaimHandled()
     setShowClaimModal(false)
     await clearOfflineMode()
     await refreshAuthSession()
+    const scopeKey = userScopeKey(pendingRemoteUserId)
+    await bootstrapWorkspaces(scopeKey)
+    await setActiveWorkspaceId(personalWorkspaceId(scopeKey), scopeKey)
     goToHome()
   }
 

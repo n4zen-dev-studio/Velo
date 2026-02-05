@@ -1,4 +1,4 @@
-export const schemaVersion = 3
+export const schemaVersion = 4
 
 export const createTablesSql = `
 CREATE TABLE IF NOT EXISTS users (
@@ -10,7 +10,8 @@ CREATE TABLE IF NOT EXISTS users (
   createdAt TEXT NOT NULL,
   updatedAt TEXT NOT NULL,
   revision TEXT NOT NULL,
-  deletedAt TEXT
+  deletedAt TEXT,
+  scopeKey TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS workspaces (
@@ -19,11 +20,12 @@ CREATE TABLE IF NOT EXISTS workspaces (
   kind TEXT NOT NULL,
   createdAt INTEGER NOT NULL,
   updatedAt INTEGER NOT NULL,
-  remoteId TEXT
+  remoteId TEXT,
+  scopeKey TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS workspace_state (
-  id TEXT PRIMARY KEY,
+  scopeKey TEXT PRIMARY KEY,
   activeWorkspaceId TEXT NOT NULL
 );
 
@@ -33,7 +35,8 @@ CREATE TABLE IF NOT EXISTS projects (
   workspaceId TEXT NOT NULL,
   createdByUserId TEXT NOT NULL,
   updatedAt TEXT NOT NULL,
-  archivedAt TEXT
+  archivedAt TEXT,
+  scopeKey TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS project_members (
@@ -41,6 +44,7 @@ CREATE TABLE IF NOT EXISTS project_members (
   userId TEXT NOT NULL,
   role TEXT NOT NULL,
   joinedAt TEXT NOT NULL,
+  scopeKey TEXT NOT NULL,
   PRIMARY KEY (projectId, userId)
 );
 
@@ -51,6 +55,7 @@ CREATE TABLE IF NOT EXISTS statuses (
   name TEXT NOT NULL,
   orderIndex INTEGER NOT NULL,
   category TEXT NOT NULL,
+  scopeKey TEXT NOT NULL,
   PRIMARY KEY (id, projectId, workspaceId)
 );
 
@@ -66,7 +71,8 @@ CREATE TABLE IF NOT EXISTS tasks (
   createdByUserId TEXT NOT NULL,
   updatedAt TEXT NOT NULL,
   revision TEXT NOT NULL,
-  deletedAt TEXT
+  deletedAt TEXT,
+  scopeKey TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS comments (
@@ -77,7 +83,8 @@ CREATE TABLE IF NOT EXISTS comments (
   createdAt TEXT NOT NULL,
   updatedAt TEXT NOT NULL,
   revision TEXT NOT NULL,
-  deletedAt TEXT
+  deletedAt TEXT,
+  scopeKey TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS workspace_members (
@@ -89,6 +96,7 @@ CREATE TABLE IF NOT EXISTS workspace_members (
   updatedAt TEXT NOT NULL,
   revision TEXT NOT NULL,
   deletedAt TEXT,
+  scopeKey TEXT NOT NULL,
   UNIQUE(workspaceId, userId)
 );
 
@@ -98,7 +106,8 @@ CREATE TABLE IF NOT EXISTS task_events (
   type TEXT NOT NULL,
   payload TEXT NOT NULL,
   createdAt TEXT NOT NULL,
-  createdByUserId TEXT NOT NULL
+  createdByUserId TEXT NOT NULL,
+  scopeKey TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS change_log (
@@ -115,7 +124,8 @@ CREATE TABLE IF NOT EXISTS change_log (
   workspaceId TEXT NOT NULL,
   status TEXT NOT NULL,
   attemptCount INTEGER NOT NULL,
-  lastAttemptAt TEXT
+  lastAttemptAt TEXT,
+  scopeKey TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS conflicts (
@@ -128,11 +138,12 @@ CREATE TABLE IF NOT EXISTS conflicts (
   remotePayload TEXT NOT NULL,
   status TEXT NOT NULL,
   createdAt TEXT NOT NULL,
-  resolvedAt TEXT
+  resolvedAt TEXT,
+  scopeKey TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS sync_state (
-  id TEXT PRIMARY KEY,
+  scopeKey TEXT PRIMARY KEY,
   lastCursor TEXT,
   lastSyncedAt TEXT
 );
@@ -140,16 +151,29 @@ CREATE TABLE IF NOT EXISTS sync_state (
 
 export const createIndexesSql = `
 CREATE INDEX IF NOT EXISTS idx_users_email ON users (email);
+CREATE INDEX IF NOT EXISTS idx_users_scope ON users (scopeKey);
+CREATE INDEX IF NOT EXISTS idx_workspaces_scope ON workspaces (scopeKey);
+CREATE INDEX IF NOT EXISTS idx_workspace_state_scope ON workspace_state (scopeKey);
 CREATE INDEX IF NOT EXISTS idx_projects_workspace ON projects (workspaceId);
+CREATE INDEX IF NOT EXISTS idx_projects_scope ON projects (scopeKey);
 CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks (projectId);
 CREATE INDEX IF NOT EXISTS idx_tasks_workspace ON tasks (workspaceId);
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks (statusId);
 CREATE INDEX IF NOT EXISTS idx_tasks_updated ON tasks (updatedAt);
+CREATE INDEX IF NOT EXISTS idx_tasks_scope ON tasks (scopeKey);
 CREATE INDEX IF NOT EXISTS idx_statuses_workspace ON statuses (workspaceId, projectId);
+CREATE INDEX IF NOT EXISTS idx_statuses_scope ON statuses (scopeKey);
 CREATE INDEX IF NOT EXISTS idx_comments_task ON comments (taskId);
+CREATE INDEX IF NOT EXISTS idx_comments_scope ON comments (scopeKey);
 CREATE INDEX IF NOT EXISTS idx_workspace_members_workspace ON workspace_members (workspaceId);
 CREATE INDEX IF NOT EXISTS idx_workspace_members_user ON workspace_members (userId);
+CREATE INDEX IF NOT EXISTS idx_workspace_members_scope ON workspace_members (scopeKey);
 CREATE INDEX IF NOT EXISTS idx_change_log_status ON change_log (status);
 CREATE INDEX IF NOT EXISTS idx_change_log_workspace ON change_log (workspaceId);
+CREATE INDEX IF NOT EXISTS idx_change_log_scope_status ON change_log (scopeKey, status);
 CREATE INDEX IF NOT EXISTS idx_conflicts_entity ON conflicts (entityType, entityId);
+CREATE INDEX IF NOT EXISTS idx_conflicts_scope ON conflicts (scopeKey);
+CREATE INDEX IF NOT EXISTS idx_task_events_scope ON task_events (scopeKey);
+CREATE INDEX IF NOT EXISTS idx_project_members_scope ON project_members (scopeKey);
+CREATE INDEX IF NOT EXISTS idx_sync_state_scope ON sync_state (scopeKey);
 `

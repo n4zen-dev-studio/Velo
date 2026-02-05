@@ -17,9 +17,11 @@ import {
   setActiveWorkspaceId,
   renameWorkspace as renameWorkspaceRepo,
   deleteWorkspace as deleteWorkspaceRepo,
-  PERSONAL_WORKSPACE_ID,
   PERSONAL_WORKSPACE_LABEL,
+  personalWorkspaceId,
 } from "@/services/db/repositories/workspacesRepository"
+import { getActiveScopeKey, GUEST_SCOPE_KEY } from "@/services/session/scope"
+import { useAuthSession } from "@/services/auth/session"
 
 interface WorkspaceStoreValue {
   workspaces: Workspace[]
@@ -34,30 +36,39 @@ interface WorkspaceStoreValue {
   deleteWorkspace: (id: string) => Promise<void>
 }
 
-const defaultWorkspace: Workspace = {
-  id: PERSONAL_WORKSPACE_ID,
+const defaultWorkspace = (scopeKey: string): Workspace => ({
+  id: personalWorkspaceId(scopeKey),
   label: PERSONAL_WORKSPACE_LABEL,
   kind: "personal",
   createdAt: 0,
   updatedAt: 0,
   remoteId: null,
-}
+  scopeKey,
+})
 
 const WorkspaceContext = createContext<WorkspaceStoreValue | null>(null)
 
 export function WorkspaceProvider({ children }: PropsWithChildren) {
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([defaultWorkspace])
-  const [activeWorkspaceIdState, setActiveWorkspaceIdState] = useState(PERSONAL_WORKSPACE_ID)
+  const authSession = useAuthSession()
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([defaultWorkspace(GUEST_SCOPE_KEY)])
+  const [activeWorkspaceIdState, setActiveWorkspaceIdState] = useState(
+    personalWorkspaceId(GUEST_SCOPE_KEY),
+  )
   const [isHydrated, setIsHydrated] = useState(false)
 
   const loadFromDb = useCallback(async () => {
-    await bootstrapWorkspaces()
-    const [rows, activeId] = await Promise.all([listWorkspaces(), getActiveWorkspaceId()])
-    const resolvedActive = activeId ?? PERSONAL_WORKSPACE_ID
-    setWorkspaces(rows.length > 0 ? rows : [defaultWorkspace])
+    const scopeKey = await getActiveScopeKey()
+    await bootstrapWorkspaces(scopeKey)
+    const [rows, activeId] = await Promise.all([
+      listWorkspaces(scopeKey),
+      getActiveWorkspaceId(scopeKey),
+    ])
+    const resolvedActive = activeId ?? personalWorkspaceId(scopeKey)
+    setWorkspaces(rows.length > 0 ? rows : [defaultWorkspace(scopeKey)])
     setActiveWorkspaceIdState(resolvedActive)
     if (__DEV__) {
-      const hasPersonal = rows.some((w) => w.id === PERSONAL_WORKSPACE_ID)
+      const personalId = personalWorkspaceId(scopeKey)
+      const hasPersonal = rows.some((w) => w.id === personalId)
       if (!hasPersonal) {
         // eslint-disable-next-line no-console
         console.warn("[Workspace] Personal workspace missing; bootstrapped fallback in memory.")
@@ -82,6 +93,10 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
     void hydrate()
   }, [hydrate])
 
+  useEffect(() => {
+    void refreshWorkspaces()
+  }, [authSession.currentUserId, authSession.token, refreshWorkspaces])
+
   const setActiveWorkspace = useCallback(async (id: string) => {
     await setActiveWorkspaceId(id)
     setActiveWorkspaceIdState(id)
@@ -105,7 +120,8 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
     await deleteWorkspaceRepo(id)
     await refreshWorkspaces()
     if (id === activeWorkspaceIdState) {
-      await setActiveWorkspace(PERSONAL_WORKSPACE_ID)
+      const scopeKey = await getActiveScopeKey()
+      await setActiveWorkspace(personalWorkspaceId(scopeKey))
     }
   }, [activeWorkspaceIdState, refreshWorkspaces, setActiveWorkspace])
 

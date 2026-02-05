@@ -410,29 +410,48 @@ const $buttonFull: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
 async function getSyncStateRow() {
   const { getDb } = await import("@/services/db/db")
   const { queryFirst } = await import("@/services/db/queries")
+  const { getActiveScopeKey } = await import("@/services/session/scope")
   const db = await getDb()
-  return queryFirst<{ lastCursor: string | null }>(db, "SELECT lastCursor FROM sync_state WHERE id = ?", ["singleton"])
+  const scopeKey = await getActiveScopeKey()
+  return queryFirst<{ lastCursor: string | null }>(
+    db,
+    "SELECT lastCursor FROM sync_state WHERE scopeKey = ?",
+    [scopeKey],
+  )
 }
 
 async function buildDebugSnapshot() {
   const { getDb } = await import("@/services/db/db")
   const { queryAll, queryFirst } = await import("@/services/db/queries")
+  const { getActiveScopeKey } = await import("@/services/session/scope")
   const db = await getDb()
-  const syncState = await queryFirst(db, "SELECT * FROM sync_state WHERE id = ?", ["singleton"])
+  const scopeKey = await getActiveScopeKey()
+  const syncState = await queryFirst(db, "SELECT * FROM sync_state WHERE scopeKey = ?", [scopeKey])
   const pendingCount = await queryFirst<{ count: number }>(
     db,
-    "SELECT COUNT(1) as count FROM change_log WHERE status = 'PENDING'",
+    "SELECT COUNT(1) as count FROM change_log WHERE scopeKey = ? AND status = 'PENDING'",
+    [scopeKey],
   )
   const failedCount = await queryFirst<{ count: number }>(
     db,
-    "SELECT COUNT(1) as count FROM change_log WHERE status = 'FAILED'",
+    "SELECT COUNT(1) as count FROM change_log WHERE scopeKey = ? AND status = 'FAILED'",
+    [scopeKey],
   )
   const conflictCount = await queryFirst<{ count: number }>(
     db,
-    "SELECT COUNT(1) as count FROM conflicts WHERE status = 'OPEN'",
+    "SELECT COUNT(1) as count FROM conflicts WHERE scopeKey = ? AND status = 'OPEN'",
+    [scopeKey],
   )
-  const changeLog = await queryAll(db, "SELECT * FROM change_log ORDER BY createdAt DESC LIMIT 20")
-  const conflicts = await queryAll(db, "SELECT * FROM conflicts ORDER BY createdAt DESC LIMIT 5")
+  const changeLog = await queryAll(
+    db,
+    "SELECT * FROM change_log WHERE scopeKey = ? ORDER BY createdAt DESC LIMIT 20",
+    [scopeKey],
+  )
+  const conflicts = await queryAll(
+    db,
+    "SELECT * FROM conflicts WHERE scopeKey = ? ORDER BY createdAt DESC LIMIT 5",
+    [scopeKey],
+  )
   return {
     syncState,
     counts: {

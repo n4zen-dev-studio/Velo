@@ -29,13 +29,13 @@ import { createHttpClient } from "@/services/api/httpClient"
 import { sync as syncApi } from "@/services/api/syncApi"
 import type { SyncChange, SyncRequest } from "@/services/sync/syncContract"
 import { getDeviceId } from "@/services/sync/identity"
+import { getActiveScopeKey } from "@/services/session/scope"
 import { refreshLocalCounts } from "@/services/sync/syncStore"
 import { BASE_URL } from "@/config/api"
 import { delay } from "@/utils/delay"
-import { PERSONAL_WORKSPACE_ID } from "@/services/db/repositories/workspacesRepository"
+import { personalWorkspaceId } from "@/services/db/repositories/workspacesRepository"
 import { ANON_USER_ID } from "@/services/constants/identity"
 
-const SYNC_STATE_ID = "singleton"
 const MAX_OPS_PER_BATCH = 50
 const MAX_BATCHES = 5
 const MAX_CHANGES_PER_RUN = 500
@@ -46,12 +46,13 @@ export async function runSync(reason?: string) {
   if (isSyncRunning) return
   isSyncRunning = true
   const db = await getDb()
+  const scopeKey = await getActiveScopeKey()
 
   try {
     const cursorRow = await queryFirst<{ lastCursor: string | null }>(
       db,
-      "SELECT lastCursor FROM sync_state WHERE id = ?",
-      [SYNC_STATE_ID],
+      "SELECT lastCursor FROM sync_state WHERE scopeKey = ?",
+      [scopeKey],
     )
 
     const deviceId = await getDeviceId()
@@ -61,7 +62,7 @@ export async function runSync(reason?: string) {
 
     let appliedChanges = 0
     while (batches < MAX_BATCHES) {
-      const ops = await listPendingOps(MAX_OPS_PER_BATCH)
+      const ops = await listPendingOps(MAX_OPS_PER_BATCH, scopeKey)
       if (ops.length === 0 && batches > 0) break
 
       const payload: SyncRequest = {
@@ -98,10 +99,10 @@ export async function runSync(reason?: string) {
         const newCursor = response.newCursor ?? cursor
         await execute(
           txDb,
-          `INSERT INTO sync_state (id, lastCursor, lastSyncedAt)
+          `INSERT INTO sync_state (scopeKey, lastCursor, lastSyncedAt)
            VALUES (?, ?, ?)
-           ON CONFLICT(id) DO UPDATE SET lastCursor = excluded.lastCursor, lastSyncedAt = excluded.lastSyncedAt`,
-          [SYNC_STATE_ID, newCursor, new Date().toISOString()],
+           ON CONFLICT(scopeKey) DO UPDATE SET lastCursor = excluded.lastCursor, lastSyncedAt = excluded.lastSyncedAt`,
+          [scopeKey, newCursor, new Date().toISOString()],
         )
         cursor = newCursor
       })
@@ -166,8 +167,12 @@ async function applyRemoteChange(db: SqliteDb, change: SyncChange) {
       return
     }
     const payload = change.payload as Task
-    const normalized = payload.workspaceId ? payload : { ...payload, workspaceId: PERSONAL_WORKSPACE_ID }
-    await upsertTaskFromSync(normalized, db)
+    const scopeKey = await getActiveScopeKey()
+    const normalized = payload.workspaceId
+      ? payload
+      : { ...payload, workspaceId: personalWorkspaceId(scopeKey) }
+    const scoped = normalized.scopeKey ? normalized : { ...normalized, scopeKey: await getActiveScopeKey() }
+    await upsertTaskFromSync(scoped, db)
   }
 
   if (change.entityType === "comment") {
@@ -176,7 +181,8 @@ async function applyRemoteChange(db: SqliteDb, change: SyncChange) {
       return
     }
     const payload = change.payload as Comment
-    await upsertCommentFromSync(payload, db)
+    const scoped = payload.scopeKey ? payload : { ...payload, scopeKey: await getActiveScopeKey() }
+    await upsertCommentFromSync(scoped, db)
   }
 
   if (change.entityType === "user") {
@@ -185,7 +191,8 @@ async function applyRemoteChange(db: SqliteDb, change: SyncChange) {
       return
     }
     const payload = change.payload as any
-    await upsertUserFromSync(payload, db)
+    const scoped = payload.scopeKey ? payload : { ...payload, scopeKey: await getActiveScopeKey() }
+    await upsertUserFromSync(scoped, db)
   }
 
   if (change.entityType === "workspace_member") {
@@ -194,15 +201,17 @@ async function applyRemoteChange(db: SqliteDb, change: SyncChange) {
       return
     }
     const payload = change.payload as any
-    await upsertWorkspaceMemberFromSync(payload, db)
+    const scoped = payload.scopeKey ? payload : { ...payload, scopeKey: await getActiveScopeKey() }
+    await upsertWorkspaceMemberFromSync(scoped, db)
   }
 }
 
 async function hasPendingOpsForEntity(db: SqliteDb, entityType: string, entityId: string) {
+  const scopeKey = await getActiveScopeKey()
   const row = await queryFirst<{ count: number }>(
     db,
-    "SELECT COUNT(1) as count FROM change_log WHERE status = 'PENDING' AND entityType = ? AND entityId = ?",
-    [entityType, entityId],
+    "SELECT COUNT(1) as count FROM change_log WHERE scopeKey = ? AND status = 'PENDING' AND entityType = ? AND entityId = ?",
+    [scopeKey, entityType, entityId],
   )
   return (row?.count ?? 0) > 0
 }
@@ -210,6 +219,7 @@ async function hasPendingOpsForEntity(db: SqliteDb, entityType: string, entityId
 async function createConflict(db: SqliteDb, change: SyncChange, localPayload?: Task | Comment | null) {
   const localRevision = localPayload?.revision ?? ""
   const conflictId = `${change.entityType}:${change.entityId}`
+  const scopeKey = await getActiveScopeKey()
 
   await execute(
     db,
@@ -223,8 +233,9 @@ async function createConflict(db: SqliteDb, change: SyncChange, localPayload?: T
       remotePayload,
       status,
       createdAt,
-      resolvedAt
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      resolvedAt,
+      scopeKey
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       localRevision = excluded.localRevision,
       remoteRevision = excluded.remoteRevision,
@@ -232,7 +243,8 @@ async function createConflict(db: SqliteDb, change: SyncChange, localPayload?: T
       remotePayload = excluded.remotePayload,
       status = 'OPEN',
       createdAt = excluded.createdAt,
-      resolvedAt = NULL`,
+      resolvedAt = NULL,
+      scopeKey = excluded.scopeKey`,
     [
       conflictId,
       change.entityType,
@@ -244,6 +256,7 @@ async function createConflict(db: SqliteDb, change: SyncChange, localPayload?: T
       "OPEN",
       new Date().toISOString(),
       null,
+      scopeKey,
     ],
   )
 }

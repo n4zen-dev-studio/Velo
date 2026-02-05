@@ -23,14 +23,14 @@ export function ClaimOfflineDataModal({
     <Modal visible={visible} transparent animationType="fade">
       <View style={themed($backdrop)}>
         <GlassCard style={themed($card)}>
-          <Text preset="heading" text="Use offline data?" />
+          <Text preset="heading" text="Claim guest data?" />
           <Text
             preset="formHelper"
-            text="You have offline work on this device. Do you want to claim it for this account?"
+            text="You have offline work on this device. Claim it for this account or discard it."
           />
           <View style={themed($buttonRow)}>
-            <Button text="Claim offline data" preset="default" onPress={onClaim} />
-            <Button text="Keep separate" preset="reversed" onPress={onKeepSeparate} />
+            <Button text="Claim & sync" preset="default" onPress={onClaim} />
+            <Button text="Discard guest data" preset="reversed" onPress={onKeepSeparate} />
           </View>
         </GlassCard>
       </View>

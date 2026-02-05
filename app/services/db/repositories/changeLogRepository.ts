@@ -4,6 +4,7 @@ import { getDb } from "@/services/db/db"
 import { execute, queryAll, queryFirst } from "@/services/db/queries"
 import type { ChangeLogEntry, ChangeLogOpType, ChangeLogStatus } from "@/services/db/types"
 import { getCurrentUserId, getDeviceId, generateUuidV4 } from "@/services/sync/identity"
+import { getActiveScopeKey } from "@/services/session/scope"
 
 export type EntityType = "task" | "comment" | "project" | "status" | "member" | "user" | "workspace_member"
 export type OpType = ChangeLogOpType
@@ -17,6 +18,7 @@ interface EnqueueParams {
   baseRevision: string
   projectId: string | null
   workspaceId: string
+  scopeKey?: string
   createdAt: string
 }
 
@@ -25,6 +27,7 @@ export async function enqueueOp(params: EnqueueParams, db?: SQLiteDatabase) {
   const opId = await generateUuidV4()
   const deviceId = await getDeviceId()
   const userId = await getCurrentUserId()
+  const scopeKey = params.scopeKey ?? (await getActiveScopeKey())
 
   await execute(
     database,
@@ -42,8 +45,9 @@ export async function enqueueOp(params: EnqueueParams, db?: SQLiteDatabase) {
       workspaceId,
       status,
       attemptCount,
-      lastAttemptAt
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      lastAttemptAt,
+      scopeKey
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     [
       opId,
@@ -60,44 +64,51 @@ export async function enqueueOp(params: EnqueueParams, db?: SQLiteDatabase) {
       "PENDING",
       0,
       null,
+      scopeKey,
     ],
   )
 
   return opId
 }
 
-export async function listPendingOps(limit = 50) {
+export async function listPendingOps(limit = 50, scopeKey?: string) {
   const database = await getDb()
+  const resolvedScope = scopeKey ?? (await getActiveScopeKey())
   return queryAll<ChangeLogEntry>(
     database,
-    "SELECT * FROM change_log WHERE status = 'PENDING' ORDER BY createdAt ASC LIMIT ?",
-    [limit],
+    "SELECT * FROM change_log WHERE scopeKey = ? AND status = 'PENDING' ORDER BY createdAt ASC LIMIT ?",
+    [resolvedScope, limit],
   )
 }
 
-export async function listFailedOps(limit = 50) {
+export async function listFailedOps(limit = 50, scopeKey?: string) {
   const database = await getDb()
+  const resolvedScope = scopeKey ?? (await getActiveScopeKey())
   return queryAll<ChangeLogEntry>(
     database,
-    "SELECT * FROM change_log WHERE status = 'FAILED' ORDER BY lastAttemptAt DESC LIMIT ?",
-    [limit],
+    "SELECT * FROM change_log WHERE scopeKey = ? AND status = 'FAILED' ORDER BY lastAttemptAt DESC LIMIT ?",
+    [resolvedScope, limit],
   )
 }
 
-export async function countPendingOps() {
+export async function countPendingOps(scopeKey?: string) {
   const database = await getDb()
+  const resolvedScope = scopeKey ?? (await getActiveScopeKey())
   const row = await queryFirst<{ count: number }>(
     database,
-    "SELECT COUNT(1) as count FROM change_log WHERE status = 'PENDING'",
+    "SELECT COUNT(1) as count FROM change_log WHERE scopeKey = ? AND status = 'PENDING'",
+    [resolvedScope],
   )
   return row?.count ?? 0
 }
 
-export async function countFailedOps() {
+export async function countFailedOps(scopeKey?: string) {
   const database = await getDb()
+  const resolvedScope = scopeKey ?? (await getActiveScopeKey())
   const row = await queryFirst<{ count: number }>(
     database,
-    "SELECT COUNT(1) as count FROM change_log WHERE status = 'FAILED'",
+    "SELECT COUNT(1) as count FROM change_log WHERE scopeKey = ? AND status = 'FAILED'",
+    [resolvedScope],
   )
   return row?.count ?? 0
 }

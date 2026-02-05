@@ -4,7 +4,8 @@ import { getDb } from "@/services/db/db"
 import { execute, executeTransaction, queryAll, queryFirst } from "@/services/db/queries"
 import type { User } from "@/services/db/types"
 import { enqueueOp } from "@/services/db/repositories/changeLogRepository"
-import { PERSONAL_WORKSPACE_ID } from "@/services/db/repositories/workspacesRepository"
+import { personalWorkspaceId } from "@/services/db/repositories/workspacesRepository"
+import { getActiveScopeKey } from "@/services/session/scope"
 
 interface UserRow {
   id: string
@@ -16,6 +17,7 @@ interface UserRow {
   updatedAt: string
   revision: string
   deletedAt: string | null
+  scopeKey: string
 }
 
 export async function upsertUser(user: User, db?: SQLiteDatabase) {
@@ -32,8 +34,13 @@ async function upsertUserInternal(
   db?: SQLiteDatabase,
 ) {
   const database = db ?? (await getDb())
+  const resolvedScope = user.scopeKey ?? (await getActiveScopeKey())
   const runner = async (txDb: SQLiteDatabase) => {
-    const existing = await queryFirst<UserRow>(txDb, "SELECT * FROM users WHERE id = ?", [user.id])
+    const existing = await queryFirst<UserRow>(
+      txDb,
+      "SELECT * FROM users WHERE id = ? AND scopeKey = ?",
+      [user.id, resolvedScope],
+    )
 
     await execute(
       txDb,
@@ -46,8 +53,9 @@ async function upsertUserInternal(
         createdAt,
         updatedAt,
         revision,
-        deletedAt
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        deletedAt,
+        scopeKey
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         displayName = excluded.displayName,
         username = excluded.username,
@@ -56,7 +64,8 @@ async function upsertUserInternal(
         createdAt = excluded.createdAt,
         updatedAt = excluded.updatedAt,
         revision = excluded.revision,
-        deletedAt = excluded.deletedAt`,
+        deletedAt = excluded.deletedAt,
+        scopeKey = excluded.scopeKey`,
       [
         user.id,
         user.displayName,
@@ -67,6 +76,7 @@ async function upsertUserInternal(
         user.updatedAt,
         user.revision,
         user.deletedAt,
+        resolvedScope,
       ],
     )
 
@@ -76,10 +86,11 @@ async function upsertUserInternal(
           entityType: "user",
           entityId: user.id,
           opType: "UPSERT",
-          patch: user,
+          patch: { ...user, scopeKey: resolvedScope },
           baseRevision: existing?.revision ?? "",
           projectId: null,
-          workspaceId: PERSONAL_WORKSPACE_ID,
+          workspaceId: personalWorkspaceId(resolvedScope),
+          scopeKey: resolvedScope,
           createdAt: new Date().toISOString(),
         },
         txDb,
@@ -94,13 +105,19 @@ async function upsertUserInternal(
   }
 }
 
-export async function getUserById(userId: string) {
+export async function getUserById(userId: string, scopeKey?: string) {
   const database = await getDb()
-  return queryFirst<UserRow>(database, "SELECT * FROM users WHERE id = ?", [userId])
+  const resolvedScope = scopeKey ?? (await getActiveScopeKey())
+  return queryFirst<UserRow>(
+    database,
+    "SELECT * FROM users WHERE id = ? AND scopeKey = ?",
+    [userId, resolvedScope],
+  )
 }
 
-export async function listUsersByWorkspaceId(workspaceId: string) {
+export async function listUsersByWorkspaceId(workspaceId: string, scopeKey?: string) {
   const database = await getDb()
+  const resolvedScope = scopeKey ?? (await getActiveScopeKey())
   return queryAll<UserRow>(
     database,
     `
@@ -108,11 +125,13 @@ export async function listUsersByWorkspaceId(workspaceId: string) {
     FROM users u
     JOIN workspace_members wm ON wm.userId = u.id
     WHERE wm.workspaceId = ?
+      AND wm.scopeKey = ?
+      AND u.scopeKey = ?
       AND wm.deletedAt IS NULL
       AND (u.deletedAt IS NULL OR u.deletedAt = '')
     ORDER BY u.displayName, u.username, u.email
     `,
-    [workspaceId],
+    [workspaceId, resolvedScope, resolvedScope],
   )
 }
 
@@ -139,14 +158,19 @@ async function markUserDeletedInternal(
   db?: SQLiteDatabase,
 ) {
   const database = db ?? (await getDb())
+  const resolvedScope = await getActiveScopeKey()
   const runner = async (txDb: SQLiteDatabase) => {
-    const existing = await queryFirst<UserRow>(txDb, "SELECT * FROM users WHERE id = ?", [userId])
+    const existing = await queryFirst<UserRow>(
+      txDb,
+      "SELECT * FROM users WHERE id = ? AND scopeKey = ?",
+      [userId, resolvedScope],
+    )
     if (!existing) return
     const nextRevision = `${existing.revision}-deleted-${Date.now()}`
     await execute(
       txDb,
-      "UPDATE users SET deletedAt = ?, updatedAt = ?, revision = ? WHERE id = ?",
-      [deletedAt, deletedAt, nextRevision, userId],
+      "UPDATE users SET deletedAt = ?, updatedAt = ?, revision = ? WHERE id = ? AND scopeKey = ?",
+      [deletedAt, deletedAt, nextRevision, userId, resolvedScope],
     )
 
     if (options.enqueue) {
@@ -163,7 +187,8 @@ async function markUserDeletedInternal(
           },
           baseRevision: existing.revision ?? "",
           projectId: null,
-          workspaceId: PERSONAL_WORKSPACE_ID,
+          workspaceId: personalWorkspaceId(resolvedScope),
+          scopeKey: resolvedScope,
           createdAt: new Date().toISOString(),
         },
         txDb,
@@ -178,12 +203,13 @@ async function markUserDeletedInternal(
   }
 }
 
-export async function getUserLabelById(userId: string) {
+export async function getUserLabelById(userId: string, scopeKey?: string) {
   const database = await getDb()
+  const resolvedScope = scopeKey ?? (await getActiveScopeKey())
   const row = await queryFirst<UserRow>(
     database,
-    "SELECT displayName, username, email FROM users WHERE id = ? LIMIT 1",
-    [userId],
+    "SELECT displayName, username, email FROM users WHERE id = ? AND scopeKey = ? LIMIT 1",
+    [userId, resolvedScope],
   )
   if (!row) return null
   const displayName = row.displayName?.trim()

@@ -3,7 +3,9 @@ import type { SQLiteDatabase } from "expo-sqlite"
 import { withWriteLock } from "@/services/db/writeLock"
 
 const DB_DEBUG = __DEV__
-let dbIsInTransaction = false
+const DB_DEBUG_TX = DB_DEBUG
+let txDepth = 0
+let savepointCounter = 0
 
 function assertSql(sql: string) {
   if (!sql || typeof sql !== "string") {
@@ -18,6 +20,49 @@ function normalizeParams(params?: Record<string, unknown> | unknown[]) {
 function logSql(tag: string, sql: string, params: unknown[]) {
   if (!DB_DEBUG) return
   console.log(`[DB] ${tag}:`, sql.trim(), params)
+}
+
+function logTx(tag: string, sql: string, depth: number, savepoint?: string) {
+  if (!DB_DEBUG_TX) return
+  const suffix = savepoint ? ` (${savepoint})` : ""
+  console.log(`[DB] ${tag} depth=${depth}${suffix}:`, sql.trim())
+}
+
+function isIgnorableControlError(sql: string, err: unknown) {
+  const message = err instanceof Error ? err.message : String(err)
+  const lowered = message.toLowerCase()
+  const isCommitOrRollback =
+    sql.startsWith("COMMIT") ||
+    sql.startsWith("ROLLBACK") ||
+    sql.startsWith("RELEASE SAVEPOINT") ||
+    sql.startsWith("ROLLBACK TO SAVEPOINT")
+
+  if (!isCommitOrRollback) return false
+  if (lowered.includes("no transaction is active")) return true
+  if (lowered.includes("no such savepoint")) return true
+  if (lowered.includes("cannot commit") && lowered.includes("no transaction")) return true
+  if (lowered.includes("cannot rollback") && lowered.includes("no transaction")) return true
+  return false
+}
+
+async function execControl(db: SQLiteDatabase, sql: string) {
+  assertSql(sql)
+  try {
+    if (typeof (db as any).execAsync === "function") {
+      await (db as any).execAsync(sql)
+      return
+    }
+    await executeInternal(db, sql)
+  } catch (err) {
+    if (isIgnorableControlError(sql, err)) {
+      if (DB_DEBUG_TX) {
+        console.log(`[DB] control ignored:`, sql.trim())
+      }
+      return
+    }
+    const message = err instanceof Error ? err.message : String(err)
+    throw new Error(`[DB] control failed: ${message}\nSQL: ${sql}`)
+  }
 }
 
 async function executeInternal(
@@ -111,20 +156,43 @@ export async function executeTransaction<T>(
   task: (txDb: SQLiteDatabase) => Promise<T>,
 ) {
   return withWriteLock(async () => {
-    if (__DEV__ && dbIsInTransaction) {
-      throw new Error("[DB] Nested executeTransaction detected")
-    }
-    await executeInternal(db, "BEGIN")
+    const isOuter = txDepth === 0
+    const savepointName = isOuter ? null : `sp_${Date.now()}_${++savepointCounter}`
+    txDepth += 1
+
     try {
-      dbIsInTransaction = true
+      if (isOuter) {
+        logTx("BEGIN", "BEGIN", txDepth)
+        await execControl(db, "BEGIN")
+      } else if (savepointName) {
+        logTx("SAVEPOINT", `SAVEPOINT ${savepointName}`, txDepth, savepointName)
+        await execControl(db, `SAVEPOINT ${savepointName}`)
+      }
+
       const result = await task(db)
-      await executeInternal(db, "COMMIT")
+
+      if (isOuter) {
+        logTx("COMMIT", "COMMIT", txDepth)
+        await execControl(db, "COMMIT")
+      } else if (savepointName) {
+        logTx("RELEASE", `RELEASE SAVEPOINT ${savepointName}`, txDepth, savepointName)
+        await execControl(db, `RELEASE SAVEPOINT ${savepointName}`)
+      }
+
       return result
     } catch (error) {
-      await executeInternal(db, "ROLLBACK")
+      if (isOuter) {
+        logTx("ROLLBACK", "ROLLBACK", txDepth)
+        await execControl(db, "ROLLBACK")
+      } else if (savepointName) {
+        logTx("ROLLBACK TO", `ROLLBACK TO SAVEPOINT ${savepointName}`, txDepth, savepointName)
+        await execControl(db, `ROLLBACK TO SAVEPOINT ${savepointName}`)
+        logTx("RELEASE", `RELEASE SAVEPOINT ${savepointName}`, txDepth, savepointName)
+        await execControl(db, `RELEASE SAVEPOINT ${savepointName}`)
+      }
       throw error
     } finally {
-      dbIsInTransaction = false
+      txDepth = Math.max(0, txDepth - 1)
     }
   })
 }
