@@ -6,27 +6,35 @@ import type { Workspace } from "@/services/db/types"
 import { seedDefaultStatusesForWorkspace, ensureDefaultStatusesForWorkspace } from "@/services/db/repositories/statusesRepository"
 import { generateUuidV4, getCurrentUserId } from "@/services/sync/identity"
 import { upsertWorkspaceMember } from "@/services/db/repositories/workspaceMembersRepository"
+import { getActiveScopeKey } from "@/services/session/scope"
 
-export const PERSONAL_WORKSPACE_ID = "personal"
 export const PERSONAL_WORKSPACE_LABEL = "Personal"
-const WORKSPACE_STATE_ID = "singleton"
+export const personalWorkspaceId = (scopeKey: string) => `personal:${scopeKey}`
 
-export async function listWorkspaces(db?: SQLiteDatabase) {
+export async function listWorkspaces(scopeKey?: string, db?: SQLiteDatabase) {
   const database = db ?? (await getDb())
+  const resolvedScope = scopeKey ?? (await getActiveScopeKey())
+  const personalId = personalWorkspaceId(resolvedScope)
   return queryAll<Workspace>(
     database,
-    "SELECT * FROM workspaces ORDER BY CASE WHEN id = ? THEN 0 ELSE 1 END, createdAt ASC",
-    [PERSONAL_WORKSPACE_ID],
+    "SELECT * FROM workspaces WHERE scopeKey = ? ORDER BY CASE WHEN id = ? THEN 0 ELSE 1 END, createdAt ASC",
+    [resolvedScope, personalId],
   )
 }
 
-export async function getWorkspace(id: string, db?: SQLiteDatabase) {
+export async function getWorkspace(id: string, scopeKey?: string, db?: SQLiteDatabase) {
   const database = db ?? (await getDb())
-  return queryFirst<Workspace>(database, "SELECT * FROM workspaces WHERE id = ?", [id])
+  const resolvedScope = scopeKey ?? (await getActiveScopeKey())
+  return queryFirst<Workspace>(
+    database,
+    "SELECT * FROM workspaces WHERE id = ? AND scopeKey = ?",
+    [id, resolvedScope],
+  )
 }
 
-export async function createWorkspace(label: string, db?: SQLiteDatabase) {
+export async function createWorkspace(label: string, scopeKey?: string, db?: SQLiteDatabase) {
   const database = db ?? (await getDb())
+  const resolvedScope = scopeKey ?? (await getActiveScopeKey())
   const now = Date.now()
   const workspace: Workspace = {
     id: await generateUuidV4(),
@@ -35,13 +43,22 @@ export async function createWorkspace(label: string, db?: SQLiteDatabase) {
     createdAt: now,
     updatedAt: now,
     remoteId: null,
+    scopeKey: resolvedScope,
   }
 
   await execute(
     database,
-    `INSERT INTO workspaces (id, label, kind, createdAt, updatedAt, remoteId)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [workspace.id, workspace.label, workspace.kind, workspace.createdAt, workspace.updatedAt, workspace.remoteId],
+    `INSERT INTO workspaces (id, label, kind, createdAt, updatedAt, remoteId, scopeKey)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [
+      workspace.id,
+      workspace.label,
+      workspace.kind,
+      workspace.createdAt,
+      workspace.updatedAt,
+      workspace.remoteId,
+      workspace.scopeKey,
+    ],
   )
 
   const userId = await getCurrentUserId()
@@ -56,95 +73,115 @@ export async function createWorkspace(label: string, db?: SQLiteDatabase) {
       updatedAt: timestamp,
       revision: `local-${Date.now()}`,
       deletedAt: null,
+      scopeKey: resolvedScope,
     })
   }
 
-  await seedDefaultStatusesForWorkspace(workspace.id, database)
+  await seedDefaultStatusesForWorkspace(workspace.id, resolvedScope, database)
   return workspace
 }
 
-export async function renameWorkspace(id: string, label: string, db?: SQLiteDatabase) {
+export async function renameWorkspace(id: string, label: string, scopeKey?: string, db?: SQLiteDatabase) {
   const database = db ?? (await getDb())
+  const resolvedScope = scopeKey ?? (await getActiveScopeKey())
   const now = Date.now()
   await execute(
     database,
-    "UPDATE workspaces SET label = ?, updatedAt = ? WHERE id = ?",
-    [label, now, id],
+    "UPDATE workspaces SET label = ?, updatedAt = ? WHERE id = ? AND scopeKey = ?",
+    [label, now, id, resolvedScope],
   )
 }
 
-export async function deleteWorkspace(id: string, db?: SQLiteDatabase) {
-  if (id === PERSONAL_WORKSPACE_ID) {
+export async function deleteWorkspace(id: string, scopeKey?: string, db?: SQLiteDatabase) {
+  const resolvedScope = scopeKey ?? (await getActiveScopeKey())
+  if (id === personalWorkspaceId(resolvedScope)) {
     throw new Error("Cannot delete Personal workspace")
   }
   const database = db ?? (await getDb())
-  await execute(database, "DELETE FROM workspaces WHERE id = ?", [id])
+  await execute(database, "DELETE FROM workspaces WHERE id = ? AND scopeKey = ?", [id, resolvedScope])
 }
 
-export async function getActiveWorkspaceId(db?: SQLiteDatabase) {
+export async function getActiveWorkspaceId(scopeKey?: string, db?: SQLiteDatabase) {
   const database = db ?? (await getDb())
+  const resolvedScope = scopeKey ?? (await getActiveScopeKey())
   const row = await queryFirst<{ activeWorkspaceId: string }>(
     database,
-    "SELECT activeWorkspaceId FROM workspace_state WHERE id = ?",
-    [WORKSPACE_STATE_ID],
+    "SELECT activeWorkspaceId FROM workspace_state WHERE scopeKey = ?",
+    [resolvedScope],
   )
   return row?.activeWorkspaceId ?? null
 }
 
-export async function setActiveWorkspaceId(id: string, db?: SQLiteDatabase) {
+export async function setActiveWorkspaceId(id: string, scopeKey?: string, db?: SQLiteDatabase) {
   const database = db ?? (await getDb())
+  const resolvedScope = scopeKey ?? (await getActiveScopeKey())
   await execute(
     database,
-    `INSERT INTO workspace_state (id, activeWorkspaceId)
+    `INSERT INTO workspace_state (scopeKey, activeWorkspaceId)
      VALUES (?, ?)
-     ON CONFLICT(id) DO UPDATE SET activeWorkspaceId = excluded.activeWorkspaceId`,
-    [WORKSPACE_STATE_ID, id],
+     ON CONFLICT(scopeKey) DO UPDATE SET activeWorkspaceId = excluded.activeWorkspaceId`,
+    [resolvedScope, id],
   )
 }
 
-export async function ensurePersonalWorkspaceExists(db?: SQLiteDatabase) {
+export async function ensurePersonalWorkspaceExists(scopeKey?: string, db?: SQLiteDatabase) {
   const database = db ?? (await getDb())
-  const existing = await getWorkspace(PERSONAL_WORKSPACE_ID, database)
+  const resolvedScope = scopeKey ?? (await getActiveScopeKey())
+  const personalId = personalWorkspaceId(resolvedScope)
+  const existing = await getWorkspace(personalId, resolvedScope, database)
   if (existing) return existing
   const now = Date.now()
   const workspace: Workspace = {
-    id: PERSONAL_WORKSPACE_ID,
+    id: personalId,
     label: PERSONAL_WORKSPACE_LABEL,
     kind: "personal",
     createdAt: now,
     updatedAt: now,
     remoteId: null,
+    scopeKey: resolvedScope,
   }
   await execute(
     database,
-    `INSERT INTO workspaces (id, label, kind, createdAt, updatedAt, remoteId)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [workspace.id, workspace.label, workspace.kind, workspace.createdAt, workspace.updatedAt, workspace.remoteId],
+    `INSERT INTO workspaces (id, label, kind, createdAt, updatedAt, remoteId, scopeKey)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [
+      workspace.id,
+      workspace.label,
+      workspace.kind,
+      workspace.createdAt,
+      workspace.updatedAt,
+      workspace.remoteId,
+      workspace.scopeKey,
+    ],
   )
-  await ensureDefaultStatusesForWorkspace(workspace.id, database)
+  await ensureDefaultStatusesForWorkspace(workspace.id, resolvedScope, database)
   return workspace
 }
 
-export async function ensureActiveWorkspaceIdValid(db?: SQLiteDatabase) {
+export async function ensureActiveWorkspaceIdValid(scopeKey?: string, db?: SQLiteDatabase) {
   const database = db ?? (await getDb())
-  const current = await getActiveWorkspaceId(database)
+  const resolvedScope = scopeKey ?? (await getActiveScopeKey())
+  const current = await getActiveWorkspaceId(resolvedScope, database)
   if (!current) {
-    await setActiveWorkspaceId(PERSONAL_WORKSPACE_ID, database)
-    return PERSONAL_WORKSPACE_ID
+    const personalId = personalWorkspaceId(resolvedScope)
+    await setActiveWorkspaceId(personalId, resolvedScope, database)
+    return personalId
   }
-  const existing = await getWorkspace(current, database)
+  const existing = await getWorkspace(current, resolvedScope, database)
   if (!existing) {
-    await setActiveWorkspaceId(PERSONAL_WORKSPACE_ID, database)
-    return PERSONAL_WORKSPACE_ID
+    const personalId = personalWorkspaceId(resolvedScope)
+    await setActiveWorkspaceId(personalId, resolvedScope, database)
+    return personalId
   }
   return current
 }
 
-export async function bootstrapWorkspaces(db?: SQLiteDatabase) {
+export async function bootstrapWorkspaces(scopeKey?: string, db?: SQLiteDatabase) {
   const database = db ?? (await getDb())
+  const resolvedScope = scopeKey ?? (await getActiveScopeKey())
   await executeTransaction(database, async (txDb) => {
-    await ensurePersonalWorkspaceExists(txDb)
-    await ensureActiveWorkspaceIdValid(txDb)
-    await ensureDefaultStatusesForWorkspace(PERSONAL_WORKSPACE_ID, txDb)
+    await ensurePersonalWorkspaceExists(resolvedScope, txDb)
+    await ensureActiveWorkspaceIdValid(resolvedScope, txDb)
+    await ensureDefaultStatusesForWorkspace(personalWorkspaceId(resolvedScope), resolvedScope, txDb)
   })
 }

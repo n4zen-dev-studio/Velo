@@ -4,6 +4,7 @@ import { getDb } from "@/services/db/db"
 import { execute, executeTransaction, queryAll, queryFirst } from "@/services/db/queries"
 import type { WorkspaceMember } from "@/services/db/types"
 import { enqueueOp } from "@/services/db/repositories/changeLogRepository"
+import { getActiveScopeKey } from "@/services/session/scope"
 
 interface WorkspaceMemberRow {
   id: string
@@ -14,6 +15,7 @@ interface WorkspaceMemberRow {
   updatedAt: string
   revision: string
   deletedAt: string | null
+  scopeKey: string
 }
 
 export async function upsertWorkspaceMember(member: WorkspaceMember, db?: SQLiteDatabase) {
@@ -33,11 +35,12 @@ async function upsertWorkspaceMemberInternal(
   db?: SQLiteDatabase,
 ) {
   const database = db ?? (await getDb())
+  const resolvedScope = member.scopeKey ?? (await getActiveScopeKey())
   const runner = async (txDb: SQLiteDatabase) => {
     const existing = await queryFirst<WorkspaceMemberRow>(
       txDb,
-      "SELECT * FROM workspace_members WHERE id = ?",
-      [member.id],
+      "SELECT * FROM workspace_members WHERE id = ? AND scopeKey = ?",
+      [member.id, resolvedScope],
     )
 
     await execute(
@@ -50,8 +53,9 @@ async function upsertWorkspaceMemberInternal(
         createdAt,
         updatedAt,
         revision,
-        deletedAt
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        deletedAt,
+        scopeKey
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         workspaceId = excluded.workspaceId,
         userId = excluded.userId,
@@ -59,7 +63,8 @@ async function upsertWorkspaceMemberInternal(
         createdAt = excluded.createdAt,
         updatedAt = excluded.updatedAt,
         revision = excluded.revision,
-        deletedAt = excluded.deletedAt`,
+        deletedAt = excluded.deletedAt,
+        scopeKey = excluded.scopeKey`,
       [
         member.id,
         member.workspaceId,
@@ -69,6 +74,7 @@ async function upsertWorkspaceMemberInternal(
         member.updatedAt,
         member.revision,
         member.deletedAt,
+        resolvedScope,
       ],
     )
 
@@ -78,10 +84,11 @@ async function upsertWorkspaceMemberInternal(
           entityType: "workspace_member",
           entityId: member.id,
           opType: "UPSERT",
-          patch: member,
+          patch: { ...member, scopeKey: resolvedScope },
           baseRevision: existing?.revision ?? "",
           projectId: null,
           workspaceId: member.workspaceId,
+          scopeKey: resolvedScope,
           createdAt: new Date().toISOString(),
         },
         txDb,
@@ -96,19 +103,23 @@ async function upsertWorkspaceMemberInternal(
   }
 }
 
-export async function getWorkspaceMemberById(id: string) {
+export async function getWorkspaceMemberById(id: string, scopeKey?: string) {
   const database = await getDb()
-  return queryFirst<WorkspaceMemberRow>(database, "SELECT * FROM workspace_members WHERE id = ?", [
-    id,
-  ])
+  const resolvedScope = scopeKey ?? (await getActiveScopeKey())
+  return queryFirst<WorkspaceMemberRow>(
+    database,
+    "SELECT * FROM workspace_members WHERE id = ? AND scopeKey = ?",
+    [id, resolvedScope],
+  )
 }
 
-export async function listWorkspaceMembersByWorkspaceId(workspaceId: string) {
+export async function listWorkspaceMembersByWorkspaceId(workspaceId: string, scopeKey?: string) {
   const database = await getDb()
+  const resolvedScope = scopeKey ?? (await getActiveScopeKey())
   return queryAll<WorkspaceMemberRow>(
     database,
-    "SELECT * FROM workspace_members WHERE workspaceId = ? AND deletedAt IS NULL ORDER BY createdAt ASC",
-    [workspaceId],
+    "SELECT * FROM workspace_members WHERE scopeKey = ? AND workspaceId = ? AND deletedAt IS NULL ORDER BY createdAt ASC",
+    [resolvedScope, workspaceId],
   )
 }
 
@@ -145,18 +156,19 @@ async function markWorkspaceMemberDeletedInternal(
   db?: SQLiteDatabase,
 ) {
   const database = db ?? (await getDb())
+  const resolvedScope = await getActiveScopeKey()
   const runner = async (txDb: SQLiteDatabase) => {
     const existing = await queryFirst<WorkspaceMemberRow>(
       txDb,
-      "SELECT * FROM workspace_members WHERE id = ?",
-      [memberId],
+      "SELECT * FROM workspace_members WHERE id = ? AND scopeKey = ?",
+      [memberId, resolvedScope],
     )
     if (!existing) return
     const nextRevision = `${existing.revision}-deleted-${Date.now()}`
     await execute(
       txDb,
-      "UPDATE workspace_members SET deletedAt = ?, updatedAt = ?, revision = ? WHERE id = ?",
-      [deletedAt, deletedAt, nextRevision, memberId],
+      "UPDATE workspace_members SET deletedAt = ?, updatedAt = ?, revision = ? WHERE id = ? AND scopeKey = ?",
+      [deletedAt, deletedAt, nextRevision, memberId, resolvedScope],
     )
 
     if (options.enqueue) {
@@ -174,6 +186,7 @@ async function markWorkspaceMemberDeletedInternal(
           baseRevision: existing.revision ?? "",
           projectId: null,
           workspaceId: existing.workspaceId,
+          scopeKey: resolvedScope,
           createdAt: new Date().toISOString(),
         },
         txDb,

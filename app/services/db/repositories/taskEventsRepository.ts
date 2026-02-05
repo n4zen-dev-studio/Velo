@@ -1,12 +1,14 @@
 import { getDb } from "@/services/db/db"
 import { queryAll } from "@/services/db/queries"
 import type { TaskEvent } from "@/services/db/types"
+import { getActiveScopeKey } from "@/services/session/scope"
 
-export async function listTaskEventsByTask(taskId: string) {
+export async function listTaskEventsByTask(taskId: string, scopeKey?: string) {
   const database = await getDb()
+  const resolvedScope = scopeKey ?? (await getActiveScopeKey())
   return queryAll<TaskEvent>(
     database,
-    "SELECT * FROM task_events WHERE taskId = ? ORDER BY createdAt DESC",
-    [taskId],
+    "SELECT * FROM task_events WHERE scopeKey = ? AND taskId = ? ORDER BY createdAt DESC",
+    [resolvedScope, taskId],
   )
 }

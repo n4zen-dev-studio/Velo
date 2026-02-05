@@ -9,7 +9,7 @@ import { Text } from "@/components/Text"
 import { TextField } from "@/components/TextField"
 import { Switch } from "@/components/Toggle/Switch"
 import { HeaderAvatar } from "@/components/HeaderAvatar"
-import { clearLocalData } from "@/services/db"
+import { clearScopeData, clearUnsyncedOps } from "@/services/db/clearScopeData"
 import { clearCurrentUserId, getCurrentUserId, setSessionMode } from "@/services/sync/identity"
 import { clearOfflineMode } from "@/services/storage/session"
 import { goToAuth, goToProfile } from "@/navigation/navigationActions"
@@ -35,6 +35,8 @@ import { useSyncStatus } from "@/services/sync/syncStore"
 import { clearAuthSession, refreshAuthSession, useAuthSession } from "@/services/auth/session"
 import { formatDateTime } from "@/utils/dateFormat"
 import { resolveUserLabel } from "@/utils/userLabel"
+import { GUEST_SCOPE_KEY, userScopeKey } from "@/services/session/scope"
+import { bootstrapWorkspaces, personalWorkspaceId, setActiveWorkspaceId } from "@/services/db/repositories/workspacesRepository"
 
 import { useSettingsViewModel } from "./useSettingsViewModel"
 
@@ -113,15 +115,22 @@ export function SettingsScreen() {
     setLogoutError(null)
     setIsLoggingOut(true)
     try {
+      if (!authSession.currentUserId) {
+        throw new Error("No authenticated user session.")
+      }
+      if (!syncStatus.isOnline) {
+        throw new Error("You are offline. Sync cannot run right now.")
+      }
       if (syncStatus.pendingCount > 0) {
         await syncController.triggerSync("manual")
       }
       await logoutUser()
-      await clearLocalData()
       await clearCurrentUserId()
       await setSessionMode("local")
       await clearOfflineMode()
       clearAuthSession()
+      await bootstrapWorkspaces(GUEST_SCOPE_KEY)
+      await setActiveWorkspaceId(personalWorkspaceId(GUEST_SCOPE_KEY), GUEST_SCOPE_KEY)
       setShowLogoutModal(false)
       goToAuth()
     } catch (err) {
@@ -136,12 +145,18 @@ export function SettingsScreen() {
     setLogoutError(null)
     setIsLoggingOut(true)
     try {
+      if (!authSession.currentUserId) {
+        throw new Error("No authenticated user session.")
+      }
+      const scopeKey = userScopeKey(authSession.currentUserId)
+      await clearUnsyncedOps(scopeKey)
       await logoutUser()
-      await clearLocalData()
       await clearCurrentUserId()
       await setSessionMode("local")
       await clearOfflineMode()
       clearAuthSession()
+      await bootstrapWorkspaces(GUEST_SCOPE_KEY)
+      await setActiveWorkspaceId(personalWorkspaceId(GUEST_SCOPE_KEY), GUEST_SCOPE_KEY)
       setShowLogoutModal(false)
       goToAuth()
     } catch (err) {
@@ -157,7 +172,6 @@ export function SettingsScreen() {
     setIsLoggingOut(true)
     try {
       await clearTokens()
-      await clearCurrentUserId()
       await setSessionMode("local")
       await clearOfflineMode()
       clearAuthSession()
@@ -175,7 +189,7 @@ export function SettingsScreen() {
     setLogoutError(null)
     setIsLoggingOut(true)
     try {
-      await clearLocalData()
+      await clearScopeData(GUEST_SCOPE_KEY)
       await clearTokens()
       await clearCurrentUserId()
       await setSessionMode("local")
@@ -223,7 +237,7 @@ export function SettingsScreen() {
       const userId = await getCurrentUserId()
       setCurrentUserId(userId)
     })()
-  }, [])
+  }, [authSession.currentUserId])
 
   const loadMembersForWorkspace = useCallback(async (workspaceId: string) => {
     const rows = await listMembers(workspaceId)
@@ -680,10 +694,10 @@ export function SettingsScreen() {
                 authSession.isAuthenticated
                   ? syncStatus.isOnline
                     ? syncStatus.pendingCount > 0
-                      ? `You have ${syncStatus.pendingCount} pending changes. Syncing will push them before signing out.`
-                      : "No pending changes. You can sign out safely."
-                    : "You are offline. Sign out will wipe this device; sync can’t run right now."
-                  : "You’re offline or unauthenticated. Keeping local data lets you sign in later and sync from this device."
+                      ? `You have ${syncStatus.pendingCount} pending changes. Syncing will push them before logout.`
+                      : "No pending changes. You can logout safely."
+                    : "You are offline. Sync can’t run right now."
+                  : "You’re not signed in. Keeping local data lets you continue offline."
               }
             />
             {logoutError ? <Text preset="formHelper" text={logoutError} style={themed($errorText)} /> : null}
@@ -692,13 +706,13 @@ export function SettingsScreen() {
               {authSession.isAuthenticated ? (
                 <>
                   <Button
-                    text={isLoggingOut ? "Syncing..." : "Sync now & sign out (wipe device)"}
+                    text={isLoggingOut ? "Syncing..." : "Sync & logout"}
                     preset="glass"
                     onPress={handleOnlineSyncAndWipe}
-                    disabled={isLoggingOut || (!syncStatus.isOnline && syncStatus.pendingCount > 0)}
+                    disabled={isLoggingOut || !syncStatus.isOnline}
                   />
                   <Button
-                    text={isLoggingOut ? "Signing out..." : "Sign out now (wipe device)"}
+                    text={isLoggingOut ? "Signing out..." : "Wipe unsynced ops & logout"}
                     preset="glass"
                     onPress={handleOnlineWipe}
                     disabled={isLoggingOut}
@@ -707,13 +721,13 @@ export function SettingsScreen() {
               ) : (
                 <>
                   <Button
-                    text={isLoggingOut ? "Signing out..." : "Keep local data & sign out"}
+                    text={isLoggingOut ? "Signing out..." : "Keep local data & continue"}
                     preset="glass"
                     onPress={handleOfflineKeepLocal}
                     disabled={isLoggingOut}
                   />
                   <Button
-                    text={isLoggingOut ? "Signing out..." : "Wipe local data & sign out"}
+                    text={isLoggingOut ? "Signing out..." : "Wipe local data & continue"}
                     preset="glass"
                     onPress={handleOfflineWipe}
                     disabled={isLoggingOut}

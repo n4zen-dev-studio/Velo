@@ -4,37 +4,49 @@ import { DEFAULT_STATUS_CATALOG } from "@/config/statusCatalog"
 import { getDb } from "@/services/db/db"
 import { execute, queryAll, queryFirst } from "@/services/db/queries"
 import type { Status } from "@/services/db/types"
+import { getActiveScopeKey } from "@/services/session/scope"
 
-export async function seedDefaultStatusesForWorkspace(workspaceId: string, db?: SQLiteDatabase) {
+export async function seedDefaultStatusesForWorkspace(
+  workspaceId: string,
+  scopeKey?: string,
+  db?: SQLiteDatabase,
+) {
   const database = db ?? (await getDb())
+  const resolvedScope = scopeKey ?? (await getActiveScopeKey())
   for (const status of DEFAULT_STATUS_CATALOG) {
     await execute(
       database,
-      `INSERT INTO statuses (id, projectId, workspaceId, name, orderIndex, category)
-       VALUES (?, NULL, ?, ?, ?, ?)
+      `INSERT INTO statuses (id, projectId, workspaceId, name, orderIndex, category, scopeKey)
+       VALUES (?, NULL, ?, ?, ?, ?, ?)
        ON CONFLICT(id, projectId, workspaceId) DO UPDATE SET
          name = excluded.name,
          orderIndex = excluded.orderIndex,
          category = excluded.category`,
-      [status.id, workspaceId, status.name, status.orderIndex, status.category],
+      [status.id, workspaceId, status.name, status.orderIndex, status.category, resolvedScope],
     )
   }
 }
 
-export async function ensureDefaultStatusesForWorkspace(workspaceId: string, db?: SQLiteDatabase) {
+export async function ensureDefaultStatusesForWorkspace(
+  workspaceId: string,
+  scopeKey?: string,
+  db?: SQLiteDatabase,
+) {
   const database = db ?? (await getDb())
+  const resolvedScope = scopeKey ?? (await getActiveScopeKey())
   const row = await queryFirst<{ count: number }>(
     database,
-    "SELECT COUNT(1) as count FROM statuses WHERE workspaceId = ? AND projectId IS NULL",
-    [workspaceId],
+    "SELECT COUNT(1) as count FROM statuses WHERE scopeKey = ? AND workspaceId = ? AND projectId IS NULL",
+    [resolvedScope, workspaceId],
   )
   if ((row?.count ?? 0) === 0) {
-    await seedDefaultStatusesForWorkspace(workspaceId, database)
+    await seedDefaultStatusesForWorkspace(workspaceId, resolvedScope, database)
   }
 }
 
-export async function listStatuses(workspaceId: string, projectId?: string | null) {
+export async function listStatuses(workspaceId: string, projectId?: string | null, scopeKey?: string) {
   const database = await getDb()
+  const resolvedScope = scopeKey ?? (await getActiveScopeKey())
 
   const isProjectScoped = projectId !== null && projectId !== undefined
   const rows = isProjectScoped
@@ -43,22 +55,24 @@ export async function listStatuses(workspaceId: string, projectId?: string | nul
         `
         SELECT s.*
         FROM statuses s
-        WHERE s.workspaceId = ?
+        WHERE s.scopeKey = ?
+          AND s.workspaceId = ?
           AND (s.projectId IS NULL OR s.projectId = ?)
         AND NOT EXISTS (
           SELECT 1 FROM statuses ps
-          WHERE ps.workspaceId = ?
+          WHERE ps.scopeKey = ?
+            AND ps.workspaceId = ?
             AND ps.projectId = ?
             AND ps.id = s.id
         )
         ORDER BY s.orderIndex
         `,
-        [workspaceId, projectId, workspaceId, projectId],
+        [resolvedScope, workspaceId, projectId, resolvedScope, workspaceId, projectId],
       )
     : await queryAll<Status>(
         database,
-        "SELECT * FROM statuses WHERE workspaceId = ? AND projectId IS NULL ORDER BY orderIndex",
-        [workspaceId],
+        "SELECT * FROM statuses WHERE scopeKey = ? AND workspaceId = ? AND projectId IS NULL ORDER BY orderIndex",
+        [resolvedScope, workspaceId],
       )
 
   // 🔒 FINAL GUARANTEE: no duplicate composite keys

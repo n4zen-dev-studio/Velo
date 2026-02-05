@@ -6,6 +6,7 @@ import type { Priority, Task } from "@/services/db/types"
 import { decryptText, encryptText } from "@/utils/crypto"
 import { enqueueOp } from "@/services/db/repositories/changeLogRepository"
 import { generateUuidV4, getCurrentUserId } from "@/services/sync/identity"
+import { getActiveScopeKey } from "@/services/session/scope"
 
 interface TaskRow {
   id: string
@@ -20,6 +21,7 @@ interface TaskRow {
   updatedAt: string
   revision: string
   deletedAt: string | null
+  scopeKey: string
 }
 
 export async function upsertTask(task: Task, db?: SQLiteDatabase) {
@@ -49,9 +51,12 @@ async function upsertTaskInternal(
 ) {
   const database = db ?? (await getDb())
   const runner = async (txDb: SQLiteDatabase) => {
-    const existing = await queryFirst<TaskRow>(txDb, "SELECT * FROM tasks WHERE id = ?", [
-      task.id,
-    ])
+    const scopeKey = task.scopeKey ?? (await getActiveScopeKey())
+    const existing = await queryFirst<TaskRow>(
+      txDb,
+      "SELECT * FROM tasks WHERE id = ? AND scopeKey = ?",
+      [task.id, scopeKey],
+    )
     const encryptedDescription = await encryptText(task.description)
 
     await execute(
@@ -68,8 +73,9 @@ async function upsertTaskInternal(
           createdByUserId,
           updatedAt,
           revision,
-          deletedAt
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          deletedAt,
+          scopeKey
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           projectId = excluded.projectId,
           workspaceId = excluded.workspaceId,
@@ -81,7 +87,8 @@ async function upsertTaskInternal(
           createdByUserId = excluded.createdByUserId,
           updatedAt = excluded.updatedAt,
           revision = excluded.revision,
-          deletedAt = excluded.deletedAt`,
+          deletedAt = excluded.deletedAt,
+          scopeKey = excluded.scopeKey`,
       [
         task.id,
         task.projectId,
@@ -95,6 +102,7 @@ async function upsertTaskInternal(
         task.updatedAt,
         task.revision,
         task.deletedAt,
+        scopeKey,
       ],
     )
 
@@ -123,6 +131,7 @@ async function upsertTaskInternal(
           baseRevision,
           projectId: task.projectId ?? null,
           workspaceId: task.workspaceId,
+          scopeKey,
           createdAt: new Date().toISOString(),
         },
         txDb,
@@ -138,9 +147,9 @@ async function upsertTaskInternal(
       })
       await execute(
         txDb,
-        `INSERT INTO task_events (id, taskId, type, payload, createdAt, createdByUserId)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [await generateUuidV4(), task.id, "STATUS_CHANGED", eventPayload, task.updatedAt, userId],
+        `INSERT INTO task_events (id, taskId, type, payload, createdAt, createdByUserId, scopeKey)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [await generateUuidV4(), task.id, "STATUS_CHANGED", eventPayload, task.updatedAt, userId, scopeKey],
       )
     }
   }
@@ -152,26 +161,36 @@ async function upsertTaskInternal(
   }
 }
 
-export async function listTasksByWorkspace(workspaceId: string, projectId?: string | null) {
+export async function listTasksByWorkspace(
+  workspaceId: string,
+  projectId?: string | null,
+  scopeKey?: string,
+) {
   const database = await getDb()
+  const resolvedScope = scopeKey ?? (await getActiveScopeKey())
   const isProjectScoped = projectId !== undefined
   const sql = isProjectScoped
     ? projectId
-      ? "SELECT * FROM tasks WHERE workspaceId = ? AND projectId = ? AND deletedAt IS NULL ORDER BY updatedAt DESC"
-      : "SELECT * FROM tasks WHERE workspaceId = ? AND projectId IS NULL AND deletedAt IS NULL ORDER BY updatedAt DESC"
-    : "SELECT * FROM tasks WHERE workspaceId = ? AND deletedAt IS NULL ORDER BY updatedAt DESC"
+      ? "SELECT * FROM tasks WHERE scopeKey = ? AND workspaceId = ? AND projectId = ? AND deletedAt IS NULL ORDER BY updatedAt DESC"
+      : "SELECT * FROM tasks WHERE scopeKey = ? AND workspaceId = ? AND projectId IS NULL AND deletedAt IS NULL ORDER BY updatedAt DESC"
+    : "SELECT * FROM tasks WHERE scopeKey = ? AND workspaceId = ? AND deletedAt IS NULL ORDER BY updatedAt DESC"
   const params = isProjectScoped
     ? projectId
-      ? [workspaceId, projectId]
-      : [workspaceId]
-    : [workspaceId]
+      ? [resolvedScope, workspaceId, projectId]
+      : [resolvedScope, workspaceId]
+    : [resolvedScope, workspaceId]
   const rows = await queryAll<TaskRow>(database, sql, params)
   return Promise.all(rows.map(mapTaskRow))
 }
 
-export async function getTaskById(taskId: string) {
+export async function getTaskById(taskId: string, scopeKey?: string) {
   const database = await getDb()
-  const row = await queryFirst<TaskRow>(database, "SELECT * FROM tasks WHERE id = ?", [taskId])
+  const resolvedScope = scopeKey ?? (await getActiveScopeKey())
+  const row = await queryFirst<TaskRow>(
+    database,
+    "SELECT * FROM tasks WHERE id = ? AND scopeKey = ?",
+    [taskId, resolvedScope],
+  )
   if (!row) return null
   return mapTaskRow(row)
 }
@@ -183,15 +202,20 @@ async function markTaskDeletedInternal(
   db?: SQLiteDatabase,
 ) {
   const database = db ?? (await getDb())
+  const resolvedScope = await getActiveScopeKey()
   const runner = async (txDb: SQLiteDatabase) => {
-    const existing = await queryFirst<TaskRow>(txDb, "SELECT * FROM tasks WHERE id = ?", [taskId])
+    const existing = await queryFirst<TaskRow>(
+      txDb,
+      "SELECT * FROM tasks WHERE id = ? AND scopeKey = ?",
+      [taskId, resolvedScope],
+    )
     if (!existing) return
 
     const nextRevision = `${existing.revision}-deleted-${Date.now()}`
     await execute(
       txDb,
-      "UPDATE tasks SET deletedAt = ?, updatedAt = ?, revision = ? WHERE id = ?",
-      [deletedAt, deletedAt, nextRevision, taskId],
+      "UPDATE tasks SET deletedAt = ?, updatedAt = ?, revision = ? WHERE id = ? AND scopeKey = ?",
+      [deletedAt, deletedAt, nextRevision, taskId, resolvedScope],
     )
 
     if (options.enqueue) {
@@ -217,6 +241,7 @@ async function markTaskDeletedInternal(
           baseRevision: existing.revision ?? "",
           projectId: existing.projectId ?? null,
           workspaceId: existing.workspaceId,
+          scopeKey: existing.scopeKey,
           createdAt: new Date().toISOString(),
         },
         txDb,

@@ -5,6 +5,7 @@ import type { Priority, Status, Task } from "@/services/db/types"
 import { generateUuidV4, getCurrentUserId } from "@/services/sync/identity"
 import { refreshLocalCounts } from "@/services/sync/syncStore"
 import { useWorkspaceStore } from "@/stores/workspaceStore"
+import { getActiveScopeKey } from "@/services/session/scope"
 
 export const useTaskEditorViewModel = (taskId?: string, projectId?: string) => {
   const { activeWorkspaceId } = useWorkspaceStore()
@@ -46,6 +47,7 @@ export const useTaskEditorViewModel = (taskId?: string, projectId?: string) => {
       setIsSaving(true)
       const now = new Date().toISOString()
       const currentUserId = await getCurrentUserId()
+      const scopeKey = await getActiveScopeKey()
       const nextRevision = task?.revision
         ? `${task.revision}-${Date.now()}`
         : `rev-${Date.now()}`
@@ -63,6 +65,7 @@ export const useTaskEditorViewModel = (taskId?: string, projectId?: string) => {
         updatedAt: now,
         revision: nextRevision,
         deletedAt: null,
+        scopeKey,
       }
 
       await upsertTask(payload)

@@ -1,36 +1,15 @@
 import { getDb } from "@/services/db/db"
-import { queryFirst } from "@/services/db/queries"
-import { listTasksByWorkspace, upsertTask } from "@/services/db/repositories/tasksRepository"
-import { PERSONAL_WORKSPACE_ID } from "@/services/db/repositories/workspacesRepository"
-import { listCommentsByTask, upsertComment } from "@/services/db/repositories/commentsRepository"
-import type { Comment, Task } from "@/services/db/types"
-import { getSessionMode } from "@/services/sync/identity"
+import { execute, executeTransaction, queryFirst } from "@/services/db/queries"
+import { bootstrapWorkspaces } from "@/services/db/repositories/workspacesRepository"
+import { GUEST_SCOPE_KEY, userScopeKey } from "@/services/session/scope"
 import { loadString, saveString } from "@/utils/storage"
 
 const OFFLINE_CLAIM_KEY = "tasktrak.offlineClaimed"
-const SYNC_STATE_ID = "singleton"
 
 export async function shouldPromptOfflineClaim() {
-  const sessionMode = await getSessionMode()
-  if (sessionMode !== "local") return false
   const claimed = loadString(OFFLINE_CLAIM_KEY)
   if (claimed === "true") return false
-
-  const db = await getDb()
-  const cursorRow = await queryFirst<{ lastCursor: string | null }>(
-    db,
-    "SELECT lastCursor FROM sync_state WHERE id = ?",
-    [SYNC_STATE_ID],
-  )
-  if (cursorRow?.lastCursor) return false
-
-  const row = await queryFirst<{ count: number }>(
-    db,
-    "SELECT COUNT(1) as count FROM tasks WHERE workspaceId = ? AND projectId IS NULL AND deletedAt IS NULL",
-    [PERSONAL_WORKSPACE_ID],
-  )
-
-  return (row?.count ?? 0) > 0
+  return hasGuestData()
 }
 
 export function markOfflineClaimHandled() {
@@ -38,38 +17,71 @@ export function markOfflineClaimHandled() {
 }
 
 export async function claimOfflineData(remoteUserId: string) {
-  const tasks = await listTasksByWorkspace(PERSONAL_WORKSPACE_ID, null)
-  if (tasks.length === 0) return
+  const userScope = userScopeKey(remoteUserId)
+  const db = await getDb()
 
-  const nowBase = Date.now()
-  for (const task of tasks) {
-    await claimTask(task, remoteUserId, nowBase)
-    const comments = await listCommentsByTask(task.id)
-    for (const comment of comments) {
-      await claimComment(comment, remoteUserId, nowBase)
-    }
-  }
+  await executeTransaction(db, async (txDb) => {
+    await execute(txDb, "DELETE FROM workspace_state WHERE scopeKey = ?", [userScope])
+    await execute(txDb, "DELETE FROM sync_state WHERE scopeKey = ?", [userScope])
+
+    await execute(txDb, "UPDATE workspaces SET scopeKey = ? WHERE scopeKey = ?", [userScope, GUEST_SCOPE_KEY])
+    await execute(txDb, "UPDATE statuses SET scopeKey = ? WHERE scopeKey = ?", [userScope, GUEST_SCOPE_KEY])
+    await execute(txDb, "UPDATE projects SET scopeKey = ? WHERE scopeKey = ?", [userScope, GUEST_SCOPE_KEY])
+    await execute(txDb, "UPDATE project_members SET scopeKey = ? WHERE scopeKey = ?", [userScope, GUEST_SCOPE_KEY])
+    await execute(txDb, "UPDATE tasks SET scopeKey = ? WHERE scopeKey = ?", [userScope, GUEST_SCOPE_KEY])
+    await execute(txDb, "UPDATE comments SET scopeKey = ? WHERE scopeKey = ?", [userScope, GUEST_SCOPE_KEY])
+    await execute(txDb, "UPDATE task_events SET scopeKey = ? WHERE scopeKey = ?", [userScope, GUEST_SCOPE_KEY])
+    await execute(txDb, "UPDATE workspace_members SET scopeKey = ? WHERE scopeKey = ?", [userScope, GUEST_SCOPE_KEY])
+    await execute(txDb, "UPDATE conflicts SET scopeKey = ? WHERE scopeKey = ?", [userScope, GUEST_SCOPE_KEY])
+    await execute(txDb, "UPDATE change_log SET scopeKey = ? WHERE scopeKey = ?", [userScope, GUEST_SCOPE_KEY])
+    await execute(txDb, "UPDATE sync_state SET scopeKey = ? WHERE scopeKey = ?", [userScope, GUEST_SCOPE_KEY])
+    await execute(txDb, "UPDATE workspace_state SET scopeKey = ? WHERE scopeKey = ?", [userScope, GUEST_SCOPE_KEY])
+    await execute(txDb, "UPDATE users SET scopeKey = ? WHERE scopeKey = ?", [userScope, GUEST_SCOPE_KEY])
+  })
+
+  await bootstrapWorkspaces(userScope)
 }
 
-async function claimTask(task: Task, remoteUserId: string, nowBase: number) {
-  const updatedAt = new Date(nowBase).toISOString()
-  const nextRevision = `${task.revision}-claim-${nowBase}`
-  await upsertTask({
-    ...task,
-    createdByUserId: remoteUserId,
-    assigneeUserId: remoteUserId,
-    updatedAt,
-    revision: nextRevision,
+export async function discardGuestData() {
+  const db = await getDb()
+  await executeTransaction(db, async (txDb) => {
+    await execute(txDb, "DELETE FROM comments WHERE scopeKey = ?", [GUEST_SCOPE_KEY])
+    await execute(txDb, "DELETE FROM task_events WHERE scopeKey = ?", [GUEST_SCOPE_KEY])
+    await execute(txDb, "DELETE FROM tasks WHERE scopeKey = ?", [GUEST_SCOPE_KEY])
+    await execute(txDb, "DELETE FROM statuses WHERE scopeKey = ?", [GUEST_SCOPE_KEY])
+    await execute(txDb, "DELETE FROM project_members WHERE scopeKey = ?", [GUEST_SCOPE_KEY])
+    await execute(txDb, "DELETE FROM projects WHERE scopeKey = ?", [GUEST_SCOPE_KEY])
+    await execute(txDb, "DELETE FROM workspace_members WHERE scopeKey = ?", [GUEST_SCOPE_KEY])
+    await execute(txDb, "DELETE FROM change_log WHERE scopeKey = ?", [GUEST_SCOPE_KEY])
+    await execute(txDb, "DELETE FROM conflicts WHERE scopeKey = ?", [GUEST_SCOPE_KEY])
+    await execute(txDb, "DELETE FROM sync_state WHERE scopeKey = ?", [GUEST_SCOPE_KEY])
+    await execute(txDb, "DELETE FROM workspace_state WHERE scopeKey = ?", [GUEST_SCOPE_KEY])
+    await execute(txDb, "DELETE FROM workspaces WHERE scopeKey = ?", [GUEST_SCOPE_KEY])
+    await execute(txDb, "DELETE FROM users WHERE scopeKey = ?", [GUEST_SCOPE_KEY])
   })
+
+  await bootstrapWorkspaces(GUEST_SCOPE_KEY)
 }
 
-async function claimComment(comment: Comment, remoteUserId: string, nowBase: number) {
-  const updatedAt = new Date(nowBase).toISOString()
-  const nextRevision = `${comment.revision}-claim-${nowBase}`
-  await upsertComment({
-    ...comment,
-    createdByUserId: remoteUserId,
-    updatedAt,
-    revision: nextRevision,
-  })
+async function hasGuestData() {
+  const db = await getDb()
+  const [taskRow, commentRow, opRow] = await Promise.all([
+    queryFirst<{ count: number }>(
+      db,
+      "SELECT COUNT(1) as count FROM tasks WHERE scopeKey = ? AND deletedAt IS NULL",
+      [GUEST_SCOPE_KEY],
+    ),
+    queryFirst<{ count: number }>(
+      db,
+      "SELECT COUNT(1) as count FROM comments WHERE scopeKey = ? AND deletedAt IS NULL",
+      [GUEST_SCOPE_KEY],
+    ),
+    queryFirst<{ count: number }>(
+      db,
+      "SELECT COUNT(1) as count FROM change_log WHERE scopeKey = ? AND status IN ('PENDING','FAILED')",
+      [GUEST_SCOPE_KEY],
+    ),
+  ])
+
+  return (taskRow?.count ?? 0) > 0 || (commentRow?.count ?? 0) > 0 || (opRow?.count ?? 0) > 0
 }
