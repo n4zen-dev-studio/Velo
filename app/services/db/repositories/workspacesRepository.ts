@@ -11,6 +11,8 @@ import { getActiveScopeKey } from "@/services/session/scope"
 export const PERSONAL_WORKSPACE_LABEL = "Personal"
 export const personalWorkspaceId = (scopeKey: string) => `personal:${scopeKey}`
 
+const bootstrapLocks = new Map<string, Promise<void>>()
+
 export async function listWorkspaces(scopeKey?: string, db?: SQLiteDatabase) {
   const database = db ?? (await getDb())
   const resolvedScope = scopeKey ?? (await getActiveScopeKey())
@@ -128,8 +130,6 @@ export async function ensurePersonalWorkspaceExists(scopeKey?: string, db?: SQLi
   const database = db ?? (await getDb())
   const resolvedScope = scopeKey ?? (await getActiveScopeKey())
   const personalId = personalWorkspaceId(resolvedScope)
-  const existing = await getWorkspace(personalId, resolvedScope, database)
-  if (existing) return existing
   const now = Date.now()
   const workspace: Workspace = {
     id: personalId,
@@ -143,7 +143,13 @@ export async function ensurePersonalWorkspaceExists(scopeKey?: string, db?: SQLi
   await execute(
     database,
     `INSERT INTO workspaces (id, label, kind, createdAt, updatedAt, remoteId, scopeKey)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       label = excluded.label,
+       kind = excluded.kind,
+       updatedAt = excluded.updatedAt,
+       remoteId = excluded.remoteId,
+       scopeKey = excluded.scopeKey`,
     [
       workspace.id,
       workspace.label,
@@ -155,7 +161,8 @@ export async function ensurePersonalWorkspaceExists(scopeKey?: string, db?: SQLi
     ],
   )
   await ensureDefaultStatusesForWorkspace(workspace.id, resolvedScope, database)
-  return workspace
+  const refreshed = await getWorkspace(personalId, resolvedScope, database)
+  return refreshed ?? workspace
 }
 
 export async function ensureActiveWorkspaceIdValid(scopeKey?: string, db?: SQLiteDatabase) {
@@ -179,9 +186,15 @@ export async function ensureActiveWorkspaceIdValid(scopeKey?: string, db?: SQLit
 export async function bootstrapWorkspaces(scopeKey?: string, db?: SQLiteDatabase) {
   const database = db ?? (await getDb())
   const resolvedScope = scopeKey ?? (await getActiveScopeKey())
-  await executeTransaction(database, async (txDb) => {
+  const existing = bootstrapLocks.get(resolvedScope)
+  if (existing) return existing
+  const run = executeTransaction(database, async (txDb) => {
     await ensurePersonalWorkspaceExists(resolvedScope, txDb)
     await ensureActiveWorkspaceIdValid(resolvedScope, txDb)
     await ensureDefaultStatusesForWorkspace(personalWorkspaceId(resolvedScope), resolvedScope, txDb)
+  }).finally(() => {
+    bootstrapLocks.delete(resolvedScope)
   })
+  bootstrapLocks.set(resolvedScope, run)
+  return run
 }
