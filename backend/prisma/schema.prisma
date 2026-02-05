@@ -46,6 +46,7 @@ model RefreshToken {
 model Task {
   id             String   @id @db.Uuid
   projectId      String?  @map("projectid") @db.Uuid
+  workspaceId    String?  @map("workspace_id") @db.Uuid
   title          String
   description    String
   statusId       String   @map("statusid")

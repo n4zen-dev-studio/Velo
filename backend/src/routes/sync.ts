@@ -40,7 +40,7 @@ export async function syncRoutes(app: FastifyInstance) {
         }
 
         if (op.entityType === "task") {
-          const validation = validateTaskOp(op)
+          const validation = await validateTaskOp(tx, userId, op)
           if (!validation.ok) {
             failed.push({ opId: op.opId, message: validation.message })
             continue
@@ -86,18 +86,30 @@ export async function syncRoutes(app: FastifyInstance) {
 
     const newCursor = changes.length > 0 ? String(changes[changes.length - 1].id) : body.cursor
 
+    const mapped = changes.map((row) => ({
+      entityType: row.entityType as "task" | "comment" | "user" | "workspace_member",
+      entityId: row.entityId,
+      opType: row.opType as "UPSERT" | "DELETE",
+      payload: row.payload as Record<string, unknown>,
+      revision: row.revision,
+      updatedAt: row.updatedAt.toISOString(),
+    }))
+    if (process.env.NODE_ENV !== "production") {
+      for (const change of mapped) {
+        if (change.entityType === "task") {
+          const payload = change.payload as any
+          console.log("[sync] send task workspaceId", {
+            taskId: change.entityId,
+            workspaceId: payload?.workspaceId ?? null,
+          })
+        }
+      }
+    }
     return reply.send({
       newCursor,
       ackOpIds,
       failed,
-      changes: changes.map((row) => ({
-        entityType: row.entityType as "task" | "comment" | "user" | "workspace_member",
-        entityId: row.entityId,
-        opType: row.opType as "UPSERT" | "DELETE",
-        payload: row.payload as Record<string, unknown>,
-        revision: row.revision,
-        updatedAt: row.updatedAt.toISOString(),
-      })),
+      changes: mapped,
     })
   })
 }
@@ -106,11 +118,19 @@ async function applyTaskOp(tx: typeof prisma, userId: string, op: SyncOp) {
   const patch = op.patch as any
   const now = new Date()
   const revision = `srv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  if (process.env.NODE_ENV !== "production") {
+    console.log("[sync] task op workspaceId", {
+      opId: op.opId,
+      taskId: op.entityId,
+      workspaceId: patch.workspaceId ?? null,
+    })
+  }
 
   if (op.opType === "DELETE") {
     const record = {
       id: op.entityId,
       projectId: patch.projectId ?? null,
+      workspaceId: patch.workspaceId,
       title: patch.title ?? "",
       description: patch.description ?? "",
       statusId: patch.statusId ?? "todo",
@@ -134,6 +154,7 @@ async function applyTaskOp(tx: typeof prisma, userId: string, op: SyncOp) {
   const record = {
     id: op.entityId,
     projectId: patch.projectId ?? null,
+    workspaceId: patch.workspaceId ?? null,
     title: patch.title,
     description: patch.description,
     statusId: patch.statusId,
@@ -301,11 +322,19 @@ function toJsonSafe(input: Record<string, unknown>) {
   )
 }
 
-function validateTaskOp(op: SyncOp) {
+async function validateTaskOp(tx: typeof prisma, userId: string, op: SyncOp) {
+  const patch = op.patch as any
   if (op.opType === "UPSERT") {
-    const patch = op.patch as any
     if (!patch.title || !patch.statusId || !patch.priority) {
       return { ok: false, message: "Task UPSERT requires title, statusId, priority" }
+    }
+  }
+  if (patch.workspaceId) {
+    const member = await tx.workspaceMember.findFirst({
+      where: { workspaceId: patch.workspaceId, userId, deletedAt: null },
+    })
+    if (!member) {
+      return { ok: false, message: "User is not a member of workspace" }
     }
   }
   return { ok: true, message: "" }
