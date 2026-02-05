@@ -553,7 +553,7 @@ export function SettingsScreen() {
                         ) : inviteListStatus?.error ? (
                           <Text preset="formHelper" text={inviteListStatus.error} style={themed($errorText)} />
                         ) : sentInvites.length === 0 ? (
-                          <Text preset="formHelper" text="No pending invites." style={themed($muted)} />
+                          <Text preset="formHelper" text="No invites yet." style={themed($muted)} />
                         ) : (
                           sentInvites.map((invite) => (
                             <View key={invite.id} style={themed($inviteRow)}>
@@ -561,22 +561,24 @@ export function SettingsScreen() {
                                 <Text preset="formLabel" text={invite.email} />
                                 <Text
                                   preset="formHelper"
-                                  text={`Expires ${formatDateTime(invite.expiresAt)}`}
+                                  text={`${invite.status} · Expires ${formatDateTime(invite.expiresAt)}`}
                                   style={themed($muted)}
                                 />
                               </View>
-                              <Button
-                                text="Revoke"
-                                preset="glass"
-                                style={themed($dangerButton)}
-                                onPress={() =>
-                                  setConfirmRevoke({
-                                    workspaceId: workspace.id,
-                                    inviteId: invite.id,
-                                    email: invite.email,
-                                  })
-                                }
-                              />
+                              {invite.status === "PENDING" ? (
+                                <Button
+                                  text="Revoke"
+                                  preset="glass"
+                                  style={themed($dangerButton)}
+                                  onPress={() =>
+                                    setConfirmRevoke({
+                                      workspaceId: workspace.id,
+                                      inviteId: invite.id,
+                                      email: invite.email,
+                                    })
+                                  }
+                                />
+                              ) : null}
                             </View>
                           ))
                         )}

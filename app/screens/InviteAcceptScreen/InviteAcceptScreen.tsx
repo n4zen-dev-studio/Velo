@@ -11,6 +11,9 @@ import { acceptInvite, getInvite } from "@/services/api/invitesApi"
 import { BASE_URL } from "@/config/api"
 import { syncController } from "@/services/sync/SyncController"
 import { useWorkspaceStore } from "@/stores/workspaceStore"
+import { upsertWorkspaceFromSync } from "@/services/db/repositories/workspacesRepository"
+import { upsertWorkspaceMemberFromSync } from "@/services/db/repositories/workspaceMembersRepository"
+import { getActiveScopeKey } from "@/services/session/scope"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
 import type { HomeStackScreenProps } from "@/navigators/navigationTypes"
@@ -27,7 +30,7 @@ export function InviteAcceptScreen() {
   const navigation = useNavigation<HomeStackScreenProps<"InviteAccept">["navigation"]>()
   const route = useRoute<HomeStackScreenProps<"InviteAccept">["route"]>()
   const { token } = route.params ?? {}
-  const { setActiveWorkspaceId } = useWorkspaceStore()
+  const { refreshWorkspaces } = useWorkspaceStore()
   const [invite, setInvite] = useState<InviteDetails | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -60,8 +63,32 @@ export function InviteAcceptScreen() {
     try {
       const client = createHttpClient(BASE_URL)
       const response = await acceptInvite(client, token)
+      const scopeKey = await getActiveScopeKey()
+      await upsertWorkspaceFromSync(
+        {
+          id: response.workspace.id,
+          label: response.workspace.label,
+          kind: response.workspace.kind ?? "custom",
+        },
+        scopeKey,
+      )
+      if (response.membership) {
+        await upsertWorkspaceMemberFromSync(
+          {
+            id: response.membership.id,
+            workspaceId: response.membership.workspaceId,
+            userId: response.membership.userId,
+            role: response.membership.role,
+            createdAt: response.membership.createdAt,
+            updatedAt: response.membership.updatedAt,
+            revision: response.membership.revision,
+            deletedAt: response.membership.deletedAt,
+            scopeKey,
+          },
+        )
+      }
+      await refreshWorkspaces()
       await syncController.triggerSync("manual")
-      await setActiveWorkspaceId(response.workspaceId)
       navigation.navigate("Home")
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to accept invite"

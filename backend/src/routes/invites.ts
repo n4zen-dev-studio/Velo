@@ -144,8 +144,6 @@ export async function inviteRoutes(app: FastifyInstance) {
       const invites = await prisma.workspaceInvite.findMany({
         where: {
           workspaceId,
-          status: "PENDING",
-          expiresAt: { gt: new Date() },
         },
         orderBy: { createdAt: "desc" },
       })
@@ -159,6 +157,7 @@ export async function inviteRoutes(app: FastifyInstance) {
           expiresAt: invite.expiresAt.toISOString(),
           createdAt: invite.createdAt.toISOString(),
           invitedById: invite.invitedById,
+          acceptedAt: invite.acceptedAt ? invite.acceptedAt.toISOString() : null,
         })),
       )
     },
@@ -327,7 +326,30 @@ export async function inviteRoutes(app: FastifyInstance) {
       if (!invite) return reply.code(404).send({ error: "Invite not found" })
 
       if (invite.status !== "PENDING") {
-        return reply.send({ ok: true, workspaceId: invite.workspaceId })
+        const membership = await prisma.workspaceMember.findFirst({
+          where: { workspaceId: invite.workspaceId, userId, deletedAt: null },
+        })
+        return reply.send({
+          ok: true,
+          workspace: { id: invite.workspaceId, label: invite.workspaceLabel, kind: "custom" },
+          membership: membership
+            ? {
+                id: membership.id,
+                workspaceId: membership.workspaceId,
+                userId: membership.userId,
+                role: membership.role,
+                createdAt: membership.createdAt.toISOString(),
+                updatedAt: membership.updatedAt.toISOString(),
+                revision: membership.revision,
+                deletedAt: membership.deletedAt,
+              }
+            : null,
+          invite: {
+            id: invite.id,
+            status: invite.status,
+            acceptedAt: invite.acceptedAt?.toISOString() ?? null,
+          },
+        })
       }
 
       if (invite.expiresAt.getTime() < Date.now()) {
@@ -342,9 +364,9 @@ export async function inviteRoutes(app: FastifyInstance) {
         return reply.code(403).send({ error: "Invite email mismatch" })
       }
 
-      await prisma.$transaction(async (tx) => {
+      const result = await prisma.$transaction(async (tx) => {
         const revision = `srv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-        await tx.workspaceMember.upsert({
+        const membership = await tx.workspaceMember.upsert({
           where: {
             workspaceId_userId: {
               workspaceId: invite.workspaceId,
@@ -369,7 +391,7 @@ export async function inviteRoutes(app: FastifyInstance) {
           },
         })
 
-        await tx.workspaceInvite.update({
+        const updatedInvite = await tx.workspaceInvite.update({
           where: { id: invite.id },
           data: {
             status: "ACCEPTED",
@@ -377,9 +399,57 @@ export async function inviteRoutes(app: FastifyInstance) {
             acceptedById: userId,
           },
         })
+
+        const owners = await tx.workspaceMember.findMany({
+          where: { workspaceId: invite.workspaceId, role: "OWNER", deletedAt: null },
+          select: { userId: true },
+        })
+        const recipientIds = new Set<string>([userId, ...owners.map((owner) => owner.userId)])
+        for (const recipientId of recipientIds) {
+          await tx.serverChange.create({
+            data: {
+              userId: recipientId,
+              entityType: "workspace_member",
+              entityId: membership.id,
+              opType: "UPSERT",
+              payload: {
+                id: membership.id,
+                workspaceId: membership.workspaceId,
+                userId: membership.userId,
+                role: membership.role,
+                createdAt: membership.createdAt.toISOString(),
+                updatedAt: membership.updatedAt.toISOString(),
+                deletedAt: membership.deletedAt,
+                revision: membership.revision,
+              },
+              revision: membership.revision,
+              updatedAt: membership.updatedAt,
+            },
+          })
+        }
+
+        return { membership, updatedInvite }
       })
 
-      return reply.send({ ok: true, workspaceId: invite.workspaceId })
+      return reply.send({
+        ok: true,
+        workspace: { id: invite.workspaceId, label: invite.workspaceLabel, kind: "custom" },
+        membership: {
+          id: result.membership.id,
+          workspaceId: result.membership.workspaceId,
+          userId: result.membership.userId,
+          role: result.membership.role,
+          createdAt: result.membership.createdAt.toISOString(),
+          updatedAt: result.membership.updatedAt.toISOString(),
+          revision: result.membership.revision,
+          deletedAt: result.membership.deletedAt,
+        },
+        invite: {
+          id: result.updatedInvite.id,
+          status: result.updatedInvite.status,
+          acceptedAt: result.updatedInvite.acceptedAt?.toISOString() ?? null,
+        },
+      })
     },
   )
 
