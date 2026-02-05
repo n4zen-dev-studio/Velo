@@ -17,6 +17,23 @@ export interface WorkspaceInvite {
   expiresAt: string
   createdAt: string
   invitedById: string
+  acceptedAt?: string | null
+}
+
+export interface InviteAcceptResponse {
+  ok: boolean
+  workspace: { id: string; label: string; kind?: string }
+  membership: {
+    id: string
+    workspaceId: string
+    userId: string
+    role: string
+    createdAt: string
+    updatedAt: string
+    revision: string
+    deletedAt: string | null
+  } | null
+  invite: { id: string; status: string; acceptedAt: string | null }
 }
 
 export async function inviteToWorkspace(
@@ -43,9 +60,7 @@ export async function getInvite(client: AxiosInstance, token: string) {
 }
 
 export async function acceptInvite(client: AxiosInstance, token: string) {
-  const response = await client.post<{ ok: boolean; workspaceId: string }>(
-    `/invites/${token}/accept`,
-  )
+  const response = await client.post<InviteAcceptResponse>(`/invites/${token}/accept`)
   return response.data
 }
 

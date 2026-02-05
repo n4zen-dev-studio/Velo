@@ -83,6 +83,52 @@ export async function createWorkspace(label: string, scopeKey?: string, db?: SQL
   return workspace
 }
 
+export async function upsertWorkspaceFromSync(
+  input: Partial<Workspace> & { id: string; label: string },
+  scopeKey?: string,
+  db?: SQLiteDatabase,
+) {
+  const database = db ?? (await getDb())
+  const resolvedScope = scopeKey ?? (await getActiveScopeKey())
+  const now = Date.now()
+  const kind = input.kind ?? (input.id.startsWith("personal:") ? "personal" : "custom")
+  const workspace: Workspace = {
+    id: input.id,
+    label: input.label,
+    kind,
+    createdAt: input.createdAt ?? now,
+    updatedAt: input.updatedAt ?? now,
+    remoteId: input.remoteId ?? null,
+    scopeKey: input.scopeKey ?? resolvedScope,
+  }
+
+  await execute(
+    database,
+    `INSERT INTO workspaces (id, label, kind, createdAt, updatedAt, remoteId, scopeKey)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       label = excluded.label,
+       kind = excluded.kind,
+       createdAt = excluded.createdAt,
+       updatedAt = excluded.updatedAt,
+       remoteId = excluded.remoteId,
+       scopeKey = excluded.scopeKey`,
+    [
+      workspace.id,
+      workspace.label,
+      workspace.kind,
+      workspace.createdAt,
+      workspace.updatedAt,
+      workspace.remoteId,
+      workspace.scopeKey,
+    ],
+  )
+
+  await ensureDefaultStatusesForWorkspace(workspace.id, resolvedScope, database)
+
+  return workspace
+}
+
 export async function renameWorkspace(id: string, label: string, scopeKey?: string, db?: SQLiteDatabase) {
   const database = db ?? (await getDb())
   const resolvedScope = scopeKey ?? (await getActiveScopeKey())
