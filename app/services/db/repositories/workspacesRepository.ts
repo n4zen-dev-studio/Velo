@@ -14,6 +14,7 @@ import { seedDefaultStatusesForWorkspace, ensureDefaultStatusesForWorkspace } fr
 import { generateUuidV4, getCurrentUserId } from "@/services/sync/identity"
 import { upsertWorkspaceMember } from "@/services/db/repositories/workspaceMembersRepository"
 import { getActiveScopeKey } from "@/services/session/scope"
+import { resolveWorkspaceScopeKey } from "@/services/db/scopeKey"
 
 export const PERSONAL_WORKSPACE_LABEL = "Personal"
 export const personalWorkspaceId = (scopeKey: string) => `personal:${scopeKey}`
@@ -24,11 +25,55 @@ export async function listWorkspaces(scopeKey?: string, db?: SQLiteDatabase) {
   const database = db ?? (await getDb())
   const resolvedScope = scopeKey ?? (await getActiveScopeKey())
   const personalId = personalWorkspaceId(resolvedScope)
-  return queryAll<Workspace>(
+  const currentUserId = await getCurrentUserId()
+  const rows = await queryAll<Workspace & { myRole: string | null; membersCount: number }>(
     database,
-    "SELECT * FROM workspaces WHERE scopeKey = ? ORDER BY CASE WHEN id = ? THEN 0 ELSE 1 END, createdAt ASC",
-    [resolvedScope, personalId],
+    `
+    SELECT
+      w.*,
+      (
+        SELECT wm.role
+        FROM workspace_members wm
+        WHERE wm.workspaceId = w.id
+          AND wm.scopeKey = ?
+          AND wm.userId = ?
+          AND wm.deletedAt IS NULL
+        LIMIT 1
+      ) AS myRole,
+      (
+        SELECT COUNT(1)
+        FROM workspace_members wm
+        WHERE wm.workspaceId = w.id
+          AND wm.scopeKey = ?
+          AND wm.deletedAt IS NULL
+      ) AS membersCount
+    FROM workspaces w
+    WHERE w.scopeKey = ?
+      AND (
+        w.kind = 'personal'
+        OR EXISTS (
+          SELECT 1
+          FROM workspace_members wm
+          WHERE wm.workspaceId = w.id
+            AND wm.scopeKey = ?
+            AND wm.userId = ?
+            AND wm.deletedAt IS NULL
+        )
+      )
+    ORDER BY CASE WHEN w.id = ? THEN 0 ELSE 1 END, w.createdAt ASC
+    `,
+    [resolvedScope, currentUserId, resolvedScope, resolvedScope, resolvedScope, currentUserId, personalId],
   )
+  return rows.map((row) => {
+    if (row.kind === "personal") {
+      return {
+        ...row,
+        myRole: row.myRole ?? "OWNER",
+        membersCount: Math.max(row.membersCount ?? 0, 1),
+      }
+    }
+    return row
+  })
 }
 
 export async function getWorkspace(id: string, scopeKey?: string, db?: SQLiteDatabase) {
@@ -109,14 +154,14 @@ export async function upsertWorkspaceFromSync(
     createdAt: input.createdAt ?? now,
     updatedAt: input.updatedAt ?? now,
     remoteId: input.remoteId ?? null,
-    scopeKey: input.scopeKey ?? resolvedScope,
+    scopeKey: resolvedScope,
   }
 
   await exec(
     database,
     `INSERT INTO workspaces (id, label, kind, createdAt, updatedAt, remoteId, scopeKey)
      VALUES (?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(id) DO UPDATE SET
+     ON CONFLICT(id, scopeKey) DO UPDATE SET
        label = excluded.label,
        kind = excluded.kind,
        createdAt = excluded.createdAt,
@@ -134,7 +179,8 @@ export async function upsertWorkspaceFromSync(
     ],
   )
 
-  await ensureDefaultStatusesForWorkspace(workspace.id, resolvedScope, db ? database : undefined)
+  const dataScope = await resolveWorkspaceScopeKey(workspace.id, resolvedScope, database)
+  await ensureDefaultStatusesForWorkspace(workspace.id, dataScope, db ? database : undefined)
 
   return workspace
 }
@@ -205,7 +251,7 @@ export async function ensurePersonalWorkspaceExists(scopeKey?: string, db?: SQLi
     database,
     `INSERT INTO workspaces (id, label, kind, createdAt, updatedAt, remoteId, scopeKey)
      VALUES (?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(id) DO UPDATE SET
+     ON CONFLICT(id, scopeKey) DO UPDATE SET
        label = excluded.label,
        kind = excluded.kind,
        updatedAt = excluded.updatedAt,

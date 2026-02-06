@@ -7,37 +7,45 @@ import { upsertCommentFromSync } from "@/services/db/repositories/commentsReposi
 import { personalWorkspaceId } from "@/services/db/repositories/workspacesRepository"
 import { refreshLocalCounts } from "@/services/sync/syncStore"
 import { getActiveScopeKey } from "@/services/session/scope"
+import {
+  isWorkspaceScopeKey,
+  listAllDataScopeKeys,
+  workspaceIdFromScopeKey,
+} from "@/services/db/scopeKey"
 
 export async function listOpenConflicts() {
   const database = await getDb()
-  const scopeKey = await getActiveScopeKey()
+  const scopes = await listAllDataScopeKeys(undefined, database)
+  const placeholders = scopes.map(() => "?").join(", ")
   return queryAll<ConflictRecord>(
     database,
-    "SELECT * FROM conflicts WHERE scopeKey = ? AND status = 'OPEN' ORDER BY createdAt DESC",
-    [scopeKey],
+    `SELECT * FROM conflicts WHERE scopeKey IN (${placeholders}) AND status = 'OPEN' ORDER BY createdAt DESC`,
+    scopes,
   )
 }
 
 export async function hasOpenConflict(entityType: string, entityId: string) {
   const database = await getDb()
-  const scopeKey = await getActiveScopeKey()
+  const scopes = await listAllDataScopeKeys(undefined, database)
+  const placeholders = scopes.map(() => "?").join(", ")
   const id = `${entityType}:${entityId}`
   const row = await queryFirst<{ count: number }>(
     database,
-    "SELECT COUNT(1) as count FROM conflicts WHERE scopeKey = ? AND id = ? AND status = 'OPEN'",
-    [scopeKey, id],
+    `SELECT COUNT(1) as count FROM conflicts WHERE scopeKey IN (${placeholders}) AND id = ? AND status = 'OPEN'`,
+    [...scopes, id],
   )
   return (row?.count ?? 0) > 0
 }
 
 export async function getConflict(entityType: string, entityId: string) {
   const database = await getDb()
-  const scopeKey = await getActiveScopeKey()
+  const scopes = await listAllDataScopeKeys(undefined, database)
+  const placeholders = scopes.map(() => "?").join(", ")
   const id = `${entityType}:${entityId}`
   return queryFirst<ConflictRecord>(
     database,
-    "SELECT * FROM conflicts WHERE scopeKey = ? AND id = ?",
-    [scopeKey, id],
+    `SELECT * FROM conflicts WHERE scopeKey IN (${placeholders}) AND id = ?`,
+    [...scopes, id],
   )
 }
 
@@ -73,10 +81,13 @@ async function resolveConflict(conflict: ConflictRecord, payload: Task | Comment
 
   if (conflict.entityType === "task") {
     const task = payload as Task
+    const fallbackWorkspaceId = isWorkspaceScopeKey(scopeKey)
+      ? workspaceIdFromScopeKey(scopeKey)
+      : personalWorkspaceId(scopeKey)
     const updatedTask: Task = {
       id: task.id,
       projectId: task.projectId ?? null,
-      workspaceId: task.workspaceId ?? personalWorkspaceId(scopeKey),
+      workspaceId: task.workspaceId ?? fallbackWorkspaceId ?? personalWorkspaceId(scopeKey),
       title: task.title ?? "",
       description: task.description ?? "",
       statusId: task.statusId ?? "todo",
@@ -123,7 +134,7 @@ async function resolveConflict(conflict: ConflictRecord, payload: Task | Comment
       "SELECT workspaceId FROM tasks WHERE id = ? AND scopeKey = ?",
       [updatedComment.taskId, scopeKey],
     )
-    const workspaceId = taskRow?.workspaceId ?? personalWorkspaceId(scopeKey)
+    const workspaceId = taskRow?.workspaceId ?? (workspaceIdFromScopeKey(scopeKey) ?? personalWorkspaceId(scopeKey))
     await enqueueOp({
       entityType: "comment",
       entityId: updatedComment.id,

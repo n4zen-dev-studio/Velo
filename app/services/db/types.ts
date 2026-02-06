@@ -52,6 +52,8 @@ export interface Workspace {
   updatedAt: number
   remoteId: string | null
   scopeKey: string
+  myRole?: "OWNER" | "MEMBER" | string | null
+  membersCount?: number
 }
 
 export interface Task {

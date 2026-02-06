@@ -13,7 +13,7 @@ import type { Comment } from "@/services/db/types"
 import { decryptText, encryptText } from "@/utils/crypto"
 import { enqueueOp } from "@/services/db/repositories/changeLogRepository"
 import { personalWorkspaceId } from "@/services/db/repositories/workspacesRepository"
-import { getActiveScopeKey } from "@/services/session/scope"
+import { listAllDataScopeKeys, resolveScopeKeyForTaskId } from "@/services/db/scopeKey"
 
 interface CommentRow {
   id: string
@@ -45,7 +45,8 @@ async function upsertCommentInternal(
   const runner = async (txDb: SQLiteDatabase, useTxRunner: boolean) => {
     const exec = useTxRunner ? executeTx : execute
     const queryFirstFn = useTxRunner ? queryFirstTx : queryFirst
-    const scopeKey = comment.scopeKey ?? (await getActiveScopeKey())
+    const scopeKey =
+      comment.scopeKey ?? (await resolveScopeKeyForTaskId(comment.taskId, undefined, txDb))
     const existing = await queryFirstFn<CommentRow>(
       txDb,
       "SELECT * FROM comments WHERE id = ? AND scopeKey = ?",
@@ -131,7 +132,7 @@ async function upsertCommentInternal(
 
 export async function listComments(taskId: string, scopeKey?: string) {
   const database = await getDb()
-  const resolvedScope = scopeKey ?? (await getActiveScopeKey())
+  const resolvedScope = await resolveScopeKeyForTaskId(taskId, scopeKey, database)
   const rows = await queryAll<CommentRow>(
     database,
     "SELECT * FROM comments WHERE scopeKey = ? AND taskId = ? AND deletedAt IS NULL ORDER BY createdAt ASC",
@@ -155,11 +156,12 @@ export async function insertComment(comment: Comment) {
 
 export async function getCommentById(commentId: string, scopeKey?: string) {
   const database = await getDb()
-  const resolvedScope = scopeKey ?? (await getActiveScopeKey())
+  const scopes = await listAllDataScopeKeys(scopeKey, database)
+  const placeholders = scopes.map(() => "?").join(", ")
   const row = await queryFirst<CommentRow>(
     database,
-    "SELECT * FROM comments WHERE id = ? AND scopeKey = ?",
-    [commentId, resolvedScope],
+    `SELECT * FROM comments WHERE id = ? AND scopeKey IN (${placeholders})`,
+    [commentId, ...scopes],
   )
   if (!row) return null
   return mapCommentRow(row)
@@ -185,20 +187,21 @@ async function markCommentDeletedInternal(
 ) {
   const database = db ?? (await getDb())
   const useTx = db !== undefined || options.useTransaction
-  const resolvedScope = await getActiveScopeKey()
   const runner = async (txDb: SQLiteDatabase, useTxRunner: boolean) => {
     const exec = useTxRunner ? executeTx : execute
     const queryFirstFn = useTxRunner ? queryFirstTx : queryFirst
+    const scopes = await listAllDataScopeKeys(undefined, txDb)
+    const placeholders = scopes.map(() => "?").join(", ")
     const existing = await queryFirstFn<CommentRow>(
       txDb,
-      "SELECT * FROM comments WHERE id = ? AND scopeKey = ?",
-      [commentId, resolvedScope],
+      `SELECT * FROM comments WHERE id = ? AND scopeKey IN (${placeholders})`,
+      [commentId, ...scopes],
     )
     if (!existing) return
     const taskRow = await queryFirstFn<{ workspaceId: string }>(
       txDb,
       "SELECT workspaceId FROM tasks WHERE id = ? AND scopeKey = ?",
-      [existing.taskId, resolvedScope],
+      [existing.taskId, existing.scopeKey],
     )
     const workspaceId = taskRow?.workspaceId ?? personalWorkspaceId(existing.scopeKey)
 
@@ -206,7 +209,7 @@ async function markCommentDeletedInternal(
     await exec(
       txDb,
       "UPDATE comments SET deletedAt = ?, updatedAt = ?, revision = ? WHERE id = ? AND scopeKey = ?",
-      [deletedAt, deletedAt, nextRevision, commentId, resolvedScope],
+      [deletedAt, deletedAt, nextRevision, commentId, existing.scopeKey],
     )
 
     if (options.enqueue) {

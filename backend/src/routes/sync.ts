@@ -118,6 +118,11 @@ async function applyTaskOp(tx: typeof prisma, userId: string, op: SyncOp) {
   const patch = op.patch as any
   const now = new Date()
   const revision = `srv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  let assigneeUserId = patch.assigneeUserId
+  if (assigneeUserId === undefined) {
+    const existing = await tx.task.findUnique({ where: { id: op.entityId } })
+    assigneeUserId = existing?.assigneeUserId ?? userId
+  }
   if (process.env.NODE_ENV !== "production") {
     console.log("[sync] task op workspaceId", {
       opId: op.opId,
@@ -135,7 +140,7 @@ async function applyTaskOp(tx: typeof prisma, userId: string, op: SyncOp) {
       description: patch.description ?? "",
       statusId: patch.statusId ?? "todo",
       priority: patch.priority ?? "medium",
-      assigneeUserId: patch.assigneeUserId ?? null,
+      assigneeUserId: assigneeUserId ?? null,
       createdByUserId: patch.createdByUserId ?? userId,
       updatedAt: now,
       revision,
@@ -159,7 +164,7 @@ async function applyTaskOp(tx: typeof prisma, userId: string, op: SyncOp) {
     description: patch.description,
     statusId: patch.statusId,
     priority: patch.priority,
-    assigneeUserId: patch.assigneeUserId ?? null,
+    assigneeUserId: assigneeUserId ?? null,
     createdByUserId: patch.createdByUserId ?? userId,
     updatedAt: now,
     revision,
@@ -335,6 +340,15 @@ async function validateTaskOp(tx: typeof prisma, userId: string, op: SyncOp) {
     })
     if (!member) {
       return { ok: false, message: "User is not a member of workspace" }
+    }
+
+    if (patch.assigneeUserId) {
+      const assigneeMember = await tx.workspaceMember.findFirst({
+        where: { workspaceId: patch.workspaceId, userId: patch.assigneeUserId, deletedAt: null },
+      })
+      if (!assigneeMember) {
+        return { ok: false, message: "Assignee is not a member of workspace" }
+      }
     }
   }
   return { ok: true, message: "" }

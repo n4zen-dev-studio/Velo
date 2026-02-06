@@ -12,6 +12,7 @@ import { BASE_URL } from "@/config/api"
 import { syncController } from "@/services/sync/SyncController"
 import { useWorkspaceStore } from "@/stores/workspaceStore"
 import { upsertWorkspaceFromSync } from "@/services/db/repositories/workspacesRepository"
+import { ensureDefaultStatusesForWorkspace } from "@/services/db/repositories/statusesRepository"
 import { upsertWorkspaceMemberFromSync } from "@/services/db/repositories/workspaceMembersRepository"
 import { getActiveScopeKey } from "@/services/session/scope"
 import { useAppTheme } from "@/theme/context"
@@ -64,14 +65,6 @@ export function InviteAcceptScreen() {
       const client = createHttpClient(BASE_URL)
       const response = await acceptInvite(client, token)
       const scopeKey = await getActiveScopeKey()
-      await upsertWorkspaceFromSync(
-        {
-          id: response.workspace.id,
-          label: response.workspace.label,
-          kind: response.workspace.kind ?? "custom",
-        },
-        scopeKey,
-      )
       if (response.membership) {
         await upsertWorkspaceMemberFromSync(
           {
@@ -87,6 +80,15 @@ export function InviteAcceptScreen() {
           },
         )
       }
+      await upsertWorkspaceFromSync(
+        {
+          id: response.workspace.id,
+          label: response.workspace.label,
+          kind: response.workspace.kind ?? "custom",
+        },
+        scopeKey,
+      )
+      await ensureDefaultStatusesForWorkspace(response.workspace.id, scopeKey)
       await refreshWorkspaces()
       await syncController.triggerSync("manual")
       navigation.navigate("Home")

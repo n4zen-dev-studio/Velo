@@ -4,7 +4,7 @@ import { DEFAULT_STATUS_CATALOG } from "@/config/statusCatalog"
 import { getDb } from "@/services/db/db"
 import { execute, executeTx, queryAll, queryFirst, queryFirstTx } from "@/services/db/queries"
 import type { Status } from "@/services/db/types"
-import { getActiveScopeKey } from "@/services/session/scope"
+import { resolveWorkspaceScopeKey } from "@/services/db/scopeKey"
 
 export async function seedDefaultStatusesForWorkspace(
   workspaceId: string,
@@ -13,7 +13,7 @@ export async function seedDefaultStatusesForWorkspace(
 ) {
   const database = db ?? (await getDb())
   const exec = db ? executeTx : execute
-  const resolvedScope = scopeKey ?? (await getActiveScopeKey())
+  const resolvedScope = await resolveWorkspaceScopeKey(workspaceId, scopeKey, database)
   for (const status of DEFAULT_STATUS_CATALOG) {
     await exec(
       database,
@@ -22,7 +22,8 @@ export async function seedDefaultStatusesForWorkspace(
        ON CONFLICT(id, projectId, workspaceId) DO UPDATE SET
          name = excluded.name,
          orderIndex = excluded.orderIndex,
-         category = excluded.category`,
+         category = excluded.category,
+         scopeKey = excluded.scopeKey`,
       [status.id, workspaceId, status.name, status.orderIndex, status.category, resolvedScope],
     )
   }
@@ -35,7 +36,7 @@ export async function ensureDefaultStatusesForWorkspace(
 ) {
   const database = db ?? (await getDb())
   const queryFirstFn = db ? queryFirstTx : queryFirst
-  const resolvedScope = scopeKey ?? (await getActiveScopeKey())
+  const resolvedScope = await resolveWorkspaceScopeKey(workspaceId, scopeKey, database)
   const row = await queryFirstFn<{ count: number }>(
     database,
     "SELECT COUNT(1) as count FROM statuses WHERE scopeKey = ? AND workspaceId = ? AND projectId IS NULL",
@@ -48,7 +49,7 @@ export async function ensureDefaultStatusesForWorkspace(
 
 export async function listStatuses(workspaceId: string, projectId?: string | null, scopeKey?: string) {
   const database = await getDb()
-  const resolvedScope = scopeKey ?? (await getActiveScopeKey())
+  const resolvedScope = await resolveWorkspaceScopeKey(workspaceId, scopeKey, database)
 
   const isProjectScoped = projectId !== null && projectId !== undefined
   const rows = isProjectScoped

@@ -2,15 +2,21 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useFocusEffect } from "@react-navigation/native"
 
 import { listStatuses, listTasksByWorkspace } from "@/services/db"
+import { ensureDefaultStatusesForWorkspace } from "@/services/db/repositories/statusesRepository"
 import { updateTaskStatusOnly } from "@/services/db/taskMutations"
 import type { Status, Task } from "@/services/db/types"
 import { hasOpenConflict } from "@/services/db/repositories/conflictsRepository"
 import { personalWorkspaceId } from "@/services/db/repositories/workspacesRepository"
 import { getActiveScopeKey, GUEST_SCOPE_KEY } from "@/services/session/scope"
 import { getCurrentUserId } from "@/services/sync/identity"
+import { resolveUserLabel } from "@/utils/userLabel"
 import { syncController } from "@/services/sync/SyncController"
 import { refreshLocalCounts } from "@/services/sync/syncStore"
 import { useWorkspaceStore } from "@/stores/workspaceStore"
+import { createHttpClient } from "@/services/api/httpClient"
+import { BASE_URL } from "@/config/api"
+import { listWorkspaceMembers as listWorkspaceMembersApi } from "@/services/api/workspacesApi"
+import { upsertUserFromSync } from "@/services/db/repositories/usersRepository"
 
 
 export const useHomeViewModel = () => {
@@ -21,6 +27,8 @@ export const useHomeViewModel = () => {
   const [lastUserId, setLastUserId] = useState<string | null>(null)
   const [uiTasksByStatus, setUiTasksByStatus] = useState<Array<{ status: Status; tasks: Task[] }>>([])
   const [uiWorkspaceId, setUiWorkspaceId] = useState<string | null>(activeWorkspaceId ?? null)
+  const [assigneeFilter, setAssigneeFilter] = useState<"all" | "mine">("all")
+  const [assigneeLabels, setAssigneeLabels] = useState<Record<string, string>>({})
   const refreshingRef = useRef(false)
   const loadTokenRef = useRef(0)
   const lastValidWorkspaceIdRef = useRef<string | null>(null)
@@ -28,12 +36,22 @@ export const useHomeViewModel = () => {
 
   type BumpDir = "up" | "down"
 
+  const activeWorkspace = useMemo(() => {
+    return workspaces.find((w) => w.id === activeWorkspaceId) ?? null
+  }, [activeWorkspaceId, workspaces])
+
+  const filteredTasks = useMemo(() => {
+    if (assigneeFilter !== "mine") return tasks
+    if (!lastUserId) return tasks
+    return tasks.filter((task) => task.assigneeUserId === lastUserId)
+  }, [assigneeFilter, lastUserId, tasks])
+
   const tasksByStatus = useMemo(() => {
     return statuses.map((status) => ({
       status,
-      tasks: tasks.filter((task) => task.statusId === status.id),
+      tasks: filteredTasks.filter((task) => task.statusId === status.id),
     }))
-  }, [statuses, tasks])
+  }, [filteredTasks, statuses])
 
   const uiTasksByStatusRef = useRef(uiTasksByStatus)
 
@@ -52,6 +70,72 @@ export const useHomeViewModel = () => {
       lastValidWorkspaceIdRef.current = activeWorkspaceId
     }
   }, [activeWorkspaceId, guestWorkspaceId])
+
+  useEffect(() => {
+    if (activeWorkspace?.kind === "personal" && assigneeFilter !== "all") {
+      setAssigneeFilter("all")
+    }
+  }, [activeWorkspace?.kind, assigneeFilter])
+
+  useEffect(() => {
+    if (!activeWorkspace || activeWorkspace.kind === "personal") return
+    void (async () => {
+      try {
+        const client = createHttpClient(BASE_URL)
+        const members = await listWorkspaceMembersApi(client, activeWorkspace.id)
+        const scopeKey = await getActiveScopeKey()
+        await Promise.all(
+          members.map((member) => {
+            if (!member.user) return Promise.resolve()
+            return upsertUserFromSync({
+              id: member.user.id,
+              email: member.user.email ?? null,
+              username: member.user.username ?? null,
+              displayName: member.user.displayName ?? null,
+              avatarUrl: member.user.avatarUrl ?? null,
+              createdAt: member.user.createdAt,
+              updatedAt: member.user.updatedAt,
+              revision: member.user.revision,
+              deletedAt: member.user.deletedAt ?? null,
+              scopeKey,
+            })
+          }),
+        )
+        const assigneeIds = Array.from(
+          new Set(tasks.map((task) => task.assigneeUserId).filter(Boolean) as string[]),
+        )
+        if (assigneeIds.length > 0) {
+          const entries = await Promise.all(
+            assigneeIds.map(async (userId) => [userId, await resolveUserLabel(userId)] as const),
+          )
+          setAssigneeLabels(Object.fromEntries(entries))
+        }
+      } catch {
+        // Member labels fall back to cached users when offline.
+      }
+    })()
+  }, [activeWorkspace, tasks])
+
+  useEffect(() => {
+    const assigneeIds = Array.from(
+      new Set(tasks.map((task) => task.assigneeUserId).filter(Boolean) as string[]),
+    )
+    if (assigneeIds.length === 0) {
+      setAssigneeLabels({})
+      return
+    }
+    let isActive = true
+    void (async () => {
+      const entries = await Promise.all(
+        assigneeIds.map(async (userId) => [userId, await resolveUserLabel(userId)] as const),
+      )
+      if (!isActive) return
+      setAssigneeLabels(Object.fromEntries(entries))
+    })()
+    return () => {
+      isActive = false
+    }
+  }, [tasks])
 
   const getEffectiveWorkspaceId = useCallback(() => {
     if (activeWorkspaceId === guestWorkspaceId && lastValidWorkspaceIdRef.current) {
@@ -212,10 +296,18 @@ export const useHomeViewModel = () => {
 
   const loadDataForWorkspace = useCallback(async (workspaceId: string, token: number) => {
     console.log("[Home] load start", { workspaceId, token })
-    const [statusRows, taskRows] = await Promise.all([
+    let [statusRows, taskRows] = await Promise.all([
       listStatuses(workspaceId, null),
       listTasksByWorkspace(workspaceId),
     ])
+
+    if (statusRows.length === 0) {
+      const workspace = workspaces.find((item) => item.id === workspaceId)
+      if (workspace && workspace.kind !== "personal") {
+        await ensureDefaultStatusesForWorkspace(workspaceId, workspace.scopeKey)
+        statusRows = await listStatuses(workspaceId, null)
+      }
+    }
 
     if (token !== loadTokenRef.current || workspaceId !== getEffectiveWorkspaceId()) {
       console.log("[Home] load stale", { workspaceId, token })
@@ -239,7 +331,7 @@ export const useHomeViewModel = () => {
       statuses: uniqueStatuses.length,
       tasks: taskRows.length,
     })
-  }, [getEffectiveWorkspaceId])
+  }, [getEffectiveWorkspaceId, workspaces])
 
   const refreshAll = useCallback(
     async (options?: { mode?: "soft" | "hard" }) => {
@@ -349,6 +441,10 @@ export const useHomeViewModel = () => {
     tasksByStatus,
     uiTasksByStatus,
     uiWorkspaceId,
+    activeWorkspace,
+    assigneeFilter,
+    setAssigneeFilter,
+    assigneeLabels,
     refreshAll,
     syncNow,
     isRefreshing,

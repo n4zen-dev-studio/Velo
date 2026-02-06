@@ -1,7 +1,7 @@
 import { getDb } from "@/services/db/db"
 import { executeTransaction, executeTx, queryFirst, queryFirstTx } from "@/services/db/queries"
 import {
-  listPendingOps,
+  listPendingOpsForScopes,
   markOpsSent,
   markOpFailed,
   pruneSentOps,
@@ -24,6 +24,7 @@ import {
   markWorkspaceMemberDeletedFromSync,
   upsertWorkspaceMemberFromSync,
 } from "@/services/db/repositories/workspaceMembersRepository"
+import { ensureDefaultStatusesForWorkspace } from "@/services/db/repositories/statusesRepository"
 import type { ChangeLogEntry, Comment, Task } from "@/services/db/types"
 import { createHttpClient } from "@/services/api/httpClient"
 import { sync as syncApi } from "@/services/api/syncApi"
@@ -35,6 +36,11 @@ import { BASE_URL } from "@/config/api"
 import { delay } from "@/utils/delay"
 import { personalWorkspaceId } from "@/services/db/repositories/workspacesRepository"
 import { ANON_USER_ID } from "@/services/constants/identity"
+import {
+  listAllDataScopeKeys,
+  resolveScopeKeyForTaskId,
+  resolveWorkspaceScopeKey,
+} from "@/services/db/scopeKey"
 
 const MAX_OPS_PER_BATCH = 50
 const MAX_BATCHES = 5
@@ -47,6 +53,7 @@ export async function runSync(reason?: string) {
   isSyncRunning = true
   const db = await getDb()
   const scopeKey = await getActiveScopeKey()
+  const dataScopes = await listAllDataScopeKeys(scopeKey, db)
 
   try {
     const cursorRow = await queryFirst<{ lastCursor: string | null }>(
@@ -62,7 +69,7 @@ export async function runSync(reason?: string) {
 
     let appliedChanges = 0
     while (batches < MAX_BATCHES) {
-      const ops = await listPendingOps(MAX_OPS_PER_BATCH, scopeKey)
+      const ops = await listPendingOpsForScopes(dataScopes, MAX_OPS_PER_BATCH)
       if (ops.length === 0 && batches > 0) break
 
       const payload: SyncRequest = {
@@ -167,8 +174,9 @@ async function applyRemoteChange(db: SqliteDb, change: SyncChange) {
       return
     }
     const payload = change.payload as Task
-    const scopeKey = await getActiveScopeKey()
-    const resolvedWorkspaceId = payload.workspaceId ?? personalWorkspaceId(scopeKey)
+    const baseScope = await getActiveScopeKey()
+    const resolvedWorkspaceId = payload.workspaceId ?? personalWorkspaceId(baseScope)
+    const resolvedScope = await resolveWorkspaceScopeKey(resolvedWorkspaceId, baseScope, db)
     if (!payload.workspaceId && __DEV__) {
       console.warn("[sync] task missing workspaceId; defaulting to personal", {
         taskId: change.entityId,
@@ -177,7 +185,7 @@ async function applyRemoteChange(db: SqliteDb, change: SyncChange) {
     }
     const scoped = payload.scopeKey
       ? { ...payload, workspaceId: resolvedWorkspaceId }
-      : { ...payload, workspaceId: resolvedWorkspaceId, scopeKey }
+      : { ...payload, workspaceId: resolvedWorkspaceId, scopeKey: resolvedScope }
     if (__DEV__) {
       console.log("[sync] apply task workspaceId", {
         taskId: payload.id,
@@ -193,7 +201,10 @@ async function applyRemoteChange(db: SqliteDb, change: SyncChange) {
       return
     }
     const payload = change.payload as Comment
-    const scoped = payload.scopeKey ? payload : { ...payload, scopeKey: await getActiveScopeKey() }
+    const resolvedScope = payload.scopeKey
+      ? payload.scopeKey
+      : await resolveScopeKeyForTaskId(payload.taskId, undefined, db)
+    const scoped = payload.scopeKey ? payload : { ...payload, scopeKey: resolvedScope }
     await upsertCommentFromSync(scoped, db)
   }
 
@@ -213,17 +224,28 @@ async function applyRemoteChange(db: SqliteDb, change: SyncChange) {
       return
     }
     const payload = change.payload as any
-    const scoped = payload.scopeKey ? payload : { ...payload, scopeKey: await getActiveScopeKey() }
+    const baseScope = await getActiveScopeKey()
+    if (payload?.scopeKey?.startsWith?.("workspace:") && __DEV__) {
+      console.warn("[sync] workspace_member payload scopeKey overridden", {
+        scopeKey: payload.scopeKey,
+        workspaceId: payload.workspaceId,
+      })
+    }
+    const scoped = { ...payload, scopeKey: baseScope }
     await upsertWorkspaceMemberFromSync(scoped, db)
+    if (payload.workspaceId) {
+      await ensureDefaultStatusesForWorkspace(payload.workspaceId, scoped.scopeKey, db)
+    }
   }
 }
 
 async function hasPendingOpsForEntity(db: SqliteDb, entityType: string, entityId: string) {
-  const scopeKey = await getActiveScopeKey()
+  const scopes = await listAllDataScopeKeys(undefined, db)
+  const placeholders = scopes.map(() => "?").join(", ")
   const row = await queryFirstTx<{ count: number }>(
     db,
-    "SELECT COUNT(1) as count FROM change_log WHERE scopeKey = ? AND status = 'PENDING' AND entityType = ? AND entityId = ?",
-    [scopeKey, entityType, entityId],
+    `SELECT COUNT(1) as count FROM change_log WHERE scopeKey IN (${placeholders}) AND status = 'PENDING' AND entityType = ? AND entityId = ?`,
+    [...scopes, entityType, entityId],
   )
   return (row?.count ?? 0) > 0
 }
@@ -231,7 +253,16 @@ async function hasPendingOpsForEntity(db: SqliteDb, entityType: string, entityId
 async function createConflict(db: SqliteDb, change: SyncChange, localPayload?: Task | Comment | null) {
   const localRevision = localPayload?.revision ?? ""
   const conflictId = `${change.entityType}:${change.entityId}`
-  const scopeKey = await getActiveScopeKey()
+  const baseScope = await getActiveScopeKey()
+  const scopeKey =
+    localPayload?.scopeKey ??
+    (change.entityType === "task"
+      ? await resolveWorkspaceScopeKey(
+          (change.payload as any)?.workspaceId ?? personalWorkspaceId(baseScope),
+          baseScope,
+          db,
+        )
+      : await resolveScopeKeyForTaskId((change.payload as any)?.taskId ?? "", baseScope, db))
 
   await executeTx(
     db,

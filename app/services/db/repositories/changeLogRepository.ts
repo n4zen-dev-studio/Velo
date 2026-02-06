@@ -82,6 +82,17 @@ export async function listPendingOps(limit = 50, scopeKey?: string) {
   )
 }
 
+export async function listPendingOpsForScopes(scopes: string[], limit = 50) {
+  const database = await getDb()
+  if (scopes.length === 0) return []
+  const placeholders = scopes.map(() => "?").join(", ")
+  return queryAll<ChangeLogEntry>(
+    database,
+    `SELECT * FROM change_log WHERE scopeKey IN (${placeholders}) AND status = 'PENDING' ORDER BY createdAt ASC LIMIT ?`,
+    [...scopes, limit],
+  )
+}
+
 export async function listFailedOps(limit = 50, scopeKey?: string) {
   const database = await getDb()
   const resolvedScope = scopeKey ?? (await getActiveScopeKey())
@@ -99,6 +110,18 @@ export async function countPendingOps(scopeKey?: string) {
     database,
     "SELECT COUNT(1) as count FROM change_log WHERE scopeKey = ? AND status = 'PENDING'",
     [resolvedScope],
+  )
+  return row?.count ?? 0
+}
+
+export async function countPendingOpsForScopes(scopes: string[]) {
+  const database = await getDb()
+  if (scopes.length === 0) return 0
+  const placeholders = scopes.map(() => "?").join(", ")
+  const row = await queryFirst<{ count: number }>(
+    database,
+    `SELECT COUNT(1) as count FROM change_log WHERE scopeKey IN (${placeholders}) AND status = 'PENDING'`,
+    scopes,
   )
   return row?.count ?? 0
 }

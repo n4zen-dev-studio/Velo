@@ -1,4 +1,4 @@
-export const schemaVersion = 4
+export const schemaVersion = 7
 
 export const createTablesSql = `
 CREATE TABLE IF NOT EXISTS users (
@@ -15,13 +15,14 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 CREATE TABLE IF NOT EXISTS workspaces (
-  id TEXT PRIMARY KEY,
+  id TEXT NOT NULL,
   label TEXT NOT NULL,
   kind TEXT NOT NULL,
   createdAt INTEGER NOT NULL,
   updatedAt INTEGER NOT NULL,
   remoteId TEXT,
-  scopeKey TEXT NOT NULL
+  scopeKey TEXT NOT NULL,
+  PRIMARY KEY (id, scopeKey)
 );
 
 CREATE TABLE IF NOT EXISTS workspace_state (

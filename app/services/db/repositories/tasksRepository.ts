@@ -13,7 +13,7 @@ import type { Priority, Task } from "@/services/db/types"
 import { decryptText, encryptText } from "@/utils/crypto"
 import { enqueueOp } from "@/services/db/repositories/changeLogRepository"
 import { generateUuidV4, getCurrentUserId } from "@/services/sync/identity"
-import { getActiveScopeKey } from "@/services/session/scope"
+import { listAllDataScopeKeys, resolveScopeKeyForTaskId, resolveWorkspaceScopeKey } from "@/services/db/scopeKey"
 
 interface TaskRow {
   id: string
@@ -61,7 +61,7 @@ async function upsertTaskInternal(
   const runner = async (txDb: SQLiteDatabase, useTxRunner: boolean) => {
     const exec = useTxRunner ? executeTx : execute
     const queryFirstFn = useTxRunner ? queryFirstTx : queryFirst
-    const scopeKey = task.scopeKey ?? (await getActiveScopeKey())
+    const scopeKey = task.scopeKey ?? (await resolveWorkspaceScopeKey(task.workspaceId, undefined, txDb))
     const existing = await queryFirstFn<TaskRow>(
       txDb,
       "SELECT * FROM tasks WHERE id = ? AND scopeKey = ?",
@@ -185,7 +185,7 @@ export async function listTasksByWorkspace(
   scopeKey?: string,
 ) {
   const database = await getDb()
-  const resolvedScope = scopeKey ?? (await getActiveScopeKey())
+  const resolvedScope = await resolveWorkspaceScopeKey(workspaceId, scopeKey, database)
   const isProjectScoped = projectId !== undefined
   const sql = isProjectScoped
     ? projectId
@@ -203,11 +203,12 @@ export async function listTasksByWorkspace(
 
 export async function getTaskById(taskId: string, scopeKey?: string) {
   const database = await getDb()
-  const resolvedScope = scopeKey ?? (await getActiveScopeKey())
+  const scopes = await listAllDataScopeKeys(scopeKey, database)
+  const placeholders = scopes.map(() => "?").join(", ")
   const row = await queryFirst<TaskRow>(
     database,
-    "SELECT * FROM tasks WHERE id = ? AND scopeKey = ?",
-    [taskId, resolvedScope],
+    `SELECT * FROM tasks WHERE id = ? AND scopeKey IN (${placeholders})`,
+    [taskId, ...scopes],
   )
   if (!row) return null
   return mapTaskRow(row)
@@ -221,10 +222,10 @@ async function markTaskDeletedInternal(
 ) {
   const database = db ?? (await getDb())
   const useTx = db !== undefined || options.useTransaction
-  const resolvedScope = await getActiveScopeKey()
   const runner = async (txDb: SQLiteDatabase, useTxRunner: boolean) => {
     const exec = useTxRunner ? executeTx : execute
     const queryFirstFn = useTxRunner ? queryFirstTx : queryFirst
+    const resolvedScope = await resolveScopeKeyForTaskId(taskId, undefined, txDb)
     const existing = await queryFirstFn<TaskRow>(
       txDb,
       "SELECT * FROM tasks WHERE id = ? AND scopeKey = ?",
