@@ -1,9 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react"
 import {
+  LayoutAnimation,
   Modal,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
+  UIManager,
   View,
   ViewStyle,
   TextStyle,
@@ -40,6 +43,7 @@ export function HomeScreen() {
     tasksByStatus,
     refreshAll,
     isRefreshing,
+    bumpTaskStatus,
   } = useHomeViewModel()
 
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false)
@@ -65,6 +69,12 @@ export function HomeScreen() {
     if (!workspaceMenuOpen) return
     void loadInvitesCount()
   }, [loadInvitesCount, workspaceMenuOpen])
+
+  useEffect(() => {
+    if (Platform.OS !== "android") return
+    if (!UIManager.setLayoutAnimationEnabledExperimental) return
+    UIManager.setLayoutAnimationEnabledExperimental(true)
+  }, [])
 
   return (
     <Screen preset="fixed" safeAreaEdges={["top", "bottom"]} contentContainerStyle={themed($screen)}>
@@ -103,7 +113,7 @@ export function HomeScreen() {
         refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={refreshAll} />}
         showsVerticalScrollIndicator={false}
       >
-        {tasksByStatus.map(({ status, tasks }) => (
+        {tasksByStatus.map(({ status, tasks }, laneIndex) => (
           <View
             key={`${status.workspaceId}:${status.projectId ?? "personal"}:${status.id}`}
             style={themed($section)}
@@ -126,9 +136,45 @@ export function HomeScreen() {
                     style={themed($pressableCard)}
                   >
                     <GlassCard>
-                      <View style={themed($taskRow)}>
-                        <PriorityDot priority={task.priority} />
-                        <Text preset="subheading" text={task.title} style={themed($taskTitle)} />
+                      <View style={themed($taskHeaderRow)}>
+                        <View style={themed($taskRow)}>
+                          <PriorityDot priority={task.priority} />
+                          <Text preset="subheading" text={task.title} style={themed($taskTitle)} />
+                        </View>
+                        <View style={themed($statusControls)}>
+                          {laneIndex > 0 ? (
+                            <Pressable
+                              onPress={(e) => {
+                                e.stopPropagation?.()
+                                LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut)
+                                void bumpTaskStatus(task.id, "up")
+                              }}
+                              style={({ pressed }) => [
+                                themed($statusButton),
+                                pressed ? themed($statusButtonPressed) : null,
+                              ]}
+                              hitSlop={6}
+                            >
+                              <Text preset="formHelper" text="↑" style={themed($statusArrow)} />
+                            </Pressable>
+                          ) : null}
+                          {laneIndex < tasksByStatus.length - 1 ? (
+                            <Pressable
+                              onPress={(e) => {
+                                e.stopPropagation?.()
+                                LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut)
+                                void bumpTaskStatus(task.id, "down")
+                              }}
+                              style={({ pressed }) => [
+                                themed($statusButton),
+                                pressed ? themed($statusButtonPressed) : null,
+                              ]}
+                              hitSlop={6}
+                            >
+                              <Text preset="formHelper" text="↓" style={themed($statusArrow)} />
+                            </Pressable>
+                          ) : null}
+                        </View>
                       </View>
                       {!!task.description && (
                         <Text preset="formHelper" text={task.description} style={themed($taskDesc)} />
@@ -311,12 +357,45 @@ const $taskRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   marginBottom: spacing.xs,
 })
 
+const $taskHeaderRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  alignItems: "flex-start",
+  justifyContent: "space-between",
+  gap: spacing.sm,
+})
+
 const $taskTitle: ThemedStyle<TextStyle> = () => ({
   flex: 1,
 })
 
 const $taskDesc: ThemedStyle<TextStyle> = () => ({
   opacity: 0.9,
+})
+
+const $statusControls: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  alignItems: "center",
+  gap: spacing.xs,
+})
+
+const $statusButton: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  width: 28,
+  height: 28,
+  borderRadius: 10,
+  alignItems: "center",
+  justifyContent: "center",
+  borderWidth: 1,
+  borderColor: colors.border,
+  backgroundColor: colors.background,
+})
+
+const $statusButtonPressed: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  borderColor: colors.palette.primary300,
+  backgroundColor: colors.palette.primary100,
+})
+
+const $statusArrow: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.text,
+  lineHeight: 18,
 })
 
 const $fab: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
