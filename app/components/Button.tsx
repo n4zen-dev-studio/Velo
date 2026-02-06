@@ -39,6 +39,12 @@ export interface ButtonProps extends PressableProps {
   disabled?: boolean
   disabledStyle?: StyleProp<ViewStyle>
 }
+function isDarkFromColors(colors: any) {
+  // Most Ignite themes use a dark background in dark mode
+  // Fallback is safe and non-breaking
+  const bg = colors.background ?? "#000"
+  return bg.startsWith("#0") || bg.startsWith("#1") || bg.startsWith("#2")
+}
 
 /**
  * Glassy modern button:
@@ -178,26 +184,61 @@ const $glassLightBoost: ViewStyle = {
   // elevation: 5,
 }
 
-const $viewPresets: Record<Presets, ThemedStyleArray<ViewStyle>> = {
-  // keep legacy presets working
-  default: [
-    $styles.row,
-    $baseViewStyle,
-    ({ colors }) => ({
-      borderWidth: 1,
-      borderColor: colors.palette.neutral400,
-      backgroundColor: colors.palette.neutral100,
-    }),
-  ],
-  filled: [$styles.row, $baseViewStyle, ({ colors }) => ({ backgroundColor: colors.palette.neutral300 })],
-  reversed: [$styles.row, $baseViewStyle, ({ colors }) => ({ backgroundColor: colors.palette.neutral800 })],
+const $regularPurpleGlassView: ThemedStyle<ViewStyle> = ({ colors }) => {
+  const isDark = isDarkFromColors(colors)
 
-  /**
-   * ✅ Modern "glass" default:
-   * - translucent fill
-   * - thin bright stroke
-   * - uses your theme card/background values if present
-   */
+  const bg = isDark
+    ? "rgba(190, 155, 255, 0.18)" // light purple glass on dark bg
+    : "rgba(88, 52, 170, 0.22)"   // darker purple glass on light bg
+
+  const border = isDark
+    ? "rgba(230, 210, 255, 0.28)"
+    : "rgba(88, 52, 170, 0.30)"
+
+  return {
+    borderWidth: 1,
+    borderColor: border,
+    backgroundColor: bg,
+
+    shadowColor: "#000",
+    shadowOpacity: isDark ? 0.22 : 0.12,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 10 },
+  }
+}
+
+const $regularPurpleGlassText: ThemedStyle<TextStyle> = ({ colors }) => {
+  const isDark = isDarkFromColors(colors)
+
+  return {
+    color: isDark
+      ? "rgba(255,255,255,0.94)"
+      : "rgba(0,0,0,0.96)",
+  }
+}
+
+const $regularPurpleGlassPressedView: ThemedStyle<ViewStyle> = ({ colors }) => {
+  const isDark = isDarkFromColors(colors)
+
+  return {
+    backgroundColor: isDark
+      ? "rgba(190, 155, 255, 0.26)"
+      : "rgba(88, 52, 170, 0.30)",
+    borderColor: isDark
+      ? "rgba(240, 225, 255, 0.34)"
+      : "rgba(88, 52, 170, 0.36)",
+  }
+}
+
+
+
+const $viewPresets: Record<Presets, ThemedStyleArray<ViewStyle>> = {
+  // ✅ regular presets now use purple glass styling
+  default: [$styles.row, $baseViewStyle, $regularPurpleGlassView],
+  filled: [$styles.row, $baseViewStyle, $regularPurpleGlassView],
+  reversed: [$styles.row, $baseViewStyle, $regularPurpleGlassView],
+
+  // ✅ KEEP THIS EXACTLY THE SAME AS YOU SAID
   glass: [
     $styles.row,
     $baseViewStyle,
@@ -209,10 +250,56 @@ const $viewPresets: Record<Presets, ThemedStyleArray<ViewStyle>> = {
   ],
 }
 
+
+// const $viewPresets: Record<Presets, ThemedStyleArray<ViewStyle>> = {
+//   // keep legacy presets working
+//   default: [
+//     $styles.row,
+//     $baseViewStyle,
+//     ({ colors }) => ({
+//       borderWidth: 1,
+//       borderColor: colors.palette.neutral400,
+//       backgroundColor: colors.palette.neutral100,
+//     }),
+//   ],
+//   filled: [$styles.row, $baseViewStyle, ({ colors }) => ({ backgroundColor: colors.palette.neutral300 })],
+//   reversed: [$styles.row, $baseViewStyle, ({ colors }) => ({ backgroundColor: colors.palette.neutral800 })],
+
+//   /**
+//    * ✅ Modern "glass" default:
+//    * - translucent fill
+//    * - thin bright stroke
+//    * - uses your theme card/background values if present
+//    */
+//   glass: [
+//     $styles.row,
+//     $baseViewStyle,
+//     ({ colors }) => ({
+//       borderWidth: 1,
+//       borderColor: "rgba(255,255,255,0.14)",
+//       backgroundColor: colors.card ?? "rgba(255,255,255,0.1)",
+//     }),
+//   ],
+// }
+
+// const $textPresets: Record<Presets, ThemedStyleArray<TextStyle>> = {
+//   default: [$baseTextStyle],
+//   filled: [$baseTextStyle],
+//   reversed: [$baseTextStyle, ({ colors }) => ({ color: colors.palette.neutral100 })],
+//   glass: [
+//     $baseTextStyle,
+//     ({ colors }) => ({
+//       color: colors.text ?? "rgba(255,255,255,0.92)",
+//     }),
+//   ],
+// }
+
 const $textPresets: Record<Presets, ThemedStyleArray<TextStyle>> = {
-  default: [$baseTextStyle],
-  filled: [$baseTextStyle],
-  reversed: [$baseTextStyle, ({ colors }) => ({ color: colors.palette.neutral100 })],
+  default: [$baseTextStyle, $regularPurpleGlassText],
+  filled: [$baseTextStyle, $regularPurpleGlassText],
+  reversed: [$baseTextStyle, $regularPurpleGlassText],
+
+  // ✅ KEEP THIS EXACTLY THE SAME
   glass: [
     $baseTextStyle,
     ({ colors }) => ({
@@ -221,14 +308,27 @@ const $textPresets: Record<Presets, ThemedStyleArray<TextStyle>> = {
   ],
 }
 
-const $pressedViewPresets: Record<Presets, ThemedStyle<ViewStyle>> = {
-  default: ({ colors }) => ({ backgroundColor: colors.palette.neutral200 }),
-  filled: ({ colors }) => ({ backgroundColor: colors.palette.neutral400 }),
-  reversed: ({ colors }) => ({ backgroundColor: colors.palette.neutral700 }),
 
-  /**
-   * Glass press: slightly brighter + subtle scale-ish feel (via padding/opacity)
-   */
+// const $pressedViewPresets: Record<Presets, ThemedStyle<ViewStyle>> = {
+//   default: ({ colors }) => ({ backgroundColor: colors.palette.neutral200 }),
+//   filled: ({ colors }) => ({ backgroundColor: colors.palette.neutral400 }),
+//   reversed: ({ colors }) => ({ backgroundColor: colors.palette.neutral700 }),
+
+//   /**
+//    * Glass press: slightly brighter + subtle scale-ish feel (via padding/opacity)
+//    */
+//   glass: () => ({
+//     backgroundColor: "rgba(0,0,0,0.12)",
+//     borderColor: "rgba(255,255,255,0.18)",
+//   }),
+// }
+
+const $pressedViewPresets: Record<Presets, ThemedStyle<ViewStyle>> = {
+  default: $regularPurpleGlassPressedView,
+  filled: $regularPurpleGlassPressedView,
+  reversed: $regularPurpleGlassPressedView,
+
+  // (you can keep yours as-is; this doesn’t change it)
   glass: () => ({
     backgroundColor: "rgba(0,0,0,0.12)",
     borderColor: "rgba(255,255,255,0.18)",

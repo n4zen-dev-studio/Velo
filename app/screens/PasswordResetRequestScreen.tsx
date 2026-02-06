@@ -27,7 +27,7 @@ export function PasswordResetRequestScreen() {
   }
 
   return (
-    <Screen preset="scroll" contentContainerStyle={themed($screen)}>
+    <Screen preset="scroll" safeAreaEdges={['top', 'bottom']} contentContainerStyle={themed($screen)}>
       <View style={themed($header)}>
         <Text preset="heading" text="Reset password" />
         <Text preset="formHelper" text="Enter your email to receive a reset link." />
