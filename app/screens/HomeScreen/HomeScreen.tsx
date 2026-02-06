@@ -146,8 +146,9 @@ export function HomeScreen() {
                             <Pressable
                               onPress={(e) => {
                                 e.stopPropagation?.()
+                                console.log("[Arrow] up pressed", { taskId: task.id, laneIndex })
                                 LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut)
-                                void bumpTaskStatus(task.id, "up")
+                                void bumpTaskStatus(task.id, laneIndex, "up")
                               }}
                               style={({ pressed }) => [
                                 themed($statusButton),
@@ -162,8 +163,9 @@ export function HomeScreen() {
                             <Pressable
                               onPress={(e) => {
                                 e.stopPropagation?.()
+                                console.log("[Arrow] down pressed", { taskId: task.id, laneIndex })
                                 LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut)
-                                void bumpTaskStatus(task.id, "down")
+                                void bumpTaskStatus(task.id, laneIndex, "down")
                               }}
                               style={({ pressed }) => [
                                 themed($statusButton),

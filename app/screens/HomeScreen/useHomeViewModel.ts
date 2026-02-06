@@ -20,18 +20,17 @@ export const useHomeViewModel = () => {
   type BumpDir = "up" | "down"
 
   const bumpTaskStatus = useCallback(
-    async (taskId: string, dir: BumpDir) => {
-      const laneIndex = tasksByStatus.findIndex((lane) => lane.tasks.some((t) => t.id === taskId))
-      if (laneIndex < 0) return
+    async (taskId: string, laneIndex: number, dir: BumpDir) => {
+      if (laneIndex < 0 || laneIndex >= tasksByStatus.length) return
 
       const targetIndex = dir === "up" ? laneIndex - 1 : laneIndex + 1
-      const targetLane = tasksByStatus[targetIndex]
-      if (!targetLane) return
+      if (targetIndex < 0 || targetIndex >= tasksByStatus.length) return
+
+      const targetStatusId = tasksByStatus[targetIndex].status.id
+      console.log("[Home] bumpTaskStatus", { taskId, laneIndex, dir, targetIndex, targetStatusId })
 
       try {
-        await updateTaskStatusOnly(taskId, targetLane.status.id)
-
-        // safest: re-run your existing pipeline so the task appears under the new lane
+        await updateTaskStatusOnly(taskId, targetStatusId)
         await refreshAll()
       } catch (e) {
         console.warn("[Home] bumpTaskStatus failed", e)
