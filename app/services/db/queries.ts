@@ -148,6 +148,13 @@ export async function execute(
   sql: string,
   params?: Record<string, unknown> | unknown[],
 ) {
+  if (txDepth > 0) {
+    if (__DEV__) {
+      console.warn("[DB] execute called inside transaction; use executeTx instead")
+      console.warn(new Error("[DB] execute misuse").stack)
+    }
+    return executeInternal(db, sql, params)
+  }
   return withWriteLock(() => executeInternal(db, sql, params))
 }
 
@@ -217,6 +224,10 @@ export async function queryFirstTx<T>(
   params?: Record<string, unknown> | unknown[],
 ) {
   return queryFirst<T>(db, sql, params)
+}
+
+export function isInTransaction() {
+  return txDepth > 0
 }
 export async function executeTransaction<T>(
   db: SQLiteDatabase,
