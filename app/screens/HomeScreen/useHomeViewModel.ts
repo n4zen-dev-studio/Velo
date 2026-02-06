@@ -17,24 +17,38 @@ export const useHomeViewModel = () => {
   const [tasks, setTasks] = useState<Task[]>([])
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [lastUserId, setLastUserId] = useState<string | null>(null)
-  const tasksByStatusRef = useRef<Array<{ status: Status; tasks: Task[] }>>([])
 
   type BumpDir = "up" | "down"
 
+  const tasksByStatus = useMemo(() => {
+    return statuses.map((status) => ({
+      status,
+      tasks: tasks.filter((task) => task.statusId === status.id),
+    }))
+  }, [statuses, tasks])
+
+  const tasksByStatusRef = useRef(tasksByStatus)
+
+  useEffect(() => {
+    tasksByStatusRef.current = tasksByStatus
+  }, [tasksByStatus])
+
   const bumpTaskStatus = useCallback(
     async (taskId: string, laneIndex: number, dir: BumpDir) => {
-      if (laneIndex < 0 || laneIndex >= tasksByStatus.length) {
+      const lanes = tasksByStatusRef.current
+      const lanesCount = lanes.length
+      if (laneIndex < 0 || laneIndex >= lanesCount) {
         console.warn("[Home] bumpTaskStatus invalid laneIndex", {
           taskId,
           laneIndex,
-          lanesCount: tasksByStatus.length,
+          lanesCount,
         })
         return
       }
 
-      const currentLane = tasksByStatus[laneIndex]
+      const currentLane = lanes[laneIndex]
       const laneTask = currentLane?.tasks.find((t) => t.id === taskId)
-      const fallbackTask = tasksByStatus.flatMap((lane) => lane.tasks).find((t) => t.id === taskId)
+      const fallbackTask = lanes.flatMap((lane) => lane.tasks).find((t) => t.id === taskId)
       const currentTask = laneTask ?? fallbackTask
       if (!currentTask) {
         console.warn("[Home] bumpTaskStatus task not found in lanes", { taskId, laneIndex })
@@ -44,7 +58,7 @@ export const useHomeViewModel = () => {
       const currentStatusId = currentTask.statusId
       const currentProjectId = currentTask.projectId ?? null
       const currentWorkspaceId = currentTask.workspaceId ?? currentLane?.status.workspaceId
-      const lanesForProject = tasksByStatus.filter((lane) => {
+      const lanesForProject = lanes.filter((lane) => {
         const laneProjectId = lane.status.projectId ?? null
         return laneProjectId === currentProjectId && lane.status.workspaceId === currentWorkspaceId
       })
@@ -78,6 +92,7 @@ export const useHomeViewModel = () => {
       console.log("[Home] bumpTaskStatus", {
         taskId,
         laneIndex,
+        lanesCount,
         dir,
         currentStatusId,
         groupLaneIndex,
@@ -106,7 +121,7 @@ export const useHomeViewModel = () => {
         console.warn("[Home] bumpTaskStatus failed", e)
       }
     },
-    [tasksByStatus, refreshAll],
+    [refreshAll],
   )
 
 
@@ -172,17 +187,6 @@ export const useHomeViewModel = () => {
       }
     }, [loadStatuses, loadTasks, refreshAll, lastUserId]),
   )
-
-  const tasksByStatus = useMemo(() => {
-    return statuses.map((status) => ({
-      status,
-      tasks: tasks.filter((task) => task.statusId === status.id),
-    }))
-  }, [statuses, tasks])
-
-  useEffect(() => {
-    tasksByStatusRef.current = tasksByStatus
-  }, [tasksByStatus])
 
   return {
     workspaces,
