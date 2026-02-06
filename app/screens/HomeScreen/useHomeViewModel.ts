@@ -213,7 +213,6 @@ export const useHomeViewModel = () => {
       })
       setIsRefreshing(true)
       try {
-        await syncController.triggerSync("manual")
         if (mode === "hard") {
           await Promise.all([refreshWorkspaces(), loadStatuses(), loadTasks(), refreshLocalCounts()])
         } else {
@@ -232,6 +231,22 @@ export const useHomeViewModel = () => {
       }
     },
     [activeWorkspaceId, loadStatuses, loadTasks, refreshWorkspaces],
+  )
+
+  const syncNow = useCallback(
+    async (reason: "manual" | "auto" | string = "manual") => {
+      if (refreshingRef.current) return
+      refreshingRef.current = true
+      setIsRefreshing(true)
+      try {
+        await syncController.triggerSync(reason)
+        await Promise.all([refreshWorkspaces(), loadStatuses(), loadTasks(), refreshLocalCounts()])
+      } finally {
+        setIsRefreshing(false)
+        refreshingRef.current = false
+      }
+    },
+    [loadStatuses, loadTasks, refreshWorkspaces],
   )
 
   useEffect(() => {
@@ -276,6 +291,7 @@ export const useHomeViewModel = () => {
     tasksByStatus,
     uiTasksByStatus,
     refreshAll,
+    syncNow,
     isRefreshing,
     bumpTaskStatus,
   }
