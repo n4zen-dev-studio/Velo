@@ -5,7 +5,8 @@ import { listStatuses, listTasksByWorkspace } from "@/services/db"
 import { updateTaskStatusOnly } from "@/services/db/taskMutations"
 import type { Status, Task } from "@/services/db/types"
 import { hasOpenConflict } from "@/services/db/repositories/conflictsRepository"
-import { getActiveScopeKey } from "@/services/session/scope"
+import { personalWorkspaceId } from "@/services/db/repositories/workspacesRepository"
+import { getActiveScopeKey, GUEST_SCOPE_KEY } from "@/services/session/scope"
 import { getCurrentUserId } from "@/services/sync/identity"
 import { syncController } from "@/services/sync/SyncController"
 import { refreshLocalCounts } from "@/services/sync/syncStore"
@@ -22,6 +23,8 @@ export const useHomeViewModel = () => {
   const [uiWorkspaceId, setUiWorkspaceId] = useState<string | null>(activeWorkspaceId ?? null)
   const refreshingRef = useRef(false)
   const loadTokenRef = useRef(0)
+  const lastValidWorkspaceIdRef = useRef<string | null>(null)
+  const guestWorkspaceId = personalWorkspaceId(GUEST_SCOPE_KEY)
 
   type BumpDir = "up" | "down"
 
@@ -44,8 +47,26 @@ export const useHomeViewModel = () => {
     uiTasksByStatusRef.current = uiTasksByStatus
   }, [uiTasksByStatus])
 
+  useEffect(() => {
+    if (activeWorkspaceId && activeWorkspaceId !== guestWorkspaceId) {
+      lastValidWorkspaceIdRef.current = activeWorkspaceId
+    }
+  }, [activeWorkspaceId, guestWorkspaceId])
+
+  const getEffectiveWorkspaceId = useCallback(() => {
+    if (activeWorkspaceId === guestWorkspaceId && lastValidWorkspaceIdRef.current) {
+      console.warn("[Home] Using last valid workspace during guest fallback", {
+        activeWorkspaceId,
+        lastValidWorkspaceId: lastValidWorkspaceIdRef.current,
+      })
+      return lastValidWorkspaceIdRef.current
+    }
+    return activeWorkspaceId
+  }, [activeWorkspaceId, guestWorkspaceId])
+
   const bumpTaskStatus = useCallback(
     async (taskId: string, laneIndex: number, dir: BumpDir) => {
+      const effectiveWorkspaceId = getEffectiveWorkspaceId()
       const lanes = uiTasksByStatusRef.current
       const lanesCount = lanes.length
       if (laneIndex < 0 || laneIndex >= lanesCount) {
@@ -69,11 +90,11 @@ export const useHomeViewModel = () => {
       const currentStatusId = currentTask.statusId
       const currentProjectId = currentTask.projectId ?? null
       const currentWorkspaceId = currentTask.workspaceId ?? currentLane?.status.workspaceId
-      if (activeWorkspaceId && currentWorkspaceId && currentWorkspaceId !== activeWorkspaceId) {
+      if (effectiveWorkspaceId && currentWorkspaceId && currentWorkspaceId !== effectiveWorkspaceId) {
         console.warn("[Home] bumpTaskStatus workspace mismatch", {
           taskId,
           currentWorkspaceId,
-          activeWorkspaceId,
+          activeWorkspaceId: effectiveWorkspaceId,
         })
         return
       }
@@ -185,7 +206,7 @@ export const useHomeViewModel = () => {
         console.warn("[Home] bumpTaskStatus failed", e)
       }
     },
-    [refreshAll],
+    [getEffectiveWorkspaceId, refreshAll],
   )
 
 
@@ -196,7 +217,7 @@ export const useHomeViewModel = () => {
       listTasksByWorkspace(workspaceId),
     ])
 
-    if (token !== loadTokenRef.current || workspaceId !== activeWorkspaceId) {
+    if (token !== loadTokenRef.current || workspaceId !== getEffectiveWorkspaceId()) {
       console.log("[Home] load stale", { workspaceId, token })
       return
     }
@@ -218,7 +239,7 @@ export const useHomeViewModel = () => {
       statuses: uniqueStatuses.length,
       tasks: taskRows.length,
     })
-  }, [activeWorkspaceId])
+  }, [getEffectiveWorkspaceId])
 
   const refreshAll = useCallback(
     async (options?: { mode?: "soft" | "hard" }) => {
@@ -235,7 +256,7 @@ export const useHomeViewModel = () => {
       })
       setIsRefreshing(true)
       try {
-        const workspaceId = activeWorkspaceId
+        const workspaceId = getEffectiveWorkspaceId()
         if (workspaceId) {
           const token = ++loadTokenRef.current
           if (mode === "hard") {
@@ -256,7 +277,7 @@ export const useHomeViewModel = () => {
         })
       }
     },
-    [activeWorkspaceId, loadDataForWorkspace, refreshWorkspaces],
+    [activeWorkspaceId, getEffectiveWorkspaceId, loadDataForWorkspace, refreshWorkspaces],
   )
 
   const syncNow = useCallback(
@@ -266,7 +287,7 @@ export const useHomeViewModel = () => {
       setIsRefreshing(true)
       try {
         await syncController.triggerSync(reason)
-        const workspaceId = activeWorkspaceId
+        const workspaceId = getEffectiveWorkspaceId()
         if (workspaceId) {
           const token = ++loadTokenRef.current
           await Promise.all([refreshWorkspaces(), loadDataForWorkspace(workspaceId, token), refreshLocalCounts()])
@@ -276,23 +297,25 @@ export const useHomeViewModel = () => {
         refreshingRef.current = false
       }
     },
-    [activeWorkspaceId, loadDataForWorkspace, refreshWorkspaces],
+    [activeWorkspaceId, getEffectiveWorkspaceId, loadDataForWorkspace, refreshWorkspaces],
   )
 
   useEffect(() => {
-    if (!activeWorkspaceId) return
+    const workspaceId = getEffectiveWorkspaceId()
+    if (!workspaceId) return
     const token = ++loadTokenRef.current
-    void loadDataForWorkspace(activeWorkspaceId, token)
-  }, [activeWorkspaceId, loadDataForWorkspace])
+    void loadDataForWorkspace(workspaceId, token)
+  }, [activeWorkspaceId, getEffectiveWorkspaceId, loadDataForWorkspace])
 
   useFocusEffect(
     useCallback(() => {
       let isActive = true
 
       const run = async () => {
-        if (activeWorkspaceId) {
+        const workspaceId = getEffectiveWorkspaceId()
+        if (workspaceId) {
           const token = ++loadTokenRef.current
-          void loadDataForWorkspace(activeWorkspaceId, token)
+          void loadDataForWorkspace(workspaceId, token)
         }
 
         const currentUserId = await getCurrentUserId()
@@ -312,7 +335,7 @@ export const useHomeViewModel = () => {
       return () => {
         isActive = false
       }
-    }, [activeWorkspaceId, loadDataForWorkspace, refreshAll, lastUserId]),
+    }, [activeWorkspaceId, getEffectiveWorkspaceId, loadDataForWorkspace, refreshAll, lastUserId]),
   )
 
   useEffect(() => {

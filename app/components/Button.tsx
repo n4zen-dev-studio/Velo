@@ -166,15 +166,16 @@ const $sheenOverlay: ThemedStyle<ViewStyle> = ({}) => ({
 
 const $glassLightBoost: ViewStyle = {
   // More visible glass on light backgrounds
-  backgroundColor: "rgba(0,0,0,0.05)",
+  backgroundColor: "rgba(0,0,0,0.1)",
   borderColor: "rgba(0,0,0,0.04)",
+  // opacity:1,
 
   // subtle lift so it reads like a component, not flat text
   shadowColor: "#000",
   shadowOpacity: 0.08,
   shadowRadius: 14,
   shadowOffset: { width: 0, height: 8 },
-  elevation: 5,
+  // elevation: 5,
 }
 
 const $viewPresets: Record<Presets, ThemedStyleArray<ViewStyle>> = {
@@ -203,7 +204,7 @@ const $viewPresets: Record<Presets, ThemedStyleArray<ViewStyle>> = {
     ({ colors }) => ({
       borderWidth: 1,
       borderColor: "rgba(255,255,255,0.14)",
-      backgroundColor: colors.card ?? "rgba(255,255,255,0.08)",
+      backgroundColor: colors.card ?? "rgba(255,255,255,0.1)",
     }),
   ],
 }

@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type PropsWithChildren,
 } from "react"
@@ -55,17 +56,54 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
     personalWorkspaceId(GUEST_SCOPE_KEY),
   )
   const [isHydrated, setIsHydrated] = useState(false)
+  const lastValidWorkspaceIdRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (activeWorkspaceIdState && activeWorkspaceIdState !== personalWorkspaceId(GUEST_SCOPE_KEY)) {
+      lastValidWorkspaceIdRef.current = activeWorkspaceIdState
+    }
+    console.log("[WorkspaceStore] activeWorkspaceId", { activeWorkspaceId: activeWorkspaceIdState })
+  }, [activeWorkspaceIdState])
 
   const loadFromDb = useCallback(async () => {
     const scopeKey = await getActiveScopeKey()
+    const isGuestSession = !authSession.currentUserId
+    if (!isGuestSession && scopeKey === GUEST_SCOPE_KEY) {
+      console.warn("[WorkspaceStore] Ignoring guest scope during authenticated session.")
+      return
+    }
     await ensureBootstrappedForScope(scopeKey)
     const [rows, activeId] = await Promise.all([
       listWorkspaces(scopeKey),
       getActiveWorkspaceId(scopeKey),
     ])
     const resolvedActive = activeId ?? personalWorkspaceId(scopeKey)
-    setWorkspaces(rows.length > 0 ? rows : [defaultWorkspace(scopeKey)])
-    setActiveWorkspaceIdState(resolvedActive)
+    const nextWorkspaces = rows.length > 0 ? rows : [defaultWorkspace(scopeKey)]
+    setWorkspaces(nextWorkspaces)
+    const resolvedIsGuestPersonal =
+      resolvedActive === personalWorkspaceId(GUEST_SCOPE_KEY) && !isGuestSession
+    const resolvedExists = nextWorkspaces.some((w) => w.id === resolvedActive)
+    if (resolvedIsGuestPersonal) {
+      const fallback = lastValidWorkspaceIdRef.current
+      if (fallback && nextWorkspaces.some((w) => w.id === fallback)) {
+        setActiveWorkspaceIdState((prev) => {
+          console.log("[WorkspaceStore] setActiveWorkspaceId", { from: prev, to: fallback, reason: "ignore-guest" })
+          return fallback
+        })
+        return
+      }
+      console.warn("[WorkspaceStore] Guest fallback blocked; keeping current active workspace.")
+      return
+    }
+    if (!resolvedExists) {
+      console.warn("[WorkspaceStore] Active workspace missing after refresh; keeping current.")
+      return
+    }
+    setActiveWorkspaceIdState((prev) => {
+      if (prev === resolvedActive) return prev
+      console.log("[WorkspaceStore] setActiveWorkspaceId", { from: prev, to: resolvedActive, reason: "loadFromDb" })
+      return resolvedActive
+    })
     if (__DEV__) {
       const personalId = personalWorkspaceId(scopeKey)
       const hasPersonal = rows.some((w) => w.id === personalId)
@@ -78,7 +116,7 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
         console.info("[Workspace] Active workspace reset to Personal.")
       }
     }
-  }, [])
+  }, [authSession.currentUserId])
 
   const hydrate = useCallback(async () => {
     await loadFromDb()
@@ -99,7 +137,10 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
 
   const setActiveWorkspace = useCallback(async (id: string) => {
     await setActiveWorkspaceId(id)
-    setActiveWorkspaceIdState(id)
+    setActiveWorkspaceIdState((prev) => {
+      console.log("[WorkspaceStore] setActiveWorkspaceId", { from: prev, to: id, reason: "explicit" })
+      return id
+    })
   }, [])
 
   const createWorkspace = useCallback(async (label: string, setActive = true) => {
