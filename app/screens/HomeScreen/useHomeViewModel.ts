@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useFocusEffect } from "@react-navigation/native"
 
 import { listStatuses, listTasksByWorkspace } from "@/services/db"
 import { updateTaskStatusOnly } from "@/services/db/taskMutations"
 import type { Status, Task } from "@/services/db/types"
+import { hasOpenConflict } from "@/services/db/repositories/conflictsRepository"
 import { getCurrentUserId } from "@/services/sync/identity"
 import { syncController } from "@/services/sync/SyncController"
 import { refreshLocalCounts } from "@/services/sync/syncStore"
@@ -16,22 +17,91 @@ export const useHomeViewModel = () => {
   const [tasks, setTasks] = useState<Task[]>([])
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [lastUserId, setLastUserId] = useState<string | null>(null)
+  const tasksByStatusRef = useRef<Array<{ status: Status; tasks: Task[] }>>([])
 
   type BumpDir = "up" | "down"
 
   const bumpTaskStatus = useCallback(
     async (taskId: string, laneIndex: number, dir: BumpDir) => {
-      if (laneIndex < 0 || laneIndex >= tasksByStatus.length) return
+      if (laneIndex < 0 || laneIndex >= tasksByStatus.length) {
+        console.warn("[Home] bumpTaskStatus invalid laneIndex", {
+          taskId,
+          laneIndex,
+          lanesCount: tasksByStatus.length,
+        })
+        return
+      }
 
-      const targetIndex = dir === "up" ? laneIndex - 1 : laneIndex + 1
-      if (targetIndex < 0 || targetIndex >= tasksByStatus.length) return
+      const currentLane = tasksByStatus[laneIndex]
+      const laneTask = currentLane?.tasks.find((t) => t.id === taskId)
+      const fallbackTask = tasksByStatus.flatMap((lane) => lane.tasks).find((t) => t.id === taskId)
+      const currentTask = laneTask ?? fallbackTask
+      if (!currentTask) {
+        console.warn("[Home] bumpTaskStatus task not found in lanes", { taskId, laneIndex })
+        return
+      }
 
-      const targetStatusId = tasksByStatus[targetIndex].status.id
-      console.log("[Home] bumpTaskStatus", { taskId, laneIndex, dir, targetIndex, targetStatusId })
+      const currentStatusId = currentTask.statusId
+      const currentProjectId = currentTask.projectId ?? null
+      const currentWorkspaceId = currentTask.workspaceId ?? currentLane?.status.workspaceId
+      const lanesForProject = tasksByStatus.filter((lane) => {
+        const laneProjectId = lane.status.projectId ?? null
+        return laneProjectId === currentProjectId && lane.status.workspaceId === currentWorkspaceId
+      })
+
+      const groupLaneIndex = lanesForProject.findIndex((lane) => lane.status.id === currentStatusId)
+      if (groupLaneIndex < 0) {
+        console.warn("[Home] bumpTaskStatus lane mismatch", {
+          taskId,
+          laneIndex,
+          currentStatusId,
+          currentProjectId,
+          currentWorkspaceId,
+          lanesForProject: lanesForProject.map((lane) => lane.status.id),
+        })
+        return
+      }
+
+      const targetIndex = dir === "up" ? groupLaneIndex - 1 : groupLaneIndex + 1
+      if (targetIndex < 0 || targetIndex >= lanesForProject.length) {
+        console.warn("[Home] bumpTaskStatus target out of bounds", {
+          taskId,
+          laneIndex,
+          dir,
+          targetIndex,
+          lanesCount: lanesForProject.length,
+        })
+        return
+      }
+
+      const targetStatusId = lanesForProject[targetIndex].status.id
+      console.log("[Home] bumpTaskStatus", {
+        taskId,
+        laneIndex,
+        dir,
+        currentStatusId,
+        groupLaneIndex,
+        targetIndex,
+        targetStatusId,
+      })
+
+      const hasConflict = await hasOpenConflict("task", taskId)
+      if (hasConflict) {
+        console.warn("[Home] bumpTaskStatus blocked by conflict", { taskId })
+        return
+      }
 
       try {
         await updateTaskStatusOnly(taskId, targetStatusId)
         await refreshAll()
+
+        const refreshedLanes = tasksByStatusRef.current
+        const updatedLane = refreshedLanes.find((lane) => lane.tasks.some((t) => t.id === taskId))
+        console.log("[Home] bumpTaskStatus refreshed", {
+          taskId,
+          statusId: updatedLane?.status.id,
+          laneName: updatedLane?.status.name,
+        })
       } catch (e) {
         console.warn("[Home] bumpTaskStatus failed", e)
       }
@@ -109,6 +179,10 @@ export const useHomeViewModel = () => {
       tasks: tasks.filter((task) => task.statusId === status.id),
     }))
   }, [statuses, tasks])
+
+  useEffect(() => {
+    tasksByStatusRef.current = tasksByStatus
+  }, [tasksByStatus])
 
   return {
     workspaces,
