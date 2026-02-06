@@ -40,7 +40,7 @@ export function HomeScreen() {
     workspaces,
     activeWorkspaceId,
     setActiveWorkspaceId,
-    tasksByStatus,
+    uiTasksByStatus,
     refreshAll,
     isRefreshing,
     bumpTaskStatus,
@@ -110,10 +110,10 @@ export function HomeScreen() {
       {/* Scroll content */}
       <ScrollView
         contentContainerStyle={themed($scrollContent)}
-        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={refreshAll} />}
+        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={() => refreshAll({ mode: "hard" })} />}
         showsVerticalScrollIndicator={false}
       >
-        {tasksByStatus.map(({ status, tasks }, laneIndex) => (
+        {uiTasksByStatus.map(({ status, tasks }, laneIndex) => (
           <View
             key={`${status.workspaceId}:${status.projectId ?? "personal"}:${status.id}`}
             style={themed($section)}
@@ -159,7 +159,7 @@ export function HomeScreen() {
                               <Text preset="formHelper" text="↑" style={themed($statusArrow)} />
                             </Pressable>
                           ) : null}
-                          {laneIndex < tasksByStatus.length - 1 ? (
+                          {laneIndex < uiTasksByStatus.length - 1 ? (
                             <Pressable
                               onPress={(e) => {
                                 e.stopPropagation?.()

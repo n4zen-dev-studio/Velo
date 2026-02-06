@@ -5,6 +5,7 @@ import { listStatuses, listTasksByWorkspace } from "@/services/db"
 import { updateTaskStatusOnly } from "@/services/db/taskMutations"
 import type { Status, Task } from "@/services/db/types"
 import { hasOpenConflict } from "@/services/db/repositories/conflictsRepository"
+import { getActiveScopeKey } from "@/services/session/scope"
 import { getCurrentUserId } from "@/services/sync/identity"
 import { syncController } from "@/services/sync/SyncController"
 import { refreshLocalCounts } from "@/services/sync/syncStore"
@@ -17,6 +18,8 @@ export const useHomeViewModel = () => {
   const [tasks, setTasks] = useState<Task[]>([])
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [lastUserId, setLastUserId] = useState<string | null>(null)
+  const [uiTasksByStatus, setUiTasksByStatus] = useState<Array<{ status: Status; tasks: Task[] }>>([])
+  const refreshingRef = useRef(false)
 
   type BumpDir = "up" | "down"
 
@@ -27,15 +30,19 @@ export const useHomeViewModel = () => {
     }))
   }, [statuses, tasks])
 
-  const tasksByStatusRef = useRef(tasksByStatus)
+  const uiTasksByStatusRef = useRef(uiTasksByStatus)
 
   useEffect(() => {
-    tasksByStatusRef.current = tasksByStatus
+    setUiTasksByStatus(tasksByStatus)
   }, [tasksByStatus])
+
+  useEffect(() => {
+    uiTasksByStatusRef.current = uiTasksByStatus
+  }, [uiTasksByStatus])
 
   const bumpTaskStatus = useCallback(
     async (taskId: string, laneIndex: number, dir: BumpDir) => {
-      const lanes = tasksByStatusRef.current
+      const lanes = uiTasksByStatusRef.current
       const lanesCount = lanes.length
       if (laneIndex < 0 || laneIndex >= lanesCount) {
         console.warn("[Home] bumpTaskStatus invalid laneIndex", {
@@ -88,7 +95,26 @@ export const useHomeViewModel = () => {
         return
       }
 
-      const targetStatusId = lanesForProject[targetIndex].status.id
+      const targetLane = lanesForProject[targetIndex]
+      const targetStatusId = targetLane.status.id
+      const targetLaneIndex = lanes.findIndex((lane) => {
+        const laneProjectId = lane.status.projectId ?? null
+        return (
+          lane.status.id === targetStatusId &&
+          laneProjectId === currentProjectId &&
+          lane.status.workspaceId === currentWorkspaceId
+        )
+      })
+      if (targetLaneIndex < 0) {
+        console.warn("[Home] bumpTaskStatus target lane not found", {
+          taskId,
+          laneIndex,
+          targetStatusId,
+          currentProjectId,
+          currentWorkspaceId,
+        })
+        return
+      }
       console.log("[Home] bumpTaskStatus", {
         taskId,
         laneIndex,
@@ -97,6 +123,7 @@ export const useHomeViewModel = () => {
         currentStatusId,
         groupLaneIndex,
         targetIndex,
+        targetLaneIndex,
         targetStatusId,
       })
 
@@ -106,11 +133,35 @@ export const useHomeViewModel = () => {
         return
       }
 
+      const prevUiLanes = uiTasksByStatusRef.current
+      const nextUiLanes = prevUiLanes.map((lane) => ({
+        status: lane.status,
+        tasks: lane.tasks.slice(),
+      }))
+      const fromLane = nextUiLanes[laneIndex]
+      const taskIndex = fromLane.tasks.findIndex((t) => t.id === taskId)
+      if (taskIndex < 0) {
+        console.warn("[Home] bumpTaskStatus missing task in optimistic lane", { taskId, laneIndex })
+        return
+      }
+      const [movedTask] = fromLane.tasks.splice(taskIndex, 1)
+      const updatedTask = { ...movedTask, statusId: targetStatusId }
+      nextUiLanes[targetLaneIndex].tasks.unshift(updatedTask)
+      console.log("[Home] bumpTaskStatus optimistic", {
+        taskId,
+        lanesCount,
+        fromLane: laneIndex,
+        toLane: targetLaneIndex,
+        fromCount: prevUiLanes[laneIndex]?.tasks.length,
+        toCount: prevUiLanes[targetLaneIndex]?.tasks.length,
+      })
+      setUiTasksByStatus(nextUiLanes)
+
       try {
         await updateTaskStatusOnly(taskId, targetStatusId)
-        await refreshAll()
+        await refreshAll({ mode: "soft" })
 
-        const refreshedLanes = tasksByStatusRef.current
+        const refreshedLanes = uiTasksByStatusRef.current
         const updatedLane = refreshedLanes.find((lane) => lane.tasks.some((t) => t.id === taskId))
         console.log("[Home] bumpTaskStatus refreshed", {
           taskId,
@@ -118,6 +169,7 @@ export const useHomeViewModel = () => {
           laneName: updatedLane?.status.name,
         })
       } catch (e) {
+        setUiTasksByStatus(prevUiLanes)
         console.warn("[Home] bumpTaskStatus failed", e)
       }
     },
@@ -146,12 +198,41 @@ export const useHomeViewModel = () => {
     setTasks(taskRows)
   }, [activeWorkspaceId])
 
-  const refreshAll = useCallback(async () => {
-    setIsRefreshing(true)
-    await syncController.triggerSync("manual")
-    await Promise.all([refreshWorkspaces(), loadStatuses(), loadTasks(), refreshLocalCounts()])
-    setIsRefreshing(false)
-  }, [loadStatuses, loadTasks, refreshWorkspaces])
+  const refreshAll = useCallback(
+    async (options?: { mode?: "soft" | "hard" }) => {
+      if (refreshingRef.current) return
+      refreshingRef.current = true
+      const mode = options?.mode ?? "hard"
+      const lanesCountBefore = uiTasksByStatusRef.current.length
+      const scopeKey = await getActiveScopeKey()
+      console.log("[Home] refreshAll start", {
+        mode,
+        activeWorkspaceId,
+        scopeKey,
+        lanesCountBefore,
+      })
+      setIsRefreshing(true)
+      try {
+        await syncController.triggerSync("manual")
+        if (mode === "hard") {
+          await Promise.all([refreshWorkspaces(), loadStatuses(), loadTasks(), refreshLocalCounts()])
+        } else {
+          await Promise.all([loadStatuses(), loadTasks(), refreshLocalCounts()])
+        }
+      } finally {
+        setIsRefreshing(false)
+        refreshingRef.current = false
+        const lanesCountAfter = uiTasksByStatusRef.current.length
+        console.log("[Home] refreshAll end", {
+          mode,
+          activeWorkspaceId,
+          scopeKey,
+          lanesCountAfter,
+        })
+      }
+    },
+    [activeWorkspaceId, loadStatuses, loadTasks, refreshWorkspaces],
+  )
 
   useEffect(() => {
     setStatuses([])
@@ -193,6 +274,7 @@ export const useHomeViewModel = () => {
     activeWorkspaceId,
     setActiveWorkspaceId,
     tasksByStatus,
+    uiTasksByStatus,
     refreshAll,
     isRefreshing,
     bumpTaskStatus,
