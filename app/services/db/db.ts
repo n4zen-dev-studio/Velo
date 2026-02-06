@@ -13,6 +13,9 @@ export async function getDb() {
   if (cachedDb) return cachedDb
 
   if (!dbPromise) {
+    if (__DEV__) {
+      console.log("[DB] opening database instance")
+    }
     dbPromise = openDatabaseAsync(DB_NAME)
   }
 

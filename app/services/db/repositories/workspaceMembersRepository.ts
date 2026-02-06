@@ -1,7 +1,14 @@
 import type { SQLiteDatabase } from "expo-sqlite"
 
 import { getDb } from "@/services/db/db"
-import { execute, executeTransaction, queryAll, queryFirst } from "@/services/db/queries"
+import {
+  execute,
+  executeTransaction,
+  executeTx,
+  queryAll,
+  queryFirst,
+  queryFirstTx,
+} from "@/services/db/queries"
 import type { WorkspaceMember } from "@/services/db/types"
 import { enqueueOp } from "@/services/db/repositories/changeLogRepository"
 import { getActiveScopeKey } from "@/services/session/scope"
@@ -36,14 +43,17 @@ async function upsertWorkspaceMemberInternal(
 ) {
   const database = db ?? (await getDb())
   const resolvedScope = member.scopeKey ?? (await getActiveScopeKey())
-  const runner = async (txDb: SQLiteDatabase) => {
-    const existing = await queryFirst<WorkspaceMemberRow>(
+  const useTx = db !== undefined || options.useTransaction
+  const runner = async (txDb: SQLiteDatabase, useTxRunner: boolean) => {
+    const exec = useTxRunner ? executeTx : execute
+    const queryFirstFn = useTxRunner ? queryFirstTx : queryFirst
+    const existing = await queryFirstFn<WorkspaceMemberRow>(
       txDb,
       "SELECT * FROM workspace_members WHERE id = ? AND scopeKey = ?",
       [member.id, resolvedScope],
     )
 
-    await execute(
+    await exec(
       txDb,
       `INSERT INTO workspace_members (
         id,
@@ -91,15 +101,15 @@ async function upsertWorkspaceMemberInternal(
           scopeKey: resolvedScope,
           createdAt: new Date().toISOString(),
         },
-        txDb,
+        useTxRunner ? txDb : undefined,
       )
     }
   }
 
   if (options.useTransaction) {
-    await executeTransaction(database, runner)
+    await executeTransaction(database, (txDb) => runner(txDb, true))
   } else {
-    await runner(database)
+    await runner(database, useTx)
   }
 }
 
@@ -156,16 +166,19 @@ async function markWorkspaceMemberDeletedInternal(
   db?: SQLiteDatabase,
 ) {
   const database = db ?? (await getDb())
+  const useTx = db !== undefined || options.useTransaction
   const resolvedScope = await getActiveScopeKey()
-  const runner = async (txDb: SQLiteDatabase) => {
-    const existing = await queryFirst<WorkspaceMemberRow>(
+  const runner = async (txDb: SQLiteDatabase, useTxRunner: boolean) => {
+    const exec = useTxRunner ? executeTx : execute
+    const queryFirstFn = useTxRunner ? queryFirstTx : queryFirst
+    const existing = await queryFirstFn<WorkspaceMemberRow>(
       txDb,
       "SELECT * FROM workspace_members WHERE id = ? AND scopeKey = ?",
       [memberId, resolvedScope],
     )
     if (!existing) return
     const nextRevision = `${existing.revision}-deleted-${Date.now()}`
-    await execute(
+    await exec(
       txDb,
       "UPDATE workspace_members SET deletedAt = ?, updatedAt = ?, revision = ? WHERE id = ? AND scopeKey = ?",
       [deletedAt, deletedAt, nextRevision, memberId, resolvedScope],
@@ -189,14 +202,14 @@ async function markWorkspaceMemberDeletedInternal(
           scopeKey: resolvedScope,
           createdAt: new Date().toISOString(),
         },
-        txDb,
+        useTxRunner ? txDb : undefined,
       )
     }
   }
 
   if (options.useTransaction) {
-    await executeTransaction(database, runner)
+    await executeTransaction(database, (txDb) => runner(txDb, true))
   } else {
-    await runner(database)
+    await runner(database, useTx)
   }
 }

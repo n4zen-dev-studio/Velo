@@ -2,7 +2,7 @@ import type { SQLiteDatabase } from "expo-sqlite"
 
 import { createIndexesSql, createTablesSql, schemaVersion } from "./schema"
 import { GUEST_SCOPE_KEY } from "@/services/session/scope"
-import { execute, executeSqlBatch, queryAll, queryFirst, executeTransaction } from "./queries"
+import { executeSqlBatch, queryAll, queryFirst, executeTransaction, executeTx } from "./queries"
 
 const GUEST_PERSONAL_WORKSPACE_ID = `personal:${GUEST_SCOPE_KEY}`
 
@@ -29,9 +29,9 @@ async function ensureColumn(
 ) {
   const hasColumn = await tableHasColumn(db, table, column)
   if (hasColumn) return
-  await execute(db, ddl)
+  await executeTx(db, ddl)
   if (backfillSql) {
-    await execute(db, backfillSql)
+    await executeTx(db, backfillSql)
   }
 }
 
@@ -41,7 +41,7 @@ async function rebuildStatusesTable(db: SQLiteDatabase) {
   const hasWorkspaceColumn = await tableHasColumn(db, "statuses", "workspaceId")
   if (hasWorkspaceColumn) return
 
-  await execute(
+  await executeTx(
     db,
     `
     CREATE TABLE IF NOT EXISTS statuses_new (
@@ -55,7 +55,7 @@ async function rebuildStatusesTable(db: SQLiteDatabase) {
     );
     `,
   )
-  await execute(
+  await executeTx(
     db,
     `
     INSERT INTO statuses_new (id, projectId, workspaceId, name, orderIndex, category)
@@ -63,8 +63,8 @@ async function rebuildStatusesTable(db: SQLiteDatabase) {
     FROM statuses;
     `,
   )
-  await execute(db, "DROP TABLE statuses;")
-  await execute(db, "ALTER TABLE statuses_new RENAME TO statuses;")
+  await executeTx(db, "DROP TABLE statuses;")
+  await executeTx(db, "ALTER TABLE statuses_new RENAME TO statuses;")
 }
 
 async function rebuildWorkspaceStateTable(db: SQLiteDatabase) {
@@ -73,7 +73,7 @@ async function rebuildWorkspaceStateTable(db: SQLiteDatabase) {
   const hasScopeKey = await tableHasColumn(db, "workspace_state", "scopeKey")
   if (hasScopeKey) return
 
-  await execute(
+  await executeTx(
     db,
     `
     CREATE TABLE IF NOT EXISTS workspace_state_new (
@@ -82,7 +82,7 @@ async function rebuildWorkspaceStateTable(db: SQLiteDatabase) {
     );
     `,
   )
-  await execute(
+  await executeTx(
     db,
     `
     INSERT INTO workspace_state_new (scopeKey, activeWorkspaceId)
@@ -92,8 +92,8 @@ async function rebuildWorkspaceStateTable(db: SQLiteDatabase) {
     LIMIT 1;
     `,
   )
-  await execute(db, "DROP TABLE workspace_state;")
-  await execute(db, "ALTER TABLE workspace_state_new RENAME TO workspace_state;")
+  await executeTx(db, "DROP TABLE workspace_state;")
+  await executeTx(db, "ALTER TABLE workspace_state_new RENAME TO workspace_state;")
 }
 
 async function rebuildSyncStateTable(db: SQLiteDatabase) {
@@ -102,7 +102,7 @@ async function rebuildSyncStateTable(db: SQLiteDatabase) {
   const hasScopeKey = await tableHasColumn(db, "sync_state", "scopeKey")
   if (hasScopeKey) return
 
-  await execute(
+  await executeTx(
     db,
     `
     CREATE TABLE IF NOT EXISTS sync_state_new (
@@ -112,7 +112,7 @@ async function rebuildSyncStateTable(db: SQLiteDatabase) {
     );
     `,
   )
-  await execute(
+  await executeTx(
     db,
     `
     INSERT INTO sync_state_new (scopeKey, lastCursor, lastSyncedAt)
@@ -122,8 +122,8 @@ async function rebuildSyncStateTable(db: SQLiteDatabase) {
     LIMIT 1;
     `,
   )
-  await execute(db, "DROP TABLE sync_state;")
-  await execute(db, "ALTER TABLE sync_state_new RENAME TO sync_state;")
+  await executeTx(db, "DROP TABLE sync_state;")
+  await executeTx(db, "ALTER TABLE sync_state_new RENAME TO sync_state;")
 }
 
 export async function migrate(db: SQLiteDatabase) {
@@ -271,6 +271,6 @@ export async function migrate(db: SQLiteDatabase) {
     )
 
     await executeSqlBatch(txDb, createIndexesSql)
-    await execute(txDb, `PRAGMA user_version = ${schemaVersion};`)
+    await executeTx(txDb, `PRAGMA user_version = ${schemaVersion};`)
   })
 }

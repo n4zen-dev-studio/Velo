@@ -28,6 +28,28 @@ function logTx(tag: string, sql: string, depth: number, savepoint?: string) {
   console.log(`[DB] ${tag} depth=${depth}${suffix}:`, sql.trim())
 }
 
+function isControlSql(sql: string) {
+  const trimmed = sql.trim().toUpperCase()
+  return (
+    trimmed.startsWith("BEGIN") ||
+    trimmed.startsWith("COMMIT") ||
+    trimmed.startsWith("ROLLBACK") ||
+    trimmed.startsWith("SAVEPOINT") ||
+    trimmed.startsWith("RELEASE SAVEPOINT") ||
+    trimmed.startsWith("PRAGMA")
+  )
+}
+
+function isSqliteBusy(err: unknown) {
+  const message = err instanceof Error ? err.message : String(err)
+  const lowered = message.toLowerCase()
+  return lowered.includes("database is locked") || lowered.includes("sqlite_busy")
+}
+
+async function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 function isIgnorableControlError(sql: string, err: unknown) {
   const message = err instanceof Error ? err.message : String(err)
   const lowered = message.toLowerCase()
@@ -73,16 +95,38 @@ async function executeInternal(
   assertSql(sql)
   const safeParams = normalizeParams(params)
   logSql("execute", sql, safeParams)
-  try {
-    const statement = await db.prepareAsync(sql)
+  const shouldRetry = !isControlSql(sql)
+  const maxAttempts = shouldRetry ? 5 : 1
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
-      await statement.executeAsync(safeParams)
-    } finally {
-      await statement.finalizeAsync()
+      const statement = await db.prepareAsync(sql)
+      try {
+        await statement.executeAsync(safeParams)
+      } finally {
+        await statement.finalizeAsync()
+      }
+      return
+    } catch (err) {
+      if (shouldRetry && isSqliteBusy(err) && attempt < maxAttempts) {
+        const delay = 30 * Math.pow(2, attempt - 1) + Math.floor(Math.random() * 25)
+        if (__DEV__) {
+          console.warn(`[DB] SQLITE_BUSY retry attempt ${attempt}`, { sql: sql.trim() })
+        }
+        await sleep(delay)
+        continue
+      }
+      if (isSqliteBusy(err)) {
+        const stack = new Error("[DB][BUSY] stack").stack
+        console.warn("[DB][BUSY] sql=", sql.trim())
+        console.warn("[DB][BUSY] params=", safeParams)
+        console.warn("[DB][BUSY] txDepth=", txDepth)
+        if (__DEV__ && stack) {
+          console.warn(stack)
+        }
+      }
+      const message = err instanceof Error ? err.message : String(err)
+      throw new Error(`[DB] execute failed: ${message}\nSQL: ${sql}\nparams: ${JSON.stringify(safeParams)}`)
     }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-    throw new Error(`[DB] execute failed: ${message}\nSQL: ${sql}\nparams: ${JSON.stringify(safeParams)}`)
   }
 }
 
@@ -107,6 +151,14 @@ export async function execute(
   return withWriteLock(() => executeInternal(db, sql, params))
 }
 
+export async function executeTx(
+  db: SQLiteDatabase,
+  sql: string,
+  params?: Record<string, unknown> | unknown[],
+) {
+  return executeInternal(db, sql, params)
+}
+
 export async function queryAll<T>(
   db: SQLiteDatabase,
   sql: string,
@@ -127,6 +179,14 @@ export async function queryAll<T>(
     const message = err instanceof Error ? err.message : String(err)
     throw new Error(`[DB] queryAll failed: ${message}\nSQL: ${sql}\nparams: ${JSON.stringify(safeParams)}`)
   }
+}
+
+export async function queryAllTx<T>(
+  db: SQLiteDatabase,
+  sql: string,
+  params?: Record<string, unknown> | unknown[],
+) {
+  return queryAll<T>(db, sql, params)
 }
 
 export async function queryFirst<T>(
@@ -151,6 +211,13 @@ export async function queryFirst<T>(
   }
 }
 
+export async function queryFirstTx<T>(
+  db: SQLiteDatabase,
+  sql: string,
+  params?: Record<string, unknown> | unknown[],
+) {
+  return queryFirst<T>(db, sql, params)
+}
 export async function executeTransaction<T>(
   db: SQLiteDatabase,
   task: (txDb: SQLiteDatabase) => Promise<T>,
@@ -162,8 +229,8 @@ export async function executeTransaction<T>(
 
     try {
       if (isOuter) {
-        logTx("BEGIN", "BEGIN", txDepth)
-        await execControl(db, "BEGIN")
+        logTx("BEGIN", "BEGIN IMMEDIATE", txDepth)
+        await execControl(db, "BEGIN IMMEDIATE")
       } else if (savepointName) {
         logTx("SAVEPOINT", `SAVEPOINT ${savepointName}`, txDepth, savepointName)
         await execControl(db, `SAVEPOINT ${savepointName}`)

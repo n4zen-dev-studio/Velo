@@ -2,7 +2,7 @@ import type { SQLiteDatabase } from "expo-sqlite"
 
 import { DEFAULT_STATUS_CATALOG } from "@/config/statusCatalog"
 import { getDb } from "@/services/db/db"
-import { execute, queryAll, queryFirst } from "@/services/db/queries"
+import { execute, executeTx, queryAll, queryFirst, queryFirstTx } from "@/services/db/queries"
 import type { Status } from "@/services/db/types"
 import { getActiveScopeKey } from "@/services/session/scope"
 
@@ -12,9 +12,10 @@ export async function seedDefaultStatusesForWorkspace(
   db?: SQLiteDatabase,
 ) {
   const database = db ?? (await getDb())
+  const exec = db ? executeTx : execute
   const resolvedScope = scopeKey ?? (await getActiveScopeKey())
   for (const status of DEFAULT_STATUS_CATALOG) {
-    await execute(
+    await exec(
       database,
       `INSERT INTO statuses (id, projectId, workspaceId, name, orderIndex, category, scopeKey)
        VALUES (?, NULL, ?, ?, ?, ?, ?)
@@ -33,8 +34,9 @@ export async function ensureDefaultStatusesForWorkspace(
   db?: SQLiteDatabase,
 ) {
   const database = db ?? (await getDb())
+  const queryFirstFn = db ? queryFirstTx : queryFirst
   const resolvedScope = scopeKey ?? (await getActiveScopeKey())
-  const row = await queryFirst<{ count: number }>(
+  const row = await queryFirstFn<{ count: number }>(
     database,
     "SELECT COUNT(1) as count FROM statuses WHERE scopeKey = ? AND workspaceId = ? AND projectId IS NULL",
     [resolvedScope, workspaceId],

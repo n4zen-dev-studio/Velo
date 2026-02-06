@@ -10,7 +10,6 @@ import {
 
 import type { Workspace } from "@/services/db/types"
 import {
-  bootstrapWorkspaces,
   createWorkspace as createWorkspaceRepo,
   listWorkspaces,
   getActiveWorkspaceId,
@@ -20,6 +19,7 @@ import {
   PERSONAL_WORKSPACE_LABEL,
   personalWorkspaceId,
 } from "@/services/db/repositories/workspacesRepository"
+import { ensureBootstrappedForScope } from "@/services/db/bootstrap"
 import { getActiveScopeKey, GUEST_SCOPE_KEY } from "@/services/session/scope"
 import { useAuthSession } from "@/services/auth/session"
 
@@ -58,7 +58,7 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
 
   const loadFromDb = useCallback(async () => {
     const scopeKey = await getActiveScopeKey()
-    await bootstrapWorkspaces(scopeKey)
+    await ensureBootstrappedForScope(scopeKey)
     const [rows, activeId] = await Promise.all([
       listWorkspaces(scopeKey),
       getActiveWorkspaceId(scopeKey),

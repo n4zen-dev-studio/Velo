@@ -296,4 +296,21 @@ export async function authRoutes(app: FastifyInstance) {
     })
     return reply.send({ accessToken, refreshToken })
   })
+
+  // POST /auth/logout
+  app.post(
+    "/auth/logout",
+    { preHandler: [app.authenticate] },
+    async (request, reply) => {
+      const { refreshToken } = request.body as { refreshToken?: string }
+      if (refreshToken) {
+        const tokenHash = hashToken(refreshToken)
+        await prisma.refreshToken.updateMany({
+          where: { tokenHash, revokedAt: null },
+          data: { revokedAt: new Date() },
+        })
+      }
+      return reply.code(200).send({ ok: true })
+    },
+  )
 }

@@ -24,7 +24,9 @@ import { clearOfflineMode } from "@/services/storage/session"
 import { refreshAuthSession } from "@/services/auth/session"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
-import { bootstrapWorkspaces, personalWorkspaceId, setActiveWorkspaceId } from "@/services/db/repositories/workspacesRepository"
+import { personalWorkspaceId, setActiveWorkspaceId } from "@/services/db/repositories/workspacesRepository"
+import { ensureBootstrappedForScope } from "@/services/db/bootstrap"
+import { logScopeAction, withScopeTransitionLock } from "@/services/session/scopeTransition"
 import { userScopeKey } from "@/services/session/scope"
 
 export function VerifyEmailScreen() {
@@ -73,45 +75,60 @@ export function VerifyEmailScreen() {
   }
 
   const finalizeRemoteLogin = async (userId: string) => {
-    await setCurrentUserId(userId)
-    await setSessionMode("remote")
-    await clearOfflineMode()
-    await refreshAuthSession()
-    const scopeKey = userScopeKey(userId)
-    await bootstrapWorkspaces(scopeKey)
-    await setActiveWorkspaceId(personalWorkspaceId(scopeKey), scopeKey)
-    goToHome()
+    await withScopeTransitionLock(async () => {
+      syncController.pause()
+      const scopeKey = userScopeKey(userId)
+      logScopeAction("verify_login_remote", scopeKey, userId)
+      await setCurrentUserId(userId)
+      await setSessionMode("remote")
+      await clearOfflineMode()
+      await refreshAuthSession()
+      await ensureBootstrappedForScope(scopeKey)
+      await setActiveWorkspaceId(personalWorkspaceId(scopeKey), scopeKey)
+      syncController.resume()
+      goToHome()
+    }, "verify_login_remote")
   }
 
   const handleClaimOfflineData = async () => {
     if (!pendingRemoteUserId) return
-    await setCurrentUserId(pendingRemoteUserId)
-    await setSessionMode("remote")
-    await claimOfflineData(pendingRemoteUserId)
-    markOfflineClaimHandled()
-    setShowClaimModal(false)
-    await clearOfflineMode()
-    await refreshAuthSession()
-    const scopeKey = userScopeKey(pendingRemoteUserId)
-    await bootstrapWorkspaces(scopeKey)
-    await setActiveWorkspaceId(personalWorkspaceId(scopeKey), scopeKey)
-    goToHome()
+    await withScopeTransitionLock(async () => {
+      syncController.pause()
+      const scopeKey = userScopeKey(pendingRemoteUserId)
+      logScopeAction("verify_claim_offline_data", scopeKey, pendingRemoteUserId)
+      await setCurrentUserId(pendingRemoteUserId)
+      await setSessionMode("remote")
+      await claimOfflineData(pendingRemoteUserId)
+      markOfflineClaimHandled()
+      setShowClaimModal(false)
+      await clearOfflineMode()
+      await refreshAuthSession()
+      await ensureBootstrappedForScope(scopeKey)
+      await setActiveWorkspaceId(personalWorkspaceId(scopeKey), scopeKey)
+      syncController.resume()
+      goToHome()
+    }, "verify_claim_offline_data")
     void syncController.triggerSync("manual")
   }
 
   const handleKeepSeparate = async () => {
     if (!pendingRemoteUserId) return
-    await setCurrentUserId(pendingRemoteUserId)
-    await setSessionMode("remote")
-    await discardGuestData()
-    markOfflineClaimHandled()
-    setShowClaimModal(false)
-    await clearOfflineMode()
-    await refreshAuthSession()
-    const scopeKey = userScopeKey(pendingRemoteUserId)
-    await bootstrapWorkspaces(scopeKey)
-    await setActiveWorkspaceId(personalWorkspaceId(scopeKey), scopeKey)
-    goToHome()
+    await withScopeTransitionLock(async () => {
+      syncController.pause()
+      const scopeKey = userScopeKey(pendingRemoteUserId)
+      logScopeAction("verify_discard_offline_data", scopeKey, pendingRemoteUserId)
+      await setCurrentUserId(pendingRemoteUserId)
+      await setSessionMode("remote")
+      await discardGuestData()
+      markOfflineClaimHandled()
+      setShowClaimModal(false)
+      await clearOfflineMode()
+      await refreshAuthSession()
+      await ensureBootstrappedForScope(scopeKey)
+      await setActiveWorkspaceId(personalWorkspaceId(scopeKey), scopeKey)
+      syncController.resume()
+      goToHome()
+    }, "verify_discard_offline_data")
   }
 
   return (

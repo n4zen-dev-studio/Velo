@@ -89,7 +89,7 @@ async function resolveConflict(conflict: ConflictRecord, payload: Task | Comment
       scopeKey,
     }
 
-    await upsertTaskFromSync(updatedTask, database)
+    await upsertTaskFromSync(updatedTask)
     await enqueueOp({
       entityType: "task",
       entityId: updatedTask.id,
@@ -100,7 +100,7 @@ async function resolveConflict(conflict: ConflictRecord, payload: Task | Comment
       workspaceId: updatedTask.workspaceId,
       scopeKey,
       createdAt: now,
-    }, database)
+    })
   }
 
   if (conflict.entityType === "comment") {
@@ -117,7 +117,7 @@ async function resolveConflict(conflict: ConflictRecord, payload: Task | Comment
       scopeKey,
     }
 
-    await upsertCommentFromSync(updatedComment, database)
+    await upsertCommentFromSync(updatedComment)
     const taskRow = await queryFirst<{ workspaceId: string }>(
       database,
       "SELECT workspaceId FROM tasks WHERE id = ? AND scopeKey = ?",
@@ -134,7 +134,7 @@ async function resolveConflict(conflict: ConflictRecord, payload: Task | Comment
       workspaceId,
       scopeKey,
       createdAt: now,
-    }, database)
+    })
   }
 
   await execute(

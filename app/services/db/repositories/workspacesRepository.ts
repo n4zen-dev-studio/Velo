@@ -1,7 +1,14 @@
 import type { SQLiteDatabase } from "expo-sqlite"
 
 import { getDb } from "@/services/db/db"
-import { execute, executeTransaction, queryAll, queryFirst } from "@/services/db/queries"
+import {
+  execute,
+  executeTransaction,
+  executeTx,
+  queryAll,
+  queryFirst,
+  queryFirstTx,
+} from "@/services/db/queries"
 import type { Workspace } from "@/services/db/types"
 import { seedDefaultStatusesForWorkspace, ensureDefaultStatusesForWorkspace } from "@/services/db/repositories/statusesRepository"
 import { generateUuidV4, getCurrentUserId } from "@/services/sync/identity"
@@ -26,8 +33,9 @@ export async function listWorkspaces(scopeKey?: string, db?: SQLiteDatabase) {
 
 export async function getWorkspace(id: string, scopeKey?: string, db?: SQLiteDatabase) {
   const database = db ?? (await getDb())
+  const queryFirstFn = db ? queryFirstTx : queryFirst
   const resolvedScope = scopeKey ?? (await getActiveScopeKey())
-  return queryFirst<Workspace>(
+  return queryFirstFn<Workspace>(
     database,
     "SELECT * FROM workspaces WHERE id = ? AND scopeKey = ?",
     [id, resolvedScope],
@@ -36,6 +44,7 @@ export async function getWorkspace(id: string, scopeKey?: string, db?: SQLiteDat
 
 export async function createWorkspace(label: string, scopeKey?: string, db?: SQLiteDatabase) {
   const database = db ?? (await getDb())
+  const exec = db ? executeTx : execute
   const resolvedScope = scopeKey ?? (await getActiveScopeKey())
   const now = Date.now()
   const workspace: Workspace = {
@@ -48,7 +57,7 @@ export async function createWorkspace(label: string, scopeKey?: string, db?: SQL
     scopeKey: resolvedScope,
   }
 
-  await execute(
+  await exec(
     database,
     `INSERT INTO workspaces (id, label, kind, createdAt, updatedAt, remoteId, scopeKey)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -79,7 +88,7 @@ export async function createWorkspace(label: string, scopeKey?: string, db?: SQL
     })
   }
 
-  await seedDefaultStatusesForWorkspace(workspace.id, resolvedScope, database)
+  await seedDefaultStatusesForWorkspace(workspace.id, resolvedScope, db ? database : undefined)
   return workspace
 }
 
@@ -89,6 +98,7 @@ export async function upsertWorkspaceFromSync(
   db?: SQLiteDatabase,
 ) {
   const database = db ?? (await getDb())
+  const exec = db ? executeTx : execute
   const resolvedScope = scopeKey ?? (await getActiveScopeKey())
   const now = Date.now()
   const kind = input.kind ?? (input.id.startsWith("personal:") ? "personal" : "custom")
@@ -102,7 +112,7 @@ export async function upsertWorkspaceFromSync(
     scopeKey: input.scopeKey ?? resolvedScope,
   }
 
-  await execute(
+  await exec(
     database,
     `INSERT INTO workspaces (id, label, kind, createdAt, updatedAt, remoteId, scopeKey)
      VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -124,16 +134,17 @@ export async function upsertWorkspaceFromSync(
     ],
   )
 
-  await ensureDefaultStatusesForWorkspace(workspace.id, resolvedScope, database)
+  await ensureDefaultStatusesForWorkspace(workspace.id, resolvedScope, db ? database : undefined)
 
   return workspace
 }
 
 export async function renameWorkspace(id: string, label: string, scopeKey?: string, db?: SQLiteDatabase) {
   const database = db ?? (await getDb())
+  const exec = db ? executeTx : execute
   const resolvedScope = scopeKey ?? (await getActiveScopeKey())
   const now = Date.now()
-  await execute(
+  await exec(
     database,
     "UPDATE workspaces SET label = ?, updatedAt = ? WHERE id = ? AND scopeKey = ?",
     [label, now, id, resolvedScope],
@@ -146,13 +157,15 @@ export async function deleteWorkspace(id: string, scopeKey?: string, db?: SQLite
     throw new Error("Cannot delete Personal workspace")
   }
   const database = db ?? (await getDb())
-  await execute(database, "DELETE FROM workspaces WHERE id = ? AND scopeKey = ?", [id, resolvedScope])
+  const exec = db ? executeTx : execute
+  await exec(database, "DELETE FROM workspaces WHERE id = ? AND scopeKey = ?", [id, resolvedScope])
 }
 
 export async function getActiveWorkspaceId(scopeKey?: string, db?: SQLiteDatabase) {
   const database = db ?? (await getDb())
+  const queryFirstFn = db ? queryFirstTx : queryFirst
   const resolvedScope = scopeKey ?? (await getActiveScopeKey())
-  const row = await queryFirst<{ activeWorkspaceId: string }>(
+  const row = await queryFirstFn<{ activeWorkspaceId: string }>(
     database,
     "SELECT activeWorkspaceId FROM workspace_state WHERE scopeKey = ?",
     [resolvedScope],
@@ -162,8 +175,9 @@ export async function getActiveWorkspaceId(scopeKey?: string, db?: SQLiteDatabas
 
 export async function setActiveWorkspaceId(id: string, scopeKey?: string, db?: SQLiteDatabase) {
   const database = db ?? (await getDb())
+  const exec = db ? executeTx : execute
   const resolvedScope = scopeKey ?? (await getActiveScopeKey())
-  await execute(
+  await exec(
     database,
     `INSERT INTO workspace_state (scopeKey, activeWorkspaceId)
      VALUES (?, ?)
@@ -174,6 +188,7 @@ export async function setActiveWorkspaceId(id: string, scopeKey?: string, db?: S
 
 export async function ensurePersonalWorkspaceExists(scopeKey?: string, db?: SQLiteDatabase) {
   const database = db ?? (await getDb())
+  const exec = db ? executeTx : execute
   const resolvedScope = scopeKey ?? (await getActiveScopeKey())
   const personalId = personalWorkspaceId(resolvedScope)
   const now = Date.now()
@@ -186,7 +201,7 @@ export async function ensurePersonalWorkspaceExists(scopeKey?: string, db?: SQLi
     remoteId: null,
     scopeKey: resolvedScope,
   }
-  await execute(
+  await exec(
     database,
     `INSERT INTO workspaces (id, label, kind, createdAt, updatedAt, remoteId, scopeKey)
      VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -206,7 +221,7 @@ export async function ensurePersonalWorkspaceExists(scopeKey?: string, db?: SQLi
       workspace.scopeKey,
     ],
   )
-  await ensureDefaultStatusesForWorkspace(workspace.id, resolvedScope, database)
+  await ensureDefaultStatusesForWorkspace(workspace.id, resolvedScope, db ? database : undefined)
   const refreshed = await getWorkspace(personalId, resolvedScope, database)
   return refreshed ?? workspace
 }
