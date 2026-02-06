@@ -31,8 +31,10 @@ import { syncController } from "@/services/sync/SyncController"
 import { googleOauth, isValidGoogleClientId } from "@/config/oauth"
 import { goToHome } from "@/navigation/navigationActions"
 import { clearOfflineMode, setOfflineMode } from "@/services/storage/session"
-import { bootstrapWorkspaces, personalWorkspaceId, setActiveWorkspaceId } from "@/services/db/repositories/workspacesRepository"
-import { userScopeKey } from "@/services/session/scope"
+import { personalWorkspaceId, setActiveWorkspaceId } from "@/services/db/repositories/workspacesRepository"
+import { ensureBootstrappedForScope } from "@/services/db/bootstrap"
+import { logScopeAction, withScopeTransitionLock } from "@/services/session/scopeTransition"
+import { GUEST_SCOPE_KEY, userScopeKey } from "@/services/session/scope"
 
 import { useAuthViewModel } from "./useAuthViewModel"
 
@@ -191,11 +193,16 @@ export function AuthScreen() {
     setError(null)
     const normalizedEmail = email.trim().toLowerCase()
     const userId = normalizedEmail ? await deriveUserIdFromEmail(normalizedEmail) : await generateUuidV4()
-    await setCurrentUserId(userId)
-    await setSessionMode("local")
-    await setOfflineMode(true)
-    await refreshAuthSession()
-    goToHome()
+    await withScopeTransitionLock(async () => {
+      syncController.pause()
+      logScopeAction("continue_offline", GUEST_SCOPE_KEY, userId)
+      await setCurrentUserId(userId)
+      await setSessionMode("local")
+      await setOfflineMode(true)
+      await refreshAuthSession()
+      syncController.resume()
+      goToHome()
+    }, "continue_offline")
   }
 
   const completeRemoteLogin = async (accessToken: string, refreshToken: string) => {
@@ -215,45 +222,60 @@ export function AuthScreen() {
   }
 
   const finalizeRemoteLogin = async (userId: string) => {
-    await setCurrentUserId(userId)
-    await setSessionMode("remote")
-    await clearOfflineMode()
-    await refreshAuthSession()
-    const scopeKey = userScopeKey(userId)
-    await bootstrapWorkspaces(scopeKey)
-    await setActiveWorkspaceId(personalWorkspaceId(scopeKey), scopeKey)
-    goToHome()
+    await withScopeTransitionLock(async () => {
+      syncController.pause()
+      const scopeKey = userScopeKey(userId)
+      logScopeAction("login_remote", scopeKey, userId)
+      await setCurrentUserId(userId)
+      await setSessionMode("remote")
+      await clearOfflineMode()
+      await refreshAuthSession()
+      await ensureBootstrappedForScope(scopeKey)
+      await setActiveWorkspaceId(personalWorkspaceId(scopeKey), scopeKey)
+      syncController.resume()
+      goToHome()
+    }, "login_remote")
   }
 
   const handleClaimOfflineData = async () => {
     if (!pendingRemoteUserId) return
-    await setCurrentUserId(pendingRemoteUserId)
-    await setSessionMode("remote")
-    await claimOfflineData(pendingRemoteUserId)
-    markOfflineClaimHandled()
-    setShowClaimModal(false)
-    await clearOfflineMode()
-    await refreshAuthSession()
-    const scopeKey = userScopeKey(pendingRemoteUserId)
-    await bootstrapWorkspaces(scopeKey)
-    await setActiveWorkspaceId(personalWorkspaceId(scopeKey), scopeKey)
-    goToHome()
+    await withScopeTransitionLock(async () => {
+      syncController.pause()
+      const scopeKey = userScopeKey(pendingRemoteUserId)
+      logScopeAction("claim_offline_data", scopeKey, pendingRemoteUserId)
+      await setCurrentUserId(pendingRemoteUserId)
+      await setSessionMode("remote")
+      await claimOfflineData(pendingRemoteUserId)
+      markOfflineClaimHandled()
+      setShowClaimModal(false)
+      await clearOfflineMode()
+      await refreshAuthSession()
+      await ensureBootstrappedForScope(scopeKey)
+      await setActiveWorkspaceId(personalWorkspaceId(scopeKey), scopeKey)
+      syncController.resume()
+      goToHome()
+    }, "claim_offline_data")
     void syncController.triggerSync("manual")
   }
 
   const handleKeepSeparate = async () => {
     if (!pendingRemoteUserId) return
-    await setCurrentUserId(pendingRemoteUserId)
-    await setSessionMode("remote")
-    await discardGuestData()
-    markOfflineClaimHandled()
-    setShowClaimModal(false)
-    await clearOfflineMode()
-    await refreshAuthSession()
-    const scopeKey = userScopeKey(pendingRemoteUserId)
-    await bootstrapWorkspaces(scopeKey)
-    await setActiveWorkspaceId(personalWorkspaceId(scopeKey), scopeKey)
-    goToHome()
+    await withScopeTransitionLock(async () => {
+      syncController.pause()
+      const scopeKey = userScopeKey(pendingRemoteUserId)
+      logScopeAction("discard_offline_data", scopeKey, pendingRemoteUserId)
+      await setCurrentUserId(pendingRemoteUserId)
+      await setSessionMode("remote")
+      await discardGuestData()
+      markOfflineClaimHandled()
+      setShowClaimModal(false)
+      await clearOfflineMode()
+      await refreshAuthSession()
+      await ensureBootstrappedForScope(scopeKey)
+      await setActiveWorkspaceId(personalWorkspaceId(scopeKey), scopeKey)
+      syncController.resume()
+      goToHome()
+    }, "discard_offline_data")
   }
 
   return (

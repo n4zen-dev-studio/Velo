@@ -1,7 +1,14 @@
 import type { SQLiteDatabase } from "expo-sqlite"
 
 import { getDb } from "@/services/db/db"
-import { execute, executeTransaction, queryAll, queryFirst } from "@/services/db/queries"
+import {
+  execute,
+  executeTransaction,
+  executeTx,
+  queryAll,
+  queryFirst,
+  queryFirstTx,
+} from "@/services/db/queries"
 import type { User } from "@/services/db/types"
 import { enqueueOp } from "@/services/db/repositories/changeLogRepository"
 import { personalWorkspaceId } from "@/services/db/repositories/workspacesRepository"
@@ -35,14 +42,17 @@ async function upsertUserInternal(
 ) {
   const database = db ?? (await getDb())
   const resolvedScope = user.scopeKey ?? (await getActiveScopeKey())
-  const runner = async (txDb: SQLiteDatabase) => {
-    const existing = await queryFirst<UserRow>(
+  const useTx = db !== undefined || options.useTransaction
+  const runner = async (txDb: SQLiteDatabase, useTxRunner: boolean) => {
+    const exec = useTxRunner ? executeTx : execute
+    const queryFirstFn = useTxRunner ? queryFirstTx : queryFirst
+    const existing = await queryFirstFn<UserRow>(
       txDb,
       "SELECT * FROM users WHERE id = ? AND scopeKey = ?",
       [user.id, resolvedScope],
     )
 
-    await execute(
+    await exec(
       txDb,
       `INSERT INTO users (
         id,
@@ -93,15 +103,15 @@ async function upsertUserInternal(
           scopeKey: resolvedScope,
           createdAt: new Date().toISOString(),
         },
-        txDb,
+        useTxRunner ? txDb : undefined,
       )
     }
   }
 
   if (options.useTransaction) {
-    await executeTransaction(database, runner)
+    await executeTransaction(database, (txDb) => runner(txDb, true))
   } else {
-    await runner(database)
+    await runner(database, useTx)
   }
 }
 
@@ -158,16 +168,19 @@ async function markUserDeletedInternal(
   db?: SQLiteDatabase,
 ) {
   const database = db ?? (await getDb())
+  const useTx = db !== undefined || options.useTransaction
   const resolvedScope = await getActiveScopeKey()
-  const runner = async (txDb: SQLiteDatabase) => {
-    const existing = await queryFirst<UserRow>(
+  const runner = async (txDb: SQLiteDatabase, useTxRunner: boolean) => {
+    const exec = useTxRunner ? executeTx : execute
+    const queryFirstFn = useTxRunner ? queryFirstTx : queryFirst
+    const existing = await queryFirstFn<UserRow>(
       txDb,
       "SELECT * FROM users WHERE id = ? AND scopeKey = ?",
       [userId, resolvedScope],
     )
     if (!existing) return
     const nextRevision = `${existing.revision}-deleted-${Date.now()}`
-    await execute(
+    await exec(
       txDb,
       "UPDATE users SET deletedAt = ?, updatedAt = ?, revision = ? WHERE id = ? AND scopeKey = ?",
       [deletedAt, deletedAt, nextRevision, userId, resolvedScope],
@@ -191,15 +204,15 @@ async function markUserDeletedInternal(
           scopeKey: resolvedScope,
           createdAt: new Date().toISOString(),
         },
-        txDb,
+        useTxRunner ? txDb : undefined,
       )
     }
   }
 
   if (options.useTransaction) {
-    await executeTransaction(database, runner)
+    await executeTransaction(database, (txDb) => runner(txDb, true))
   } else {
-    await runner(database)
+    await runner(database, useTx)
   }
 }
 

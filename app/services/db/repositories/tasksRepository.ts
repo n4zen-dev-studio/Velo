@@ -1,7 +1,14 @@
 import type { SQLiteDatabase } from "expo-sqlite"
 
 import { getDb } from "@/services/db/db"
-import { execute, executeTransaction, queryAll, queryFirst } from "@/services/db/queries"
+import {
+  execute,
+  executeTransaction,
+  executeTx,
+  queryAll,
+  queryFirst,
+  queryFirstTx,
+} from "@/services/db/queries"
 import type { Priority, Task } from "@/services/db/types"
 import { decryptText, encryptText } from "@/utils/crypto"
 import { enqueueOp } from "@/services/db/repositories/changeLogRepository"
@@ -50,16 +57,19 @@ async function upsertTaskInternal(
   db?: SQLiteDatabase,
 ) {
   const database = db ?? (await getDb())
-  const runner = async (txDb: SQLiteDatabase) => {
+  const useTx = db !== undefined || options.useTransaction
+  const runner = async (txDb: SQLiteDatabase, useTxRunner: boolean) => {
+    const exec = useTxRunner ? executeTx : execute
+    const queryFirstFn = useTxRunner ? queryFirstTx : queryFirst
     const scopeKey = task.scopeKey ?? (await getActiveScopeKey())
-    const existing = await queryFirst<TaskRow>(
+    const existing = await queryFirstFn<TaskRow>(
       txDb,
       "SELECT * FROM tasks WHERE id = ? AND scopeKey = ?",
       [task.id, scopeKey],
     )
     const encryptedDescription = await encryptText(task.description)
 
-    await execute(
+    await exec(
       txDb,
       `INSERT INTO tasks (
           id,
@@ -142,7 +152,7 @@ async function upsertTaskInternal(
           scopeKey,
           createdAt: new Date().toISOString(),
         },
-        txDb,
+        useTxRunner ? txDb : undefined,
       )
     }
 
@@ -153,7 +163,7 @@ async function upsertTaskInternal(
         to: task.statusId,
         revision: task.revision,
       })
-      await execute(
+      await executeTx(
         txDb,
         `INSERT INTO task_events (id, taskId, type, payload, createdAt, createdByUserId, scopeKey)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -163,9 +173,9 @@ async function upsertTaskInternal(
   }
 
   if (options.useTransaction) {
-    await executeTransaction(database, runner)
+    await executeTransaction(database, (txDb) => runner(txDb, true))
   } else {
-    await runner(database)
+    await runner(database, useTx)
   }
 }
 
@@ -210,9 +220,12 @@ async function markTaskDeletedInternal(
   db?: SQLiteDatabase,
 ) {
   const database = db ?? (await getDb())
+  const useTx = db !== undefined || options.useTransaction
   const resolvedScope = await getActiveScopeKey()
-  const runner = async (txDb: SQLiteDatabase) => {
-    const existing = await queryFirst<TaskRow>(
+  const runner = async (txDb: SQLiteDatabase, useTxRunner: boolean) => {
+    const exec = useTxRunner ? executeTx : execute
+    const queryFirstFn = useTxRunner ? queryFirstTx : queryFirst
+    const existing = await queryFirstFn<TaskRow>(
       txDb,
       "SELECT * FROM tasks WHERE id = ? AND scopeKey = ?",
       [taskId, resolvedScope],
@@ -220,7 +233,7 @@ async function markTaskDeletedInternal(
     if (!existing) return
 
     const nextRevision = `${existing.revision}-deleted-${Date.now()}`
-    await execute(
+    await exec(
       txDb,
       "UPDATE tasks SET deletedAt = ?, updatedAt = ?, revision = ? WHERE id = ? AND scopeKey = ?",
       [deletedAt, deletedAt, nextRevision, taskId, resolvedScope],
@@ -255,15 +268,15 @@ async function markTaskDeletedInternal(
           scopeKey: existing.scopeKey,
           createdAt: new Date().toISOString(),
         },
-        txDb,
+        useTxRunner ? txDb : undefined,
       )
     }
   }
 
   if (options.useTransaction) {
-    await executeTransaction(database, runner)
+    await executeTransaction(database, (txDb) => runner(txDb, true))
   } else {
-    await runner(database)
+    await runner(database, useTx)
   }
 }
 

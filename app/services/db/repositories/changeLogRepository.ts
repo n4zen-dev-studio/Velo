@@ -1,7 +1,7 @@
 import type { SQLiteDatabase } from "expo-sqlite"
 
 import { getDb } from "@/services/db/db"
-import { execute, queryAll, queryFirst } from "@/services/db/queries"
+import { execute, executeTx, queryAll, queryFirst } from "@/services/db/queries"
 import type { ChangeLogEntry, ChangeLogOpType, ChangeLogStatus } from "@/services/db/types"
 import { getCurrentUserId, getDeviceId, generateUuidV4 } from "@/services/sync/identity"
 import { getActiveScopeKey } from "@/services/session/scope"
@@ -24,12 +24,13 @@ interface EnqueueParams {
 
 export async function enqueueOp(params: EnqueueParams, db?: SQLiteDatabase) {
   const database = db ?? (await getDb())
+  const exec = db ? executeTx : execute
   const opId = await generateUuidV4()
   const deviceId = await getDeviceId()
   const userId = await getCurrentUserId()
   const scopeKey = params.scopeKey ?? (await getActiveScopeKey())
 
-  await execute(
+  await exec(
     database,
     `INSERT INTO change_log (
         opId,
@@ -116,8 +117,9 @@ export async function countFailedOps(scopeKey?: string) {
 export async function markOpsSent(opIds: string[], db?: SQLiteDatabase) {
   if (opIds.length === 0) return
   const database = db ?? (await getDb())
+  const exec = db ? executeTx : execute
   const placeholders = opIds.map(() => "?").join(",")
-  await execute(
+  await exec(
     database,
     `UPDATE change_log SET status = 'SENT' WHERE opId IN (${placeholders})`,
     opIds,
@@ -126,9 +128,10 @@ export async function markOpsSent(opIds: string[], db?: SQLiteDatabase) {
 
 export async function markOpFailed(opId: string, errorText?: string, db?: SQLiteDatabase) {
   const database = db ?? (await getDb())
+  const exec = db ? executeTx : execute
   const now = new Date().toISOString()
   const nextStatus: ChangeLogStatus = "FAILED"
-  await execute(
+  await exec(
     database,
     `UPDATE change_log
       SET status = ?,

@@ -1,7 +1,14 @@
 import type { SQLiteDatabase } from "expo-sqlite"
 
 import { getDb } from "@/services/db/db"
-import { execute, executeTransaction, queryAll, queryFirst } from "@/services/db/queries"
+import {
+  execute,
+  executeTransaction,
+  executeTx,
+  queryAll,
+  queryFirst,
+  queryFirstTx,
+} from "@/services/db/queries"
 import type { Comment } from "@/services/db/types"
 import { decryptText, encryptText } from "@/utils/crypto"
 import { enqueueOp } from "@/services/db/repositories/changeLogRepository"
@@ -34,14 +41,17 @@ async function upsertCommentInternal(
   db?: SQLiteDatabase,
 ) {
   const database = db ?? (await getDb())
-  const runner = async (txDb: SQLiteDatabase) => {
+  const useTx = db !== undefined || options.useTransaction
+  const runner = async (txDb: SQLiteDatabase, useTxRunner: boolean) => {
+    const exec = useTxRunner ? executeTx : execute
+    const queryFirstFn = useTxRunner ? queryFirstTx : queryFirst
     const scopeKey = comment.scopeKey ?? (await getActiveScopeKey())
-    const existing = await queryFirst<CommentRow>(
+    const existing = await queryFirstFn<CommentRow>(
       txDb,
       "SELECT * FROM comments WHERE id = ? AND scopeKey = ?",
       [comment.id, scopeKey],
     )
-    const taskRow = await queryFirst<{ workspaceId: string }>(
+    const taskRow = await queryFirstFn<{ workspaceId: string }>(
       txDb,
       "SELECT workspaceId FROM tasks WHERE id = ? AND scopeKey = ?",
       [comment.taskId, scopeKey],
@@ -49,7 +59,7 @@ async function upsertCommentInternal(
     const workspaceId = taskRow?.workspaceId ?? personalWorkspaceId(scopeKey)
     const encryptedBody = await encryptText(comment.body)
 
-    await execute(
+    await exec(
       txDb,
       `INSERT INTO comments (
           id,
@@ -107,15 +117,15 @@ async function upsertCommentInternal(
           scopeKey,
           createdAt: new Date().toISOString(),
         },
-        txDb,
+        useTxRunner ? txDb : undefined,
       )
     }
   }
 
   if (options.useTransaction) {
-    await executeTransaction(database, runner)
+    await executeTransaction(database, (txDb) => runner(txDb, true))
   } else {
-    await runner(database)
+    await runner(database, useTx)
   }
 }
 
@@ -174,15 +184,18 @@ async function markCommentDeletedInternal(
   db?: SQLiteDatabase,
 ) {
   const database = db ?? (await getDb())
+  const useTx = db !== undefined || options.useTransaction
   const resolvedScope = await getActiveScopeKey()
-  const runner = async (txDb: SQLiteDatabase) => {
-    const existing = await queryFirst<CommentRow>(
+  const runner = async (txDb: SQLiteDatabase, useTxRunner: boolean) => {
+    const exec = useTxRunner ? executeTx : execute
+    const queryFirstFn = useTxRunner ? queryFirstTx : queryFirst
+    const existing = await queryFirstFn<CommentRow>(
       txDb,
       "SELECT * FROM comments WHERE id = ? AND scopeKey = ?",
       [commentId, resolvedScope],
     )
     if (!existing) return
-    const taskRow = await queryFirst<{ workspaceId: string }>(
+    const taskRow = await queryFirstFn<{ workspaceId: string }>(
       txDb,
       "SELECT workspaceId FROM tasks WHERE id = ? AND scopeKey = ?",
       [existing.taskId, resolvedScope],
@@ -190,7 +203,7 @@ async function markCommentDeletedInternal(
     const workspaceId = taskRow?.workspaceId ?? personalWorkspaceId(existing.scopeKey)
 
     const nextRevision = `${existing.revision}-deleted-${Date.now()}`
-    await execute(
+    await exec(
       txDb,
       "UPDATE comments SET deletedAt = ?, updatedAt = ?, revision = ? WHERE id = ? AND scopeKey = ?",
       [deletedAt, deletedAt, nextRevision, commentId, resolvedScope],
@@ -219,15 +232,15 @@ async function markCommentDeletedInternal(
           scopeKey: existing.scopeKey,
           createdAt: new Date().toISOString(),
         },
-        txDb,
+        useTxRunner ? txDb : undefined,
       )
     }
   }
 
   if (options.useTransaction) {
-    await executeTransaction(database, runner)
+    await executeTransaction(database, (txDb) => runner(txDb, true))
   } else {
-    await runner(database)
+    await runner(database, useTx)
   }
 }
 

@@ -9,7 +9,6 @@ import { Text } from "@/components/Text"
 import { TextField } from "@/components/TextField"
 import { Switch } from "@/components/Toggle/Switch"
 import { HeaderAvatar } from "@/components/HeaderAvatar"
-import { clearScopeData, clearUnsyncedOps } from "@/services/db/clearScopeData"
 import { clearCurrentUserId, getCurrentUserId, setSessionMode } from "@/services/sync/identity"
 import { clearOfflineMode } from "@/services/storage/session"
 import { goToAuth, goToProfile } from "@/navigation/navigationActions"
@@ -35,8 +34,11 @@ import { useSyncStatus } from "@/services/sync/syncStore"
 import { clearAuthSession, refreshAuthSession, useAuthSession } from "@/services/auth/session"
 import { formatDateTime } from "@/utils/dateFormat"
 import { resolveUserLabel } from "@/utils/userLabel"
-import { GUEST_SCOPE_KEY, userScopeKey } from "@/services/session/scope"
-import { bootstrapWorkspaces, personalWorkspaceId, setActiveWorkspaceId } from "@/services/db/repositories/workspacesRepository"
+import { GUEST_SCOPE_KEY } from "@/services/session/scope"
+import { logScopeAction, withScopeTransitionLock } from "@/services/session/scopeTransition"
+import { logoutCleanup } from "@/services/session/logoutCleanup"
+import { setLoggingOut } from "@/services/session/logoutState"
+import { resetOfflineClaimHandled } from "@/services/sync/offlineClaim"
 
 import { useSettingsViewModel } from "./useSettingsViewModel"
 
@@ -124,15 +126,25 @@ export function SettingsScreen() {
       if (syncStatus.pendingCount > 0) {
         await syncController.triggerSync("manual")
       }
-      await logoutUser()
-      await clearCurrentUserId()
-      await setSessionMode("local")
-      await clearOfflineMode()
-      clearAuthSession()
-      await bootstrapWorkspaces(GUEST_SCOPE_KEY)
-      await setActiveWorkspaceId(personalWorkspaceId(GUEST_SCOPE_KEY), GUEST_SCOPE_KEY)
-      setShowLogoutModal(false)
-      goToAuth()
+      await withScopeTransitionLock(async () => {
+        setLoggingOut(true)
+        syncController.pause()
+        try {
+          logScopeAction("logout_sync_wipe", GUEST_SCOPE_KEY, authSession.currentUserId)
+          await logoutUser()
+          await logoutCleanup({ mode: "user_sync_logout", userId: authSession.currentUserId })
+          await clearCurrentUserId()
+          await setSessionMode("local")
+          await clearOfflineMode()
+          clearAuthSession()
+          resetOfflineClaimHandled()
+          setShowLogoutModal(false)
+          goToAuth()
+        } finally {
+          syncController.resume()
+          setLoggingOut(false)
+        }
+      }, "logout_sync_wipe")
     } catch (err) {
       const message = err instanceof Error ? err.message : "Sync failed. Please try again."
       setLogoutError(message)
@@ -141,42 +153,107 @@ export function SettingsScreen() {
     }
   }
 
+  // const handleOnlineWipe = async () => {
+  //   setLogoutError(null)
+  //   setIsLoggingOut(true)
+  //   try {
+  //     if (!authSession.currentUserId) {
+  //       throw new Error("No authenticated user session.")
+  //     }
+  //     await withScopeTransitionLock(async () => {
+  //       setLoggingOut(true)
+  //       syncController.pause()
+  //       try {
+  //         logScopeAction("logout_wipe_unsynced", GUEST_SCOPE_KEY, authSession.currentUserId)
+  //         await logoutCleanup({ mode: "user_wipe_logout", userId: authSession.currentUserId })
+  //         await logoutUser()
+  //         await clearCurrentUserId()
+  //         await setSessionMode("local")
+  //         await clearOfflineMode()
+  //         clearAuthSession()
+  //         resetOfflineClaimHandled()
+  //         setShowLogoutModal(false)
+  //         goToAuth()
+  //       } finally {
+  //         syncController.resume()
+  //         setLoggingOut(false)
+  //       }
+  //     }, "logout_wipe_unsynced")
+  //   } catch (err) {
+  //     const message = err instanceof Error ? err.message : "Sign out failed. Please try again."
+  //     setLogoutError(message)
+  //   } finally {
+  //     setIsLoggingOut(false)
+  //   }
+  // }
   const handleOnlineWipe = async () => {
     setLogoutError(null)
     setIsLoggingOut(true)
+    let didWipe = false
+
     try {
-      if (!authSession.currentUserId) {
-        throw new Error("No authenticated user session.")
-      }
-      const scopeKey = userScopeKey(authSession.currentUserId)
-      await clearUnsyncedOps(scopeKey)
-      await logoutUser()
-      await clearCurrentUserId()
-      await setSessionMode("local")
-      await clearOfflineMode()
-      clearAuthSession()
-      await bootstrapWorkspaces(GUEST_SCOPE_KEY)
-      await setActiveWorkspaceId(personalWorkspaceId(GUEST_SCOPE_KEY), GUEST_SCOPE_KEY)
-      setShowLogoutModal(false)
-      goToAuth()
+      if (!authSession.currentUserId) throw new Error("No authenticated user session.")
+
+      await withScopeTransitionLock(async () => {
+        setLoggingOut(true)
+
+        // HARD STOP sync (abort if possible)
+        syncController.abortAndPause?.("logout_wipe_unsynced")
+        syncController.pause()
+
+        didWipe = true
+
+        logScopeAction("logout_wipe_unsynced", GUEST_SCOPE_KEY, authSession.currentUserId)
+
+        // IMPORTANT: wipe pending ops BEFORE any auth clearing effects
+        await logoutCleanup({ mode: "user_wipe_logout", userId: authSession.currentUserId })
+
+        // For wipe-logout: DO NOT call network logout if it can trigger sync
+        // await logoutUser()   // <-- remove or guard with "no sync" mode
+
+        await clearCurrentUserId()
+        await setSessionMode("local")
+        await clearOfflineMode()
+
+        clearAuthSession()
+        resetOfflineClaimHandled()
+
+        setShowLogoutModal(false)
+        goToAuth()
+      }, "logout_wipe_unsynced")
     } catch (err) {
       const message = err instanceof Error ? err.message : "Sign out failed. Please try again."
       setLogoutError(message)
     } finally {
+      // DO NOT resume on wipe
+      if (!didWipe) syncController.resume()
+      setLoggingOut(false)
       setIsLoggingOut(false)
     }
   }
+
 
   const handleOfflineKeepLocal = async () => {
     setLogoutError(null)
     setIsLoggingOut(true)
     try {
-      await clearTokens()
-      await setSessionMode("local")
-      await clearOfflineMode()
-      clearAuthSession()
-      setShowLogoutModal(false)
-      goToAuth()
+      await withScopeTransitionLock(async () => {
+        setLoggingOut(true)
+        syncController.pause()
+        try {
+          logScopeAction("logout_offline_keep", GUEST_SCOPE_KEY, authSession.currentUserId)
+          await clearTokens()
+          await setSessionMode("local")
+          await clearOfflineMode()
+          clearAuthSession()
+          resetOfflineClaimHandled()
+          setShowLogoutModal(false)
+          goToAuth()
+        } finally {
+          syncController.resume()
+          setLoggingOut(false)
+        }
+      }, "logout_offline_keep")
     } catch (err) {
       const message = err instanceof Error ? err.message : "Sign out failed. Please try again."
       setLogoutError(message)
@@ -189,14 +266,25 @@ export function SettingsScreen() {
     setLogoutError(null)
     setIsLoggingOut(true)
     try {
-      await clearScopeData(GUEST_SCOPE_KEY)
-      await clearTokens()
-      await clearCurrentUserId()
-      await setSessionMode("local")
-      await clearOfflineMode()
-      clearAuthSession()
-      setShowLogoutModal(false)
-      goToAuth()
+      await withScopeTransitionLock(async () => {
+        setLoggingOut(true)
+        syncController.pause()
+        try {
+          logScopeAction("logout_offline_wipe", GUEST_SCOPE_KEY, authSession.currentUserId)
+          await logoutCleanup({ mode: "guest_wipe" })
+          await clearTokens()
+          await clearCurrentUserId()
+          await setSessionMode("local")
+          await clearOfflineMode()
+          clearAuthSession()
+          resetOfflineClaimHandled()
+          setShowLogoutModal(false)
+          goToAuth()
+        } finally {
+          syncController.resume()
+          setLoggingOut(false)
+        }
+      }, "logout_offline_wipe")
     } catch (err) {
       const message = err instanceof Error ? err.message : "Sign out failed. Please try again."
       setLogoutError(message)

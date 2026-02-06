@@ -17,6 +17,7 @@ export type SyncTriggerReason = "app_open" | "manual" | "net_regain" | "backgrou
 
 class SyncController {
   private isRunning = false
+  private isPaused = false
   private netInfoUnsubscribe: NetInfoSubscription | null = null
   private appStateUnsubscribe: { remove: () => void } | null = null
   private lastTriggerAt = 0
@@ -49,6 +50,10 @@ class SyncController {
   }
 
   async triggerSync(reason: SyncTriggerReason) {
+    if (this.isPaused) {
+      setPhase("idle")
+      return
+    }
     if (this.isRunning) {
       this.pendingTrigger = true
       return
@@ -120,6 +125,14 @@ class SyncController {
       clearTimeout(this.debounceTimer)
       this.debounceTimer = null
     }
+  }
+
+  pause() {
+    this.isPaused = true
+  }
+
+  resume() {
+    this.isPaused = false
   }
 }
 

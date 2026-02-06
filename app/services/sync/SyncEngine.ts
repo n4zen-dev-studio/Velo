@@ -1,5 +1,5 @@
 import { getDb } from "@/services/db/db"
-import { execute, executeTransaction, queryFirst } from "@/services/db/queries"
+import { executeTransaction, executeTx, queryFirst, queryFirstTx } from "@/services/db/queries"
 import {
   listPendingOps,
   markOpsSent,
@@ -97,7 +97,7 @@ export async function runSync(reason?: string) {
         appliedChanges += changesToApply.length
 
         const newCursor = response.newCursor ?? cursor
-        await execute(
+        await executeTx(
           txDb,
           `INSERT INTO sync_state (scopeKey, lastCursor, lastSyncedAt)
            VALUES (?, ?, ?)
@@ -220,7 +220,7 @@ async function applyRemoteChange(db: SqliteDb, change: SyncChange) {
 
 async function hasPendingOpsForEntity(db: SqliteDb, entityType: string, entityId: string) {
   const scopeKey = await getActiveScopeKey()
-  const row = await queryFirst<{ count: number }>(
+  const row = await queryFirstTx<{ count: number }>(
     db,
     "SELECT COUNT(1) as count FROM change_log WHERE scopeKey = ? AND status = 'PENDING' AND entityType = ? AND entityId = ?",
     [scopeKey, entityType, entityId],
@@ -233,7 +233,7 @@ async function createConflict(db: SqliteDb, change: SyncChange, localPayload?: T
   const conflictId = `${change.entityType}:${change.entityId}`
   const scopeKey = await getActiveScopeKey()
 
-  await execute(
+  await executeTx(
     db,
     `INSERT INTO conflicts (
       id,
