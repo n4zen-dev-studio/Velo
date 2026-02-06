@@ -146,7 +146,7 @@ export function HomeScreen() {
                             <Pressable
                               onPress={(e) => {
                                 e.stopPropagation?.()
-                                console.log("[Arrow] up pressed", { taskId: task.id, laneIndex })
+                                console.log("[ArrowPress]", { taskId: task.id, laneIndex, dir: "up", task })
                                 LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut)
                                 void bumpTaskStatus(task.id, laneIndex, "up")
                               }}
@@ -163,7 +163,7 @@ export function HomeScreen() {
                             <Pressable
                               onPress={(e) => {
                                 e.stopPropagation?.()
-                                console.log("[Arrow] down pressed", { taskId: task.id, laneIndex })
+                                console.log("[ArrowPress]", { taskId: task.id, laneIndex, dir: "down", task })
                                 LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut)
                                 void bumpTaskStatus(task.id, laneIndex, "down")
                               }}
