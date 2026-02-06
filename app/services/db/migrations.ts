@@ -126,6 +126,148 @@ async function rebuildSyncStateTable(db: SQLiteDatabase) {
   await executeTx(db, "ALTER TABLE sync_state_new RENAME TO sync_state;")
 }
 
+async function rebuildWorkspacesTable(db: SQLiteDatabase) {
+  const hasTable = await tableExists(db, "workspaces")
+  if (!hasTable) return
+
+  await executeTx(
+    db,
+    `
+    CREATE TABLE IF NOT EXISTS workspaces_new (
+      id TEXT NOT NULL,
+      label TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      createdAt INTEGER NOT NULL,
+      updatedAt INTEGER NOT NULL,
+      remoteId TEXT,
+      scopeKey TEXT NOT NULL,
+      PRIMARY KEY (id, scopeKey)
+    );
+    `,
+  )
+  await executeTx(
+    db,
+    `
+    INSERT INTO workspaces_new (id, label, kind, createdAt, updatedAt, remoteId, scopeKey)
+    SELECT id, label, kind, createdAt, updatedAt, remoteId, scopeKey
+    FROM workspaces;
+    `,
+  )
+  await executeTx(db, "DROP TABLE workspaces;")
+  await executeTx(db, "ALTER TABLE workspaces_new RENAME TO workspaces;")
+}
+
+async function migrateSharedWorkspaceScopes(db: SQLiteDatabase) {
+  const scopes = await queryAll<{ scopeKey: string }>(
+    db,
+    "SELECT DISTINCT scopeKey FROM workspaces WHERE scopeKey LIKE 'user:%'",
+  )
+  for (const { scopeKey } of scopes) {
+    const shared = await queryAll<{ workspaceId: string }>(
+      db,
+      `
+      SELECT wm.workspaceId
+      FROM workspace_members wm
+      JOIN workspaces w ON w.id = wm.workspaceId AND w.scopeKey = ?
+      WHERE wm.scopeKey = ?
+        AND wm.deletedAt IS NULL
+        AND w.kind != 'personal'
+        AND (
+          wm.role = 'MEMBER'
+          OR (
+            wm.role = 'OWNER'
+            AND (
+              SELECT COUNT(1)
+              FROM workspace_members wm2
+              WHERE wm2.workspaceId = wm.workspaceId
+                AND wm2.scopeKey = ?
+                AND wm2.deletedAt IS NULL
+            ) > 1
+          )
+        )
+      `,
+      [scopeKey, scopeKey, scopeKey],
+    )
+    for (const { workspaceId } of shared) {
+      const workspaceScope = `workspace:${workspaceId}`
+      await executeTx(
+        db,
+        "UPDATE tasks SET scopeKey = ? WHERE workspaceId = ? AND scopeKey LIKE 'user:%'",
+        [workspaceScope, workspaceId],
+      )
+      await executeTx(
+        db,
+        "UPDATE statuses SET scopeKey = ? WHERE workspaceId = ? AND scopeKey LIKE 'user:%'",
+        [workspaceScope, workspaceId],
+      )
+      await executeTx(
+        db,
+        "UPDATE projects SET scopeKey = ? WHERE workspaceId = ? AND scopeKey LIKE 'user:%'",
+        [workspaceScope, workspaceId],
+      )
+      await executeTx(
+        db,
+        "UPDATE change_log SET scopeKey = ? WHERE workspaceId = ? AND scopeKey LIKE 'user:%'",
+        [workspaceScope, workspaceId],
+      )
+      await executeTx(
+        db,
+        "UPDATE task_events SET scopeKey = ? WHERE taskId IN (SELECT id FROM tasks WHERE workspaceId = ?) AND scopeKey LIKE 'user:%'",
+        [workspaceScope, workspaceId],
+      )
+      await executeTx(
+        db,
+        "UPDATE comments SET scopeKey = ? WHERE taskId IN (SELECT id FROM tasks WHERE workspaceId = ?) AND scopeKey LIKE 'user:%'",
+        [workspaceScope, workspaceId],
+      )
+      await executeTx(
+        db,
+        "UPDATE conflicts SET scopeKey = ? WHERE entityType = 'task' AND entityId IN (SELECT id FROM tasks WHERE workspaceId = ?) AND scopeKey LIKE 'user:%'",
+        [workspaceScope, workspaceId],
+      )
+      await executeTx(
+        db,
+        "UPDATE conflicts SET scopeKey = ? WHERE entityType = 'comment' AND entityId IN (SELECT c.id FROM comments c JOIN tasks t ON t.id = c.taskId WHERE t.workspaceId = ?) AND scopeKey LIKE 'user:%'",
+        [workspaceScope, workspaceId],
+      )
+    }
+  }
+}
+
+async function repairWorkspaceIndexScopes(db: SQLiteDatabase) {
+  const scopes = await queryAll<{ scopeKey: string }>(
+    db,
+    "SELECT DISTINCT scopeKey FROM workspaces WHERE scopeKey LIKE 'user:%'",
+  )
+  for (const { scopeKey } of scopes) {
+    const misplaced = await queryAll<{
+      id: string
+      label: string
+      kind: string
+      createdAt: number
+      updatedAt: number
+      remoteId: string | null
+    }>(
+      db,
+      "SELECT id, label, kind, createdAt, updatedAt, remoteId FROM workspaces WHERE scopeKey LIKE 'workspace:%'",
+    )
+    for (const row of misplaced) {
+      await executeTx(
+        db,
+        `INSERT INTO workspaces (id, label, kind, createdAt, updatedAt, remoteId, scopeKey)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id, scopeKey) DO UPDATE SET
+           label = excluded.label,
+           kind = excluded.kind,
+           createdAt = excluded.createdAt,
+           updatedAt = excluded.updatedAt,
+           remoteId = excluded.remoteId`,
+        [row.id, row.label, row.kind, row.createdAt, row.updatedAt, row.remoteId, scopeKey],
+      )
+    }
+  }
+}
+
 export async function migrate(db: SQLiteDatabase) {
   const versionRow = await queryFirst<{ user_version: number }>(db, "PRAGMA user_version;")
   const currentVersion = versionRow?.user_version ?? 0
@@ -269,6 +411,18 @@ export async function migrate(db: SQLiteDatabase) {
       "ALTER TABLE conflicts ADD COLUMN scopeKey TEXT NOT NULL DEFAULT 'guest'",
       "UPDATE conflicts SET scopeKey = 'guest' WHERE scopeKey IS NULL OR scopeKey = ''",
     )
+
+    if (currentVersion < 5) {
+      await rebuildWorkspacesTable(txDb)
+    }
+
+    if (currentVersion < 6) {
+      await migrateSharedWorkspaceScopes(txDb)
+    }
+
+    if (currentVersion < 7) {
+      await repairWorkspaceIndexScopes(txDb)
+    }
 
     await executeSqlBatch(txDb, createIndexesSql)
     await executeTx(txDb, `PRAGMA user_version = ${schemaVersion};`)

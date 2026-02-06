@@ -23,7 +23,17 @@ export function TaskEditorScreen() {
   const navigation = useNavigation<HomeStackScreenProps<"TaskEditor">["navigation"]>()
   const route = useRoute<HomeStackScreenProps<"TaskEditor">["route"]>()
   const { taskId, projectId } = route.params ?? {}
-  const { task, statuses, priorityOptions, defaultValues, saveTask, isSaving } =
+  const {
+    task,
+    statuses,
+    priorityOptions,
+    defaultValues,
+    saveTask,
+    isSaving,
+    assigneeOptions,
+    assigneeUserId,
+    setAssigneeUserId,
+  } =
     useTaskEditorViewModel(taskId, projectId)
   const syncState = useSyncStatus()
   const [hasConflict, setHasConflict] = useState(false)
@@ -147,6 +157,24 @@ export function TaskEditorScreen() {
               style={[themed($pill), priorityValue === priority && themed($pillActive)]}
             >
               <Text text={priority} />
+            </Pressable>
+          ))}
+        </View>
+      </GlassCard>
+
+      <GlassCard>
+        <Text preset="formLabel" text="Assignee" />
+        <View style={themed($pillRow)}>
+          {assigneeOptions.map((member) => (
+            <Pressable
+              key={member.userId ?? "unassigned"}
+              onPress={() => !hasConflict && setAssigneeUserId(member.userId)}
+              style={[
+                themed($pill),
+                assigneeUserId === member.userId && themed($pillActive),
+              ]}
+            >
+              <Text text={member.label} />
             </Pressable>
           ))}
         </View>

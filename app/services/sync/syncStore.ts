@@ -2,9 +2,10 @@ import { useSyncExternalStore } from "react"
 
 import { getDb } from "@/services/db/db"
 import { queryFirst } from "@/services/db/queries"
-import { countPendingOps } from "@/services/db/repositories/changeLogRepository"
+import { countPendingOpsForScopes } from "@/services/db/repositories/changeLogRepository"
 import { getActiveScopeKey } from "@/services/session/scope"
 import type { SyncBadgeState, SyncPhase } from "@/services/sync/syncTypes"
+import { listAllDataScopeKeys } from "@/services/db/scopeKey"
 
 interface SyncStoreState {
   phase: SyncPhase
@@ -57,9 +58,10 @@ function setState(partial: Partial<SyncStoreState>) {
 
 export async function refreshLocalCounts() {
   const scopeKey = await getActiveScopeKey()
+  const scopes = await listAllDataScopeKeys(scopeKey)
   const [pendingCount, conflictCount] = await Promise.all([
-    countPendingOps(scopeKey),
-    countConflicts(scopeKey),
+    countPendingOpsForScopes(scopes),
+    countConflicts(scopes),
   ])
   setState({ pendingCount, conflictCount })
 }
@@ -93,12 +95,14 @@ export function deriveSyncBadgeState(snapshot: SyncStoreState): SyncBadgeState {
   return "idle"
 }
 
-async function countConflicts(scopeKey: string) {
+async function countConflicts(scopes: string[]) {
   const db = await getDb()
+  if (scopes.length === 0) return 0
+  const placeholders = scopes.map(() => "?").join(", ")
   const row = await queryFirst<{ count: number }>(
     db,
-    "SELECT COUNT(1) as count FROM conflicts WHERE scopeKey = ? AND status = 'OPEN'",
-    [scopeKey],
+    `SELECT COUNT(1) as count FROM conflicts WHERE scopeKey IN (${placeholders}) AND status = 'OPEN'`,
+    scopes,
   )
   return row?.count ?? 0
 }

@@ -32,17 +32,22 @@ export async function upsertWorkspaceMember(member: WorkspaceMember, db?: SQLite
 export async function upsertWorkspaceMemberFromSync(
   member: WorkspaceMember,
   db?: SQLiteDatabase,
+  scopeKey?: string,
 ) {
-  return upsertWorkspaceMemberInternal(member, { enqueue: false, useTransaction: false }, db)
+  return upsertWorkspaceMemberInternal(
+    member,
+    { enqueue: false, useTransaction: false, forceScopeKey: scopeKey },
+    db,
+  )
 }
 
 async function upsertWorkspaceMemberInternal(
   member: WorkspaceMember,
-  options: { enqueue: boolean; useTransaction: boolean },
+  options: { enqueue: boolean; useTransaction: boolean; forceScopeKey?: string },
   db?: SQLiteDatabase,
 ) {
   const database = db ?? (await getDb())
-  const resolvedScope = member.scopeKey ?? (await getActiveScopeKey())
+  const resolvedScope = options.forceScopeKey ?? member.scopeKey ?? (await getActiveScopeKey())
   const useTx = db !== undefined || options.useTransaction
   const runner = async (txDb: SQLiteDatabase, useTxRunner: boolean) => {
     const exec = useTxRunner ? executeTx : execute

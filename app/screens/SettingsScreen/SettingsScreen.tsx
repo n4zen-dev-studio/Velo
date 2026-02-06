@@ -297,10 +297,15 @@ export function SettingsScreen() {
     const error = validateWorkspaceLabel(newWorkspaceLabel)
     setCreateError(error)
     if (error) return
-    await createWorkspace(newWorkspaceLabel.trim(), true)
-    setNewWorkspaceLabel("")
-    setCreateError(null)
-    setCreateExpanded(false)
+    try {
+      await createWorkspace(newWorkspaceLabel.trim(), true)
+      setNewWorkspaceLabel("")
+      setCreateError(null)
+      setCreateExpanded(false)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to create workspace"
+      setCreateError(message)
+    }
   }
 
   const openRenameModal = (workspaceId: string, currentLabel: string) => {

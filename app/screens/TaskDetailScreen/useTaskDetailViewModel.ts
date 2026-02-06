@@ -13,7 +13,7 @@ import { resolveAuthorLabel } from "@/services/users/resolveAuthorLabel"
 import { refreshLocalCounts } from "@/services/sync/syncStore"
 import { generateUuidV4, getCurrentUserId, getSessionMode } from "@/services/sync/identity"
 import { ANON_USER_ID } from "@/services/constants/identity"
-import { getActiveScopeKey } from "@/services/session/scope"
+import { resolveScopeKeyForTaskId } from "@/services/db/scopeKey"
 
 export type CommentVM = Comment & { authorLabel: string }
 export type TaskEventVM = TaskEvent & { authorLabel: string }
@@ -85,7 +85,7 @@ export const useTaskDetailViewModel = (taskId: string) => {
       const sessionMode = await getSessionMode()
       const currentUserId = sessionMode === "remote" ? await getCurrentUserId() : null
       const createdByUserId = currentUserId ?? ANON_USER_ID
-      const scopeKey = await getActiveScopeKey()
+      const scopeKey = await resolveScopeKeyForTaskId(taskId)
       const authorLabel = await resolveAuthorLabel({
         createdByUserId,
         currentUserId,

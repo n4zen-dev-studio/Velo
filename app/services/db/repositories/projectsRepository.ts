@@ -2,10 +2,12 @@ import { getDb } from "@/services/db/db"
 import { execute, queryAll, queryFirst } from "@/services/db/queries"
 import type { Project, ProjectMember } from "@/services/db/types"
 import { getActiveScopeKey } from "@/services/session/scope"
+import { listAllDataScopeKeys, resolveWorkspaceScopeKey } from "@/services/db/scopeKey"
 
 export async function upsertProject(project: Project, scopeKey?: string) {
   const database = await getDb()
-  const resolvedScope = project.scopeKey ?? scopeKey ?? (await getActiveScopeKey())
+  const resolvedScope =
+    project.scopeKey ?? scopeKey ?? (await resolveWorkspaceScopeKey(project.workspaceId, undefined, database))
   await execute(
     database,
     `INSERT INTO projects (
@@ -38,14 +40,16 @@ export async function upsertProject(project: Project, scopeKey?: string) {
 
 export async function listProjects(workspaceId?: string, scopeKey?: string) {
   const database = await getDb()
-  const resolvedScope = scopeKey ?? (await getActiveScopeKey())
   if (!workspaceId) {
+    const scopes = await listAllDataScopeKeys(scopeKey, database)
+    const placeholders = scopes.map(() => "?").join(", ")
     return queryAll<Project>(
       database,
-      "SELECT * FROM projects WHERE scopeKey = ? AND archivedAt IS NULL ORDER BY name",
-      [resolvedScope],
+      `SELECT * FROM projects WHERE scopeKey IN (${placeholders}) AND archivedAt IS NULL ORDER BY name`,
+      scopes,
     )
   }
+  const resolvedScope = await resolveWorkspaceScopeKey(workspaceId, scopeKey, database)
   return queryAll<Project>(
     database,
     "SELECT * FROM projects WHERE scopeKey = ? AND archivedAt IS NULL AND workspaceId = ? ORDER BY name",
@@ -55,11 +59,12 @@ export async function listProjects(workspaceId?: string, scopeKey?: string) {
 
 export async function getProjectById(projectId: string, scopeKey?: string) {
   const database = await getDb()
-  const resolvedScope = scopeKey ?? (await getActiveScopeKey())
+  const scopes = await listAllDataScopeKeys(scopeKey, database)
+  const placeholders = scopes.map(() => "?").join(", ")
   return queryFirst<Project>(
     database,
-    "SELECT * FROM projects WHERE id = ? AND scopeKey = ?",
-    [projectId, resolvedScope],
+    `SELECT * FROM projects WHERE id = ? AND scopeKey IN (${placeholders})`,
+    [projectId, ...scopes],
   )
 }
 

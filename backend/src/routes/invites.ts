@@ -40,6 +40,17 @@ async function requireWorkspaceOwner(userId: string, workspaceId: string) {
   return Boolean(owner)
 }
 
+async function requireWorkspaceMember(userId: string, workspaceId: string) {
+  const member = await prisma.workspaceMember.findFirst({
+    where: {
+      workspaceId,
+      userId,
+      deletedAt: null,
+    },
+  })
+  return Boolean(member)
+}
+
 export async function inviteRoutes(app: FastifyInstance) {
   app.post(
     "/workspaces/:workspaceId/invites",
@@ -159,6 +170,79 @@ export async function inviteRoutes(app: FastifyInstance) {
           invitedById: invite.invitedById,
           acceptedAt: invite.acceptedAt ? invite.acceptedAt.toISOString() : null,
         })),
+      )
+    },
+  )
+
+  app.get(
+    "/workspaces/:workspaceId/members",
+    { preHandler: [app.authenticate] },
+    async (request, reply) => {
+      const { workspaceId } = request.params as { workspaceId: string }
+      const userId = (request.user as { sub: string }).sub
+
+      const workspaceExists = await prisma.workspaceMember.findFirst({
+        where: { workspaceId, deletedAt: null },
+      })
+      if (!workspaceExists) {
+        return sendError(reply, 404, "WORKSPACE_NOT_FOUND", "Workspace not found.")
+      }
+
+      const isMember = await requireWorkspaceMember(userId, workspaceId)
+      if (!isMember) {
+        return sendError(reply, 403, "NOT_WORKSPACE_MEMBER", "Only workspace members can view members.")
+      }
+
+      const members = await prisma.workspaceMember.findMany({
+        where: { workspaceId, deletedAt: null },
+        orderBy: { createdAt: "asc" },
+      })
+      if (members.length === 0) return reply.send([])
+
+      const userIds = members.map((member) => member.userId)
+      const users = await prisma.user.findMany({
+        where: { id: { in: userIds } },
+        select: {
+          id: true,
+          email: true,
+          username: true,
+          displayName: true,
+          avatarUrl: true,
+          createdAt: true,
+          updatedAt: true,
+          revision: true,
+          deletedAt: true,
+        },
+      })
+      const userMap = new Map(users.map((user) => [user.id, user]))
+
+      return reply.send(
+        members.map((member) => {
+          const user = userMap.get(member.userId)
+          return {
+            id: member.id,
+            workspaceId: member.workspaceId,
+            userId: member.userId,
+            role: member.role,
+            createdAt: member.createdAt.toISOString(),
+            updatedAt: member.updatedAt.toISOString(),
+            revision: member.revision,
+            deletedAt: member.deletedAt,
+            user: user
+              ? {
+                  id: user.id,
+                  email: user.email,
+                  username: user.username,
+                  displayName: user.displayName,
+                  avatarUrl: user.avatarUrl,
+                  createdAt: user.createdAt.toISOString(),
+                  updatedAt: user.updatedAt.toISOString(),
+                  revision: user.revision,
+                  deletedAt: user.deletedAt,
+                }
+              : null,
+          }
+        }),
       )
     },
   )

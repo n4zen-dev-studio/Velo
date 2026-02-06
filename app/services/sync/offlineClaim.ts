@@ -30,6 +30,11 @@ export async function claimOfflineData(remoteUserId: string) {
     await executeTx(txDb, "DELETE FROM workspace_state WHERE scopeKey = ?", [userScope])
     await executeTx(txDb, "DELETE FROM sync_state WHERE scopeKey = ?", [userScope])
 
+    await executeTx(
+      txDb,
+      "DELETE FROM workspaces WHERE scopeKey = ? AND id IN (SELECT id FROM workspaces WHERE scopeKey = ?)",
+      [GUEST_SCOPE_KEY, userScope],
+    )
     await executeTx(txDb, "UPDATE workspaces SET scopeKey = ? WHERE scopeKey = ?", [userScope, GUEST_SCOPE_KEY])
     await executeTx(txDb, "UPDATE statuses SET scopeKey = ? WHERE scopeKey = ?", [userScope, GUEST_SCOPE_KEY])
     await executeTx(txDb, "UPDATE projects SET scopeKey = ? WHERE scopeKey = ?", [userScope, GUEST_SCOPE_KEY])

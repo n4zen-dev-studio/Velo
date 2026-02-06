@@ -45,6 +45,8 @@ const defaultWorkspace = (scopeKey: string): Workspace => ({
   updatedAt: 0,
   remoteId: null,
   scopeKey,
+  myRole: "OWNER",
+  membersCount: 1,
 })
 
 const WorkspaceContext = createContext<WorkspaceStoreValue | null>(null)
@@ -144,6 +146,9 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
   }, [])
 
   const createWorkspace = useCallback(async (label: string, setActive = true) => {
+    if (!authSession.isAuthenticated) {
+      throw new Error("Sign in to create a workspace.")
+    }
     const workspace = await createWorkspaceRepo(label)
     await refreshWorkspaces()
     if (setActive) {

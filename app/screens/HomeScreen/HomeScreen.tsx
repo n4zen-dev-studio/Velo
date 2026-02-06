@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react"
+import React, { useCallback, useEffect, useState } from "react"
 import {
   LayoutAnimation,
   Modal,
@@ -41,6 +41,10 @@ export function HomeScreen() {
     activeWorkspaceId,
     setActiveWorkspaceId,
     uiTasksByStatus,
+    activeWorkspace,
+    assigneeFilter,
+    setAssigneeFilter,
+    assigneeLabels,
     refreshAll,
     isRefreshing,
     bumpTaskStatus,
@@ -48,10 +52,6 @@ export function HomeScreen() {
 
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false)
   const [pendingInvitesCount, setPendingInvitesCount] = useState(0)
-
-  const activeWorkspace = useMemo(() => {
-    return workspaces.find((w) => w.id === activeWorkspaceId) ?? workspaces[0]
-  }, [workspaces, activeWorkspaceId])
 
   const fabBottom = Math.max(insets.bottom, 0) + 50
 
@@ -113,6 +113,29 @@ export function HomeScreen() {
         refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={() => refreshAll({ mode: "hard" })} />}
         showsVerticalScrollIndicator={false}
       >
+        {activeWorkspace?.kind !== "personal" ? (
+          <View style={themed($filterRow)}>
+            <Pressable
+              onPress={() => setAssigneeFilter("all")}
+              style={[
+                themed($filterPill),
+                assigneeFilter === "all" && themed($filterPillActive),
+              ]}
+            >
+              <Text preset="formHelper" text="All tasks" />
+            </Pressable>
+            <Pressable
+              onPress={() => setAssigneeFilter("mine")}
+              style={[
+                themed($filterPill),
+                assigneeFilter === "mine" && themed($filterPillActive),
+              ]}
+            >
+              <Text preset="formHelper" text="Assigned to me" />
+            </Pressable>
+          </View>
+        ) : null}
+
         {uiTasksByStatus.map(({ status, tasks }, laneIndex) => (
           <View
             key={`${status.workspaceId}:${status.projectId ?? "personal"}:${status.id}`}
@@ -181,6 +204,15 @@ export function HomeScreen() {
                       {!!task.description && (
                         <Text preset="formHelper" text={task.description} style={themed($taskDesc)} />
                       )}
+                      <Text
+                        preset="formHelper"
+                        text={`Assignee: ${
+                          task.assigneeUserId
+                            ? assigneeLabels[task.assigneeUserId] ?? "Member"
+                            : "Unassigned"
+                        }`}
+                        style={themed($taskMeta)}
+                      />
                     </GlassCard>
                   </Pressable>
                 ))}
@@ -398,6 +430,31 @@ const $statusButtonPressed: ThemedStyle<ViewStyle> = ({ colors }) => ({
 const $statusArrow: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.text,
   lineHeight: 18,
+})
+
+const $filterRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  gap: spacing.sm,
+  paddingHorizontal: spacing.lg,
+})
+
+const $filterPill: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+  paddingHorizontal: spacing.sm,
+  paddingVertical: spacing.xs,
+  borderRadius: 12,
+  backgroundColor: colors.palette.neutral100,
+  borderWidth: 1,
+  borderColor: colors.palette.neutral300,
+})
+
+const $filterPillActive: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  backgroundColor: colors.palette.neutral200,
+  borderColor: colors.palette.neutral500,
+})
+
+const $taskMeta: ThemedStyle<TextStyle> = ({ colors, spacing }) => ({
+  color: colors.palette.neutral600,
+  marginTop: spacing.xs,
 })
 
 const $fab: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
