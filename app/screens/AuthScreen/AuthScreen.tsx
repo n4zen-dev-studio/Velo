@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Platform, View, ViewStyle } from "react-native"
 import { useNavigation } from "@react-navigation/native"
 import * as AppleAuthentication from "expo-apple-authentication"
 import * as Google from "expo-auth-session/providers/google"
+import LottieView from "lottie-react-native"
 
 import { Button } from "@/components/Button"
 import { ClaimOfflineDataModal } from "@/components/ClaimOfflineDataModal"
@@ -31,15 +32,20 @@ import { syncController } from "@/services/sync/SyncController"
 import { googleOauth, isValidGoogleClientId } from "@/config/oauth"
 import { goToHome } from "@/navigation/navigationActions"
 import { clearOfflineMode, setOfflineMode } from "@/services/storage/session"
-import { personalWorkspaceId, setActiveWorkspaceId } from "@/services/db/repositories/workspacesRepository"
+import {
+  personalWorkspaceId,
+  setActiveWorkspaceId,
+} from "@/services/db/repositories/workspacesRepository"
 import { ensureBootstrappedForScope } from "@/services/db/bootstrap"
 import { logScopeAction, withScopeTransitionLock } from "@/services/session/scopeTransition"
 import { GUEST_SCOPE_KEY, userScopeKey } from "@/services/session/scope"
 
 import { useAuthViewModel } from "./useAuthViewModel"
 
+const ROBOT_ANIM = require("@assets/animations/robot.json")
+
 export function AuthScreen() {
-  const { themed } = useAppTheme()
+  const { themed, theme } = useAppTheme()
   const {
     offlineNotice,
     loginWithEmail,
@@ -68,6 +74,19 @@ export function AuthScreen() {
   const showGoogleButton = isGoogleConfigured
   const showAppleButton = Platform.OS === "ios"
   const [request, response, promptAsync] = Google.useIdTokenAuthRequest(googleConfig)
+
+  // UI: pick a subtle accent based on your theme if it exists
+  const accent = useMemo(() => {
+    // If your theme has a known accent field, prefer it.
+    // Fallbacks keep this safe even if fields don’t exist.
+    return (
+      // @ts-expect-error theme shape may vary
+      theme?.colors?.tint ??
+      // @ts-expect-error theme shape may vary
+      theme?.colors?.primary ??
+      "#7C5CFF"
+    )
+  }, [theme])
 
   useEffect(() => {
     const handleGoogleResponse = async () => {
@@ -142,10 +161,7 @@ export function AuthScreen() {
         baseURL: e?.config?.baseURL,
         url: e?.config?.url,
       })
-      setError(
-        e?.response?.data?.error ??
-          `Sign up failed (${e?.response?.status ?? "no status"}).`
-      )
+      setError(e?.response?.data?.error ?? `Sign up failed (${e?.response?.status ?? "no status"}).`)
     }
   }
 
@@ -279,45 +295,90 @@ export function AuthScreen() {
   }
 
   return (
-    <Screen preset="scroll" contentContainerStyle={themed($screen)}>
-      <View style={themed($header)}>
-        <Text preset="heading" text="TaskTrak" />
-        <Text preset="subheading" text="Offline-first Jira-lite" />
+    <Screen preset="scroll" safeAreaEdges={['top', 'bottom']} contentContainerStyle={themed($screen)}>
+      {/* HERO HEADER */}
+      <View style={themed($hero)}>
+        <View style={themed($heroGlowWrap)}>
+          <View style={themed($heroGlow(accent))} />
+          <View style={themed($heroRow)}>
+            <View style={themed($robotWrap)}>
+              <LottieView
+                source={ROBOT_ANIM}
+                autoPlay
+                loop
+                style={themed($robot)}
+                // iOS sometimes needs hardware rendering off for Lottie depending on setup;
+                // leaving default to avoid changing runtime behavior.
+              />
+            </View>
+
+            <View style={themed($heroTextCol)}>
+              <Text preset="heading" text="TaskTrak" />
+              <Text preset="subheading" text="Offline-first Jira-lite" />
+              <Text
+                preset="formHelper"
+                text="Sign in, or continue offline — your work stays on-device until you’re ready to sync."
+              />
+            </View>
+          </View>
+        </View>
       </View>
 
+      {/* MAIN AUTH CARD */}
       <GlassCard>
-        <Text preset="formLabel" text="Email" />
-        <TextField
-          value={email}
-          onChangeText={setEmail}
-          placeholder="you@company.com"
-          autoCapitalize="none"
-          keyboardType="email-address"
-        />
-        <View style={themed($spacer)} />
-        <Text preset="formLabel" text="Username (optional)" />
-        <TextField
-          value={username}
-          onChangeText={setUsername}
-          placeholder="your_handle"
-          autoCapitalize="none"
-        />
-        <View style={themed($spacer)} />
-        <Text preset="formLabel" text="Password" />
-        <TextField value={password} onChangeText={setPassword} placeholder="••••••••" secureTextEntry />
-        {error ? <Text preset="formHelper" text={error} /> : null}
-        {signupMessage ? <Text preset="formHelper" text={signupMessage} /> : null}
-        <View style={themed($buttonRow)}>
+        <View style={themed($cardHeader)}>
+          <Text preset="formLabel" text="Welcome back" />
+          <Text preset="formHelper" text="Use email/password, or a provider." />
+        </View>
+
+        <View style={themed($fieldBlock)}>
+          <Text preset="formLabel" text="Email" />
+          <TextField
+            value={email}
+            onChangeText={setEmail}
+            placeholder="you@company.com"
+            autoCapitalize="none"
+            keyboardType="email-address"
+          />
+        </View>
+
+        <View style={themed($fieldBlock)}>
+          <Text preset="formLabel" text="Username (optional)" />
+          <TextField
+            value={username}
+            onChangeText={setUsername}
+            placeholder="your_handle"
+            autoCapitalize="none"
+          />
+        </View>
+
+        <View style={themed($fieldBlock)}>
+          <Text preset="formLabel" text="Password" />
+          <TextField
+            value={password}
+            onChangeText={setPassword}
+            placeholder="••••••••"
+            secureTextEntry
+          />
+        </View>
+
+        {(error || signupMessage) ? (
+          <View style={themed($messageWrap)}>
+            {error ? <Text preset="formHelper" text={error} /> : null}
+            {signupMessage ? <Text preset="formHelper" text={signupMessage} /> : null}
+          </View>
+        ) : null}
+
+        {/* PRIMARY ACTIONS */}
+        <View style={themed($buttonStack)}>
           <Button text="Login" preset="default" onPress={handleLogin} />
           <Button text="Sign up" preset="reversed" onPress={handleSignup} />
         </View>
+
+        {/* VERIFICATION ACTIONS */}
         {signupMessage ? (
-          <View style={themed($buttonRow)}>
-            <Button
-              text="Resend verification email"
-              preset="reversed"
-              onPress={handleResendVerification}
-            />
+          <View style={themed($buttonStackTight)}>
+            <Button text="Resend verification email" preset="reversed" onPress={handleResendVerification} />
             <Button
               text="Enter verification token"
               preset="reversed"
@@ -325,17 +386,20 @@ export function AuthScreen() {
             />
           </View>
         ) : null}
-        <View style={themed($buttonRow)}>
+
+        {/* SECONDARY */}
+        <View style={themed($buttonStackTight)}>
           <Button
             text="Forgot password?"
             preset="reversed"
             onPress={() => navigation.navigate("PasswordResetRequest")}
           />
-        </View>
-        <View style={themed($buttonRow)}>
           <Button text="Continue Offline" preset="reversed" onPress={handleContinueOffline} />
         </View>
-        <View style={themed($buttonRow)}>
+
+        {/* OAUTH */}
+        <View style={themed($divider)} />
+        <View style={themed($buttonStackTight)}>
           {showGoogleButton ? (
             <Button text="Continue with Google" preset="default" onPress={handleGoogleLogin} />
           ) : null}
@@ -345,6 +409,7 @@ export function AuthScreen() {
         </View>
       </GlassCard>
 
+      {/* FOOTER NOTICE */}
       <GlassCard>
         <Text preset="formHelper" text={offlineNotice} />
       </GlassCard>
@@ -377,19 +442,88 @@ function parseUserIdFromJwt(token: string) {
 
 const $screen: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   padding: spacing.lg,
+  paddingTop: spacing.xl,
   gap: spacing.lg,
 })
 
-const $header: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+const $hero: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  marginBottom: spacing.xs,
+})
+
+const $heroGlowWrap: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  position: "relative",
+  borderRadius: 24,
+  overflow: "hidden",
+  padding: spacing.lg,
+})
+
+const $heroGlow =
+  (accent: string): ThemedStyle<ViewStyle> =>
+  ({}) => ({
+    position: "absolute",
+    top: -120,
+    left: -120,
+    width: 260,
+    height: 260,
+    borderRadius: 260,
+    backgroundColor: accent,
+    opacity: 0.18,
+    transform: [{ scale: 1.05 }],
+  })
+
+const $heroRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  alignItems: "center",
+  gap: spacing.md,
+})
+
+const $robotWrap: ThemedStyle<ViewStyle> = ({}) => ({
+  width: 86,
+  height: 86,
+  borderRadius: 22,
+  overflow: "hidden",
+})
+
+const $robot: ThemedStyle<ViewStyle> = ({}) => ({
+  width: 86,
+  height: 86,
+})
+
+const $heroTextCol: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flex: 1,
   gap: spacing.xs,
 })
 
-const $spacer: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  height: spacing.sm,
+const $cardHeader: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: spacing.xs,
+  marginBottom: spacing.sm,
 })
 
-const $buttonRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  flexDirection: "column",
-  gap: spacing.sm,
+const $fieldBlock: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: spacing.xs,
+  marginTop: spacing.sm,
+})
+
+const $messageWrap: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  marginTop: spacing.sm,
+  gap: spacing.xs,
+  paddingVertical: spacing.xs,
+})
+
+const $buttonStack: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   marginTop: spacing.md,
+  gap: spacing.sm,
+})
+
+const $buttonStackTight: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  marginTop: spacing.sm,
+  gap: spacing.sm,
+})
+
+const $divider: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  height: 1,
+  opacity: 0.18,
+  marginTop: spacing.md,
+  marginBottom: spacing.md,
+  // Leave color to GlassCard background; divider reads as subtle line via opacity.
 })

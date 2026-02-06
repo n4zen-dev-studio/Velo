@@ -132,7 +132,7 @@ export function VerifyEmailScreen() {
   }
 
   return (
-    <Screen preset="scroll" contentContainerStyle={themed($screen)}>
+    <Screen preset="scroll" safeAreaEdges={['top', 'bottom']} contentContainerStyle={themed($screen)}>
       <View style={themed($header)}>
         <Text preset="heading" text="Verify your email" />
         <Text preset="formHelper" text="Check your email for the verification token, then enter it below." />
