@@ -16,6 +16,7 @@ import { syncController } from "@/services/sync/SyncController"
 import { refreshLocalCounts, useSyncStatus } from "@/services/sync/syncStore"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
+import { formatDateTime } from "@/utils/dateFormat"
 
 export function SyncDebugScreen() {
   const { themed } = useAppTheme()
@@ -47,7 +48,7 @@ export function SyncDebugScreen() {
   // UX niceties: small derived labels; no functional changes
   const isOnlineLabel = syncState.isOnline ? "Online" : "Offline"
   const phaseLabel = String(syncState.phase ?? "—")
-  const lastSyncedLabel = syncState.lastSyncedAt ?? "—"
+  const lastSyncedLabel = formatDateTime(syncState.lastSyncedAt) ?? "—"
   const hasError = !!syncState.lastError
 
   const topStats = useMemo(
