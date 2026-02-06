@@ -19,7 +19,9 @@ export const useHomeViewModel = () => {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [lastUserId, setLastUserId] = useState<string | null>(null)
   const [uiTasksByStatus, setUiTasksByStatus] = useState<Array<{ status: Status; tasks: Task[] }>>([])
+  const [uiWorkspaceId, setUiWorkspaceId] = useState<string | null>(activeWorkspaceId ?? null)
   const refreshingRef = useRef(false)
+  const loadTokenRef = useRef(0)
 
   type BumpDir = "up" | "down"
 
@@ -33,8 +35,10 @@ export const useHomeViewModel = () => {
   const uiTasksByStatusRef = useRef(uiTasksByStatus)
 
   useEffect(() => {
-    setUiTasksByStatus(tasksByStatus)
-  }, [tasksByStatus])
+    if (uiWorkspaceId && uiWorkspaceId === activeWorkspaceId) {
+      setUiTasksByStatus(tasksByStatus)
+    }
+  }, [tasksByStatus, uiWorkspaceId, activeWorkspaceId])
 
   useEffect(() => {
     uiTasksByStatusRef.current = uiTasksByStatus
@@ -65,6 +69,14 @@ export const useHomeViewModel = () => {
       const currentStatusId = currentTask.statusId
       const currentProjectId = currentTask.projectId ?? null
       const currentWorkspaceId = currentTask.workspaceId ?? currentLane?.status.workspaceId
+      if (activeWorkspaceId && currentWorkspaceId && currentWorkspaceId !== activeWorkspaceId) {
+        console.warn("[Home] bumpTaskStatus workspace mismatch", {
+          taskId,
+          currentWorkspaceId,
+          activeWorkspaceId,
+        })
+        return
+      }
       const lanesForProject = lanes.filter((lane) => {
         const laneProjectId = lane.status.projectId ?? null
         return laneProjectId === currentProjectId && lane.status.workspaceId === currentWorkspaceId
@@ -177,25 +189,35 @@ export const useHomeViewModel = () => {
   )
 
 
-  const loadStatuses = useCallback(async () => {
-    if (!activeWorkspaceId) return
-    const rows = await listStatuses(activeWorkspaceId, null)
+  const loadDataForWorkspace = useCallback(async (workspaceId: string, token: number) => {
+    console.log("[Home] load start", { workspaceId, token })
+    const [statusRows, taskRows] = await Promise.all([
+      listStatuses(workspaceId, null),
+      listTasksByWorkspace(workspaceId),
+    ])
+
+    if (token !== loadTokenRef.current || workspaceId !== activeWorkspaceId) {
+      console.log("[Home] load stale", { workspaceId, token })
+      return
+    }
 
     const seen = new Set<string>()
-    const unique = rows.filter((s) => {
+    const uniqueStatuses = statusRows.filter((s) => {
       const key = `${s.workspaceId}:${s.projectId ?? "personal"}:${s.id}`
       if (seen.has(key)) return false
       seen.add(key)
       return true
     })
 
-    setStatuses(unique)
-  }, [activeWorkspaceId])
-
-  const loadTasks = useCallback(async () => {
-    if (!activeWorkspaceId) return
-    const taskRows = await listTasksByWorkspace(activeWorkspaceId)
+    setStatuses(uniqueStatuses)
     setTasks(taskRows)
+    setUiWorkspaceId(workspaceId)
+    console.log("[Home] load end", {
+      workspaceId,
+      token,
+      statuses: uniqueStatuses.length,
+      tasks: taskRows.length,
+    })
   }, [activeWorkspaceId])
 
   const refreshAll = useCallback(
@@ -213,10 +235,14 @@ export const useHomeViewModel = () => {
       })
       setIsRefreshing(true)
       try {
-        if (mode === "hard") {
-          await Promise.all([refreshWorkspaces(), loadStatuses(), loadTasks(), refreshLocalCounts()])
-        } else {
-          await Promise.all([loadStatuses(), loadTasks(), refreshLocalCounts()])
+        const workspaceId = activeWorkspaceId
+        if (workspaceId) {
+          const token = ++loadTokenRef.current
+          if (mode === "hard") {
+            await Promise.all([refreshWorkspaces(), loadDataForWorkspace(workspaceId, token), refreshLocalCounts()])
+          } else {
+            await Promise.all([loadDataForWorkspace(workspaceId, token), refreshLocalCounts()])
+          }
         }
       } finally {
         setIsRefreshing(false)
@@ -230,7 +256,7 @@ export const useHomeViewModel = () => {
         })
       }
     },
-    [activeWorkspaceId, loadStatuses, loadTasks, refreshWorkspaces],
+    [activeWorkspaceId, loadDataForWorkspace, refreshWorkspaces],
   )
 
   const syncNow = useCallback(
@@ -240,29 +266,34 @@ export const useHomeViewModel = () => {
       setIsRefreshing(true)
       try {
         await syncController.triggerSync(reason)
-        await Promise.all([refreshWorkspaces(), loadStatuses(), loadTasks(), refreshLocalCounts()])
+        const workspaceId = activeWorkspaceId
+        if (workspaceId) {
+          const token = ++loadTokenRef.current
+          await Promise.all([refreshWorkspaces(), loadDataForWorkspace(workspaceId, token), refreshLocalCounts()])
+        }
       } finally {
         setIsRefreshing(false)
         refreshingRef.current = false
       }
     },
-    [loadStatuses, loadTasks, refreshWorkspaces],
+    [activeWorkspaceId, loadDataForWorkspace, refreshWorkspaces],
   )
 
   useEffect(() => {
-    setStatuses([])
-    setTasks([])
-    void loadStatuses()
-    void loadTasks()
-  }, [activeWorkspaceId, loadStatuses, loadTasks])
+    if (!activeWorkspaceId) return
+    const token = ++loadTokenRef.current
+    void loadDataForWorkspace(activeWorkspaceId, token)
+  }, [activeWorkspaceId, loadDataForWorkspace])
 
   useFocusEffect(
     useCallback(() => {
       let isActive = true
 
       const run = async () => {
-        void loadStatuses()
-        void loadTasks()
+        if (activeWorkspaceId) {
+          const token = ++loadTokenRef.current
+          void loadDataForWorkspace(activeWorkspaceId, token)
+        }
 
         const currentUserId = await getCurrentUserId()
         if (!isActive) return
@@ -281,8 +312,12 @@ export const useHomeViewModel = () => {
       return () => {
         isActive = false
       }
-    }, [loadStatuses, loadTasks, refreshAll, lastUserId]),
+    }, [activeWorkspaceId, loadDataForWorkspace, refreshAll, lastUserId]),
   )
+
+  useEffect(() => {
+    console.log("[Workspace] activeWorkspaceId", activeWorkspaceId)
+  }, [activeWorkspaceId])
 
   return {
     workspaces,
@@ -290,6 +325,7 @@ export const useHomeViewModel = () => {
     setActiveWorkspaceId,
     tasksByStatus,
     uiTasksByStatus,
+    uiWorkspaceId,
     refreshAll,
     syncNow,
     isRefreshing,
