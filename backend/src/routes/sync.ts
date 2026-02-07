@@ -23,6 +23,9 @@ export async function syncRoutes(app: FastifyInstance) {
   app.post("/sync", { preHandler: [app.authenticate] }, async (request, reply) => {
     const userId = (request.user as { sub: string }).sub
     const body = request.body as SyncRequest
+    if (!body.deviceId) {
+      return reply.code(400).send({ error: "deviceId required" })
+    }
 
     const ackOpIds: string[] = []
     const failed: Array<{ opId: string; message: string }> = []
@@ -77,17 +80,25 @@ export async function syncRoutes(app: FastifyInstance) {
       }
     })
 
-    const cursorValue = body.cursor ? BigInt(body.cursor) : BigInt(0)
+    const deviceState = await prisma.syncDeviceState.findUnique({
+      where: { userId_deviceId: { userId, deviceId: body.deviceId } },
+    })
+    const cursorValue = deviceState?.lastCursor ?? BigInt(0)
     const changes = await prisma.serverChange.findMany({
       where: { userId, id: { gt: cursorValue } },
       orderBy: { id: "asc" },
       take: 500,
     })
 
-    const newCursor = changes.length > 0 ? String(changes[changes.length - 1].id) : body.cursor
+    const newCursorValue = changes.length > 0 ? changes[changes.length - 1].id : cursorValue
+    await prisma.syncDeviceState.upsert({
+      where: { userId_deviceId: { userId, deviceId: body.deviceId } },
+      update: { lastCursor: newCursorValue },
+      create: { userId, deviceId: body.deviceId, lastCursor: newCursorValue },
+    })
 
     const mapped = changes.map((row) => ({
-      entityType: row.entityType as "task" | "comment" | "user" | "workspace_member",
+      entityType: row.entityType as "task" | "comment" | "user" | "workspace_member" | "workspace",
       entityId: row.entityId,
       opType: row.opType as "UPSERT" | "DELETE",
       payload: row.payload as Record<string, unknown>,
@@ -106,7 +117,7 @@ export async function syncRoutes(app: FastifyInstance) {
       }
     }
     return reply.send({
-      newCursor,
+      newCursor: String(newCursorValue),
       ackOpIds,
       failed,
       changes: mapped,
@@ -152,7 +163,7 @@ async function applyTaskOp(tx: typeof prisma, userId: string, op: SyncOp) {
       create: record,
     })
 
-    await logChange(tx, userId, "task", op.entityId, "DELETE", record, revision, now)
+    await logChangeForWorkspace(tx, userId, record.workspaceId, "task", op.entityId, "DELETE", record, revision, now)
     return
   }
 
@@ -177,7 +188,7 @@ async function applyTaskOp(tx: typeof prisma, userId: string, op: SyncOp) {
     create: record,
   })
 
-  await logChange(tx, userId, "task", op.entityId, "UPSERT", record, revision, now)
+  await logChangeForWorkspace(tx, userId, record.workspaceId, "task", op.entityId, "UPSERT", record, revision, now)
 }
 
 async function applyCommentOp(tx: typeof prisma, userId: string, op: SyncOp) {
@@ -202,7 +213,8 @@ async function applyCommentOp(tx: typeof prisma, userId: string, op: SyncOp) {
       create: record,
     })
 
-    await logChange(tx, userId, "comment", op.entityId, "DELETE", record, revision, now)
+    const workspaceId = await resolveWorkspaceIdForTask(tx, record.taskId)
+    await logChangeForWorkspace(tx, userId, workspaceId, "comment", op.entityId, "DELETE", record, revision, now)
     return
   }
 
@@ -223,7 +235,8 @@ async function applyCommentOp(tx: typeof prisma, userId: string, op: SyncOp) {
     create: record,
   })
 
-  await logChange(tx, userId, "comment", op.entityId, "UPSERT", record, revision, now)
+  const workspaceId = await resolveWorkspaceIdForTask(tx, record.taskId)
+  await logChangeForWorkspace(tx, userId, workspaceId, "comment", op.entityId, "UPSERT", record, revision, now)
 }
 
 async function applyUserOp(tx: typeof prisma, userId: string, op: SyncOp) {
@@ -261,6 +274,10 @@ async function applyWorkspaceMemberOp(tx: typeof prisma, userId: string, op: Syn
   const now = new Date()
   const revision = patch.revision ?? `srv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
+  const existingActiveMember = await tx.workspaceMember.findFirst({
+    where: { workspaceId: patch.workspaceId, userId: patch.userId, deletedAt: null },
+  })
+
   let role = patch.role ?? "MEMBER"
   if (op.opType === "UPSERT") {
     const existingOwner = await tx.workspaceMember.findFirst({
@@ -288,13 +305,60 @@ async function applyWorkspaceMemberOp(tx: typeof prisma, userId: string, op: Syn
     create: record,
   })
 
-  await logChange(tx, userId, "workspace_member", op.entityId, op.opType, record, revision, now)
+  const recipientIds = new Set<string>([userId, record.userId])
+  await logChangeForRecipients(
+    tx,
+    Array.from(recipientIds),
+    "workspace_member",
+    op.entityId,
+    op.opType,
+    record,
+    revision,
+    now,
+  )
+
+  await emitWorkspaceIndexChangeForRecipients(tx, record.workspaceId, Array.from(recipientIds), 
+  now,
+  patch.workspaceLabel as string | undefined
+)
+
+  if (op.opType === "UPSERT" && !record.deletedAt && !existingActiveMember) {
+    const tasks = await tx.task.findMany({
+      where: { workspaceId: record.workspaceId, deletedAt: null },
+    })
+    for (const task of tasks) {
+      await logChangeForRecipients(
+        tx,
+        [record.userId],
+        "task",
+        task.id,
+        "UPSERT",
+        {
+          id: task.id,
+          projectId: task.projectId ?? null,
+          workspaceId: task.workspaceId,
+          title: task.title,
+          description: task.description,
+          statusId: task.statusId,
+          priority: task.priority,
+          assigneeUserId: task.assigneeUserId ?? null,
+          createdByUserId: task.createdByUserId,
+          createdAt: task.createdAt,
+          updatedAt: task.updatedAt,
+          revision: task.revision,
+          deletedAt: task.deletedAt,
+        },
+        task.revision ?? `srv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        now,
+      )
+    }
+  }
 }
 
 async function logChange(
   tx: typeof prisma,
   userId: string,
-  entityType: "task" | "comment" | "user" | "workspace_member",
+  entityType: "task" | "comment" | "user" | "workspace_member" | "workspace",
   entityId: string,
   opType: "UPSERT" | "DELETE",
   payload: Record<string, unknown>,
@@ -326,6 +390,110 @@ function toJsonSafe(input: Record<string, unknown>) {
     }),
   )
 }
+
+async function resolveWorkspaceIdForTask(tx: typeof prisma, taskId: string) {
+  const task = await tx.task.findUnique({ where: { id: taskId }, select: { workspaceId: true } })
+  return task?.workspaceId ?? null
+}
+
+async function listWorkspaceRecipientUserIds(tx: typeof prisma, workspaceId: string) {
+  const rows = await tx.workspaceMember.findMany({
+    where: { workspaceId, deletedAt: null },
+    select: { userId: true },
+  })
+  const unique = new Set(rows.map((row) => row.userId))
+  return Array.from(unique)
+}
+
+async function logChangeForWorkspace(
+  tx: typeof prisma,
+  actorUserId: string,
+  workspaceId: string | null | undefined,
+  entityType: "task" | "comment" | "user" | "workspace_member" | "workspace",
+  entityId: string,
+  opType: "UPSERT" | "DELETE",
+  payload: Record<string, unknown>,
+  revision: string,
+  updatedAt: Date,
+) {
+  if (!workspaceId) {
+    await logChange(tx, actorUserId, entityType, entityId, opType, payload, revision, updatedAt)
+    return
+  }
+  const recipients = await listWorkspaceRecipientUserIds(tx, workspaceId)
+  if (recipients.length === 0) {
+    await logChange(tx, actorUserId, entityType, entityId, opType, payload, revision, updatedAt)
+    return
+  }
+  await logChangeForRecipients(tx, recipients, entityType, entityId, opType, payload, revision, updatedAt)
+}
+
+async function logChangeForRecipients(
+  tx: typeof prisma,
+  userIds: string[],
+  entityType: "task" | "comment" | "user" | "workspace_member" | "workspace",
+  entityId: string,
+  opType: "UPSERT" | "DELETE",
+  payload: Record<string, unknown>,
+  revision: string,
+  updatedAt: Date,
+) {
+  const recipients = Array.from(new Set(userIds))
+  const safePayload = toJsonSafe({
+    ...payload,
+    updatedAt: payload.updatedAt instanceof Date ? payload.updatedAt.toISOString() : payload.updatedAt,
+  })
+  await tx.serverChange.createMany({
+    data: recipients.map((recipientId) => ({
+      userId: recipientId,
+      entityType,
+      entityId,
+      opType,
+      payload: safePayload,
+      revision,
+      updatedAt,
+    })),
+  })
+}
+
+async function emitWorkspaceIndexChangeForRecipients(
+  tx: typeof prisma,
+  workspaceId: string,
+  recipientUserIds: string[],
+  now: Date,
+  workspaceLabel?: string,
+) {
+  let workspace = await tx.workspace.findUnique({ where: { id: workspaceId } })
+
+  if (!workspace) {
+    if (!workspaceLabel) {
+      console.warn("[workspace] Missing workspace row + label; cannot emit correct index", { workspaceId })
+      return
+    }
+    // Create with correct label instead of workspaceId
+    workspace = await tx.workspace.create({
+      data: { id: workspaceId, label: workspaceLabel, kind: "custom" },
+    })
+  } else if (workspaceLabel && workspace.label !== workspaceLabel) {
+    workspace = await tx.workspace.update({
+      where: { id: workspaceId },
+      data: { label: workspaceLabel },
+    })
+  }
+
+  const payload = {
+    id: workspace.id,
+    label: workspace.label,
+    kind: workspace.kind,
+    createdAt: workspace.createdAt.toISOString(),
+    updatedAt: workspace.updatedAt.toISOString(),
+    remoteId: null,
+  }
+
+  const revision = `srv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  await logChangeForRecipients(tx, recipientUserIds, "workspace", workspace.id, "UPSERT", payload, revision, now)
+}
+
 
 async function validateTaskOp(tx: typeof prisma, userId: string, op: SyncOp) {
   const patch = op.patch as any

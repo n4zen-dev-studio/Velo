@@ -13,7 +13,13 @@ import { normalizeSyncError } from "@/services/sync/syncErrors"
 import { getSessionMode, getStoredUserId } from "@/services/sync/identity"
 import { getAccessToken } from "@/services/api/tokenStore"
 
-export type SyncTriggerReason = "app_open" | "manual" | "net_regain" | "background" | "app_resume"
+export type SyncTriggerReason =
+  | "app_open"
+  | "manual"
+  | "net_regain"
+  | "background"
+  | "app_resume"
+  | "auth_bootstrap"
 
 class SyncController {
   private isRunning = false

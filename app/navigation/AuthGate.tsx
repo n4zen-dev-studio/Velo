@@ -6,6 +6,8 @@ import { MainTabs } from "@/navigation/MainTabs"
 import { hasSession, isOfflineMode } from "@/services/storage/session"
 import { useAppTheme } from "@/theme/context"
 import type { AuthGateParamList } from "@/navigators/navigationTypes"
+import { useAuthSession } from "@/services/auth/session"
+import { useWorkspaceStore } from "@/stores/workspaceStore"
 
 const Stack = createNativeStackNavigator<AuthGateParamList>()
 
@@ -15,6 +17,8 @@ export function AuthGate() {
   } = useAppTheme()
   const [isReady, setIsReady] = useState(false)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const authSession = useAuthSession()
+  const { bootstrapAfterLogin, didBootstrapSync } = useWorkspaceStore()
 
   useEffect(() => {
     let mounted = true
@@ -29,6 +33,11 @@ export function AuthGate() {
       mounted = false
     }
   }, [])
+
+  useEffect(() => {
+    if (!authSession.isAuthenticated || didBootstrapSync) return
+    void bootstrapAfterLogin()
+  }, [authSession.isAuthenticated, bootstrapAfterLogin, didBootstrapSync])
 
   if (!isReady) return null
 

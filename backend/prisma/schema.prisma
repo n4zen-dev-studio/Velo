@@ -26,6 +26,7 @@ model User {
   revision     String         @default("rev-0") @map("revision")
   refreshTokens RefreshToken[]
   serverChanges ServerChange[]
+  syncDeviceStates SyncDeviceState[]
 
   @@map("users")
 }
@@ -109,6 +110,16 @@ model WorkspaceInvite {
   @@map("workspace_invites")
 }
 
+model Workspace {
+  id        String   @id @default(uuid()) @db.Uuid
+  label     String
+  kind      String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("workspaces")
+}
+
 model OpDedup {
   opId      String   @id @map("opid")
   userId    String   @map("user_id") @db.Uuid
@@ -130,5 +141,20 @@ model ServerChange {
 
   user User @relation(fields: [userId], references: [id])
 
+  @@index([userId, id])
   @@map("server_changes")
+}
+
+model SyncDeviceState {
+  id         String   @id @default(cuid())
+  userId     String   @map("user_id") @db.Uuid
+  deviceId   String   @map("device_id")
+  lastCursor BigInt   @default(0) @map("last_cursor")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([userId, deviceId])
+  @@index([userId, lastCursor])
+  @@map("sync_device_state")
 }

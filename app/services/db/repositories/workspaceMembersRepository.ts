@@ -94,12 +94,22 @@ async function upsertWorkspaceMemberInternal(
     )
 
     if (options.enqueue) {
+      const ws = await queryFirstFn<{ label: string }>(
+        txDb,
+        "SELECT label FROM workspaces WHERE id = ? AND scopeKey = ?",
+        [member.workspaceId, resolvedScope],
+      )
+
       await enqueueOp(
         {
           entityType: "workspace_member",
           entityId: member.id,
           opType: "UPSERT",
-          patch: { ...member, scopeKey: resolvedScope },
+          patch: {
+            ...member,
+            scopeKey: resolvedScope,
+            workspaceLabel: ws?.label ?? null, // ✅ add this
+          },
           baseRevision: existing?.revision ?? "",
           projectId: null,
           workspaceId: member.workspaceId,
@@ -109,6 +119,7 @@ async function upsertWorkspaceMemberInternal(
         useTxRunner ? txDb : undefined,
       )
     }
+
   }
 
   if (options.useTransaction) {
@@ -190,6 +201,11 @@ async function markWorkspaceMemberDeletedInternal(
     )
 
     if (options.enqueue) {
+      const ws = await queryFirstFn<{ label: string }>(
+        txDb,
+        "SELECT label FROM workspaces WHERE id = ? AND scopeKey = ?",
+        [existing.workspaceId, resolvedScope],
+      )
       await enqueueOp(
         {
           entityType: "workspace_member",
@@ -197,6 +213,7 @@ async function markWorkspaceMemberDeletedInternal(
           opType: "DELETE",
           patch: {
             ...existing,
+            workspaceLabel: ws?.label ?? null,
             updatedAt: deletedAt,
             revision: nextRevision,
             deletedAt,

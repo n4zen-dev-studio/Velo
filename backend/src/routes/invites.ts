@@ -28,6 +28,80 @@ function buildInviteLink(token: string) {
   }
 }
 
+async function emitWorkspaceChange(
+  tx: typeof prisma,
+  workspaceId: string,
+  recipientUserIds: string[],
+  opType: "UPSERT" | "DELETE",
+) {
+  const now = new Date()
+  const revision = `srv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  const workspace = await tx.workspace.findUnique({ where: { id: workspaceId } })
+  const payload = workspace
+    ? {
+        id: workspace.id,
+        workspaceId: workspace.id,
+        label: workspace.label,
+        kind: workspace.kind,
+        createdAt: workspace.createdAt.toISOString(),
+        updatedAt: workspace.updatedAt.toISOString(),
+        remoteId: workspace.remoteId ?? null,
+      }
+    : { id: workspaceId }
+  const recipients = Array.from(new Set(recipientUserIds))
+  await tx.serverChange.createMany({
+    data: recipients.map((userId) => ({
+      userId,
+      entityType: "workspace",
+      entityId: workspaceId,
+      opType,
+      payload,
+      revision,
+      updatedAt: now,
+    })),
+  })
+}
+
+async function seedWorkspaceTasksForRecipient(
+  tx: typeof prisma,
+  workspaceId: string,
+  recipientUserId: string,
+) {
+  const tasks = await tx.task.findMany({
+    where: { workspaceId, deletedAt: null },
+  })
+  if (tasks.length === 0) return
+  const now = new Date()
+  await tx.serverChange.createMany({
+    data: tasks.map((task) => {
+      const revision = task.revision ?? `srv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+      return {
+        userId: recipientUserId,
+        entityType: "task",
+        entityId: task.id,
+        opType: "UPSERT",
+        payload: {
+          id: task.id,
+          projectId: task.projectId ?? null,
+          workspaceId: task.workspaceId,
+          title: task.title,
+          description: task.description,
+          statusId: task.statusId,
+          priority: task.priority,
+          assigneeUserId: task.assigneeUserId ?? null,
+          createdByUserId: task.createdByUserId,
+          createdAt: task.createdAt.toISOString(),
+          updatedAt: task.updatedAt.toISOString(),
+          revision,
+          deletedAt: task.deletedAt ? task.deletedAt.toISOString() : null,
+        },
+        revision,
+        updatedAt: task.updatedAt,
+      }
+    }),
+  })
+}
+
 async function requireWorkspaceOwner(userId: string, workspaceId: string) {
   const owner = await prisma.workspaceMember.findFirst({
     where: {
@@ -119,6 +193,21 @@ export async function inviteRoutes(app: FastifyInstance) {
             expiresAt,
           },
         })
+
+        await prisma.workspace.upsert({
+          where: { id: workspaceId },
+          update: {
+            label: workspaceLabel ?? workspaceId,
+            kind: "custom",
+          },
+          create: {
+            id: workspaceId,
+            label: workspaceLabel ?? workspaceId,
+            kind: "custom",
+          },
+        })
+
+        await emitWorkspaceChange(prisma, workspaceId, [inviterId], "UPSERT")
 
         const links = buildInviteLink(invite.token)
         // eslint-disable-next-line no-console
@@ -362,6 +451,12 @@ export async function inviteRoutes(app: FastifyInstance) {
 
       const now = new Date()
       await prisma.$transaction(async (tx) => {
+        const members = await tx.workspaceMember.findMany({
+          where: { workspaceId, deletedAt: null },
+          select: { userId: true },
+        })
+        const recipientIds = members.map((member) => member.userId)
+
         await tx.workspaceMember.updateMany({
           where: { workspaceId, deletedAt: null },
           data: {
@@ -375,6 +470,10 @@ export async function inviteRoutes(app: FastifyInstance) {
           where: { workspaceId, status: "PENDING" },
           data: { status: "REVOKED", updatedAt: now },
         })
+
+        if (recipientIds.length > 0) {
+          await emitWorkspaceChange(tx, workspaceId, recipientIds, "DELETE")
+        }
       })
 
       return reply.send({ ok: true })
@@ -475,6 +574,16 @@ export async function inviteRoutes(app: FastifyInstance) {
           },
         })
 
+        await tx.workspace.upsert({
+          where: { id: invite.workspaceId },
+          update: { label: invite.workspaceLabel ?? invite.workspaceId, kind: "custom" },
+          create: {
+            id: invite.workspaceId,
+            label: invite.workspaceLabel ?? invite.workspaceId,
+            kind: "custom",
+          },
+        })
+
         const updatedInvite = await tx.workspaceInvite.update({
           where: { id: invite.id },
           data: {
@@ -511,6 +620,9 @@ export async function inviteRoutes(app: FastifyInstance) {
             },
           })
         }
+
+        await emitWorkspaceChange(tx, invite.workspaceId, Array.from(recipientIds), "UPSERT")
+        await seedWorkspaceTasksForRecipient(tx, invite.workspaceId, userId)
 
         return { membership, updatedInvite }
       })
