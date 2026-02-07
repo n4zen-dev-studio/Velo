@@ -74,6 +74,22 @@ model Comment {
   @@map("comments")
 }
 
+model TaskEvent {
+  id             String   @id @db.Uuid
+  taskId         String   @map("taskid") @db.Uuid
+  type           String
+  payload        String
+  createdAt      DateTime @map("createdat")
+  createdByUserId String  @map("createdbyuserid") @db.Uuid
+  scopeKey       String   @map("scopekey")
+  revision       String
+  deletedAt      DateTime? @map("deletedat")
+
+  @@index([taskId])
+  @@index([scopeKey])
+  @@map("task_events")
+}
+
 model WorkspaceMember {
   id          String   @id @db.Uuid
   workspaceId String   @map("workspace_id") @db.Uuid

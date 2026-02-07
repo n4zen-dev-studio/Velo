@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify"
+import crypto from "node:crypto"
 
 import { prisma } from "../prisma.js"
 
@@ -98,7 +99,7 @@ export async function syncRoutes(app: FastifyInstance) {
     })
 
     const mapped = changes.map((row) => ({
-      entityType: row.entityType as "task" | "comment" | "user" | "workspace_member" | "workspace",
+      entityType: row.entityType as "task" | "comment" | "task_events" | "user" | "workspace_member" | "workspace",
       entityId: row.entityId,
       opType: row.opType as "UPSERT" | "DELETE",
       payload: row.payload as Record<string, unknown>,
@@ -129,9 +130,9 @@ async function applyTaskOp(tx: typeof prisma, userId: string, op: SyncOp) {
   const patch = op.patch as any
   const now = new Date()
   const revision = `srv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  const existing = await tx.task.findUnique({ where: { id: op.entityId } })
   let assigneeUserId = patch.assigneeUserId
   if (assigneeUserId === undefined) {
-    const existing = await tx.task.findUnique({ where: { id: op.entityId } })
     assigneeUserId = existing?.assigneeUserId ?? userId
   }
   if (process.env.NODE_ENV !== "production") {
@@ -163,6 +164,16 @@ async function applyTaskOp(tx: typeof prisma, userId: string, op: SyncOp) {
       create: record,
     })
 
+    await createTaskEventForOp(tx, {
+      taskId: record.id,
+      workspaceId: record.workspaceId,
+      actorUserId: userId,
+      now,
+      existingTask: existing,
+      nextStatusId: record.statusId,
+      opType: "DELETE",
+      taskRevision: record.revision,
+    })
     await logChangeForWorkspace(tx, userId, record.workspaceId, "task", op.entityId, "DELETE", record, revision, now)
     return
   }
@@ -188,7 +199,85 @@ async function applyTaskOp(tx: typeof prisma, userId: string, op: SyncOp) {
     create: record,
   })
 
+  await createTaskEventForOp(tx, {
+    taskId: record.id,
+    workspaceId: record.workspaceId,
+    actorUserId: userId,
+    now,
+    existingTask: existing,
+    nextStatusId: record.statusId,
+    opType: "UPSERT",
+    taskRevision: record.revision,
+  })
   await logChangeForWorkspace(tx, userId, record.workspaceId, "task", op.entityId, "UPSERT", record, revision, now)
+}
+
+async function createTaskEventForOp(
+  tx: typeof prisma,
+  params: {
+    taskId: string
+    workspaceId: string | null | undefined
+    actorUserId: string
+    now: Date
+    existingTask: { statusId: string } | null
+    nextStatusId: string | undefined
+    opType: "UPSERT" | "DELETE"
+    taskRevision: string
+  },
+) {
+  const { taskId, workspaceId, actorUserId, now, existingTask, nextStatusId, opType, taskRevision } = params
+  const eventId = crypto.randomUUID()
+  const eventRevision = `evt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+
+  let type = "TASK_UPDATED"
+  let payload: Record<string, unknown> = { message: "Task updated" }
+  if (opType === "DELETE") {
+    type = "TASK_DELETED"
+    payload = { message: "Task deleted" }
+  } else if (!existingTask) {
+    type = "TASK_CREATED"
+    payload = { message: "Task created" }
+  } else if (existingTask.statusId !== nextStatusId) {
+    type = "STATUS_CHANGED"
+    payload = { fromStatusId: existingTask.statusId, toStatusId: nextStatusId, revision: taskRevision }
+  }
+
+  const scopeKey = workspaceId ? `workspace:${workspaceId}` : ""
+  const record = {
+    id: eventId,
+    taskId,
+    type,
+    payload: JSON.stringify(payload),
+    createdAt: now,
+    createdByUserId: actorUserId,
+    scopeKey,
+    revision: eventRevision,
+    deletedAt: null,
+  }
+
+  await tx.taskEvent.create({ data: record })
+
+  await logChangeForWorkspace(
+    tx,
+    actorUserId,
+    workspaceId,
+    "task_events",
+    eventId,
+    "UPSERT",
+    {
+      id: eventId,
+      taskId,
+      type,
+      payload: record.payload,
+      createdAt: now.toISOString(),
+      createdByUserId: actorUserId,
+      scopeKey,
+    },
+    eventRevision,
+    now,
+  )
+
+  // Verification: sync another workspace member and confirm the task activity timeline includes this event.
 }
 
 async function applyCommentOp(tx: typeof prisma, userId: string, op: SyncOp) {
@@ -358,7 +447,7 @@ async function applyWorkspaceMemberOp(tx: typeof prisma, userId: string, op: Syn
 async function logChange(
   tx: typeof prisma,
   userId: string,
-  entityType: "task" | "comment" | "user" | "workspace_member" | "workspace",
+  entityType: "task" | "comment" | "task_events" | "user" | "workspace_member" | "workspace",
   entityId: string,
   opType: "UPSERT" | "DELETE",
   payload: Record<string, unknown>,
@@ -409,7 +498,7 @@ async function logChangeForWorkspace(
   tx: typeof prisma,
   actorUserId: string,
   workspaceId: string | null | undefined,
-  entityType: "task" | "comment" | "user" | "workspace_member" | "workspace",
+  entityType: "task" | "comment" | "task_events" | "user" | "workspace_member" | "workspace",
   entityId: string,
   opType: "UPSERT" | "DELETE",
   payload: Record<string, unknown>,
@@ -431,7 +520,7 @@ async function logChangeForWorkspace(
 async function logChangeForRecipients(
   tx: typeof prisma,
   userIds: string[],
-  entityType: "task" | "comment" | "user" | "workspace_member" | "workspace",
+  entityType: "task" | "comment" | "task_events" | "user" | "workspace_member" | "workspace",
   entityId: string,
   opType: "UPSERT" | "DELETE",
   payload: Record<string, unknown>,
