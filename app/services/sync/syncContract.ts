@@ -1,4 +1,4 @@
-export type SyncEntityType = "task" | "comment" | "user" | "workspace_member"
+export type SyncEntityType = "task" | "comment" | "user" | "workspace_member" | "workspace"
 export type SyncOpType = "UPSERT" | "DELETE"
 
 export interface SyncOpPayload {

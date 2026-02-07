@@ -23,14 +23,20 @@ import {
 import { ensureBootstrappedForScope } from "@/services/db/bootstrap"
 import { getActiveScopeKey, GUEST_SCOPE_KEY } from "@/services/session/scope"
 import { useAuthSession } from "@/services/auth/session"
+import { syncController } from "@/services/sync/SyncController"
+import { useSyncStatus } from "@/services/sync/syncStore"
+import { getAccessToken } from "@/services/api/tokenStore"
+import { getStoredUserId } from "@/services/sync/identity"
 
 interface WorkspaceStoreValue {
   workspaces: Workspace[]
   activeWorkspaceId: string
   activeWorkspace: Workspace | null
   isHydrated: boolean
+  didBootstrapSync: boolean
   hydrate: () => Promise<void>
   refreshWorkspaces: () => Promise<void>
+  bootstrapAfterLogin: () => Promise<void>
   setActiveWorkspaceId: (id: string) => Promise<void>
   createWorkspace: (label: string, setActive?: boolean) => Promise<Workspace>
   renameWorkspace: (id: string, label: string) => Promise<void>
@@ -58,7 +64,10 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
     personalWorkspaceId(GUEST_SCOPE_KEY),
   )
   const [isHydrated, setIsHydrated] = useState(false)
+  const [didBootstrapSync, setDidBootstrapSync] = useState(false)
   const lastValidWorkspaceIdRef = useRef<string | null>(null)
+  const lastBootstrapUserIdRef = useRef<string | null>(null)
+  const syncStatus = useSyncStatus()
 
   useEffect(() => {
     if (activeWorkspaceIdState && activeWorkspaceIdState !== personalWorkspaceId(GUEST_SCOPE_KEY)) {
@@ -66,6 +75,14 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
     }
     console.log("[WorkspaceStore] activeWorkspaceId", { activeWorkspaceId: activeWorkspaceIdState })
   }, [activeWorkspaceIdState])
+
+  useEffect(() => {
+    const currentUserId = authSession.currentUserId
+    if (currentUserId !== lastBootstrapUserIdRef.current) {
+      setDidBootstrapSync(false)
+      lastBootstrapUserIdRef.current = currentUserId
+    }
+  }, [authSession.currentUserId])
 
   const loadFromDb = useCallback(async () => {
     const scopeKey = await getActiveScopeKey()
@@ -129,6 +146,20 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
     await loadFromDb()
   }, [loadFromDb])
 
+  const bootstrapAfterLogin = useCallback(async () => {
+    if (didBootstrapSync) return
+    const [token, userId] = await Promise.all([getAccessToken(), getStoredUserId()])
+    if (!token || !userId) return
+    setDidBootstrapSync(true)
+    try {
+      await syncController.triggerSync("auth_bootstrap")
+      await refreshWorkspaces()
+    } catch (error) {
+      setDidBootstrapSync(false)
+      throw error
+    }
+  }, [authSession.isAuthenticated, didBootstrapSync, refreshWorkspaces])
+
   useEffect(() => {
     void hydrate()
   }, [hydrate])
@@ -136,6 +167,11 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     void refreshWorkspaces()
   }, [authSession.currentUserId, authSession.token, refreshWorkspaces])
+
+  useEffect(() => {
+    if (!authSession.currentUserId || !syncStatus.lastSyncedAt) return
+    void refreshWorkspaces()
+  }, [authSession.currentUserId, syncStatus.lastSyncedAt, refreshWorkspaces])
 
   const setActiveWorkspace = useCallback(async (id: string) => {
     await setActiveWorkspaceId(id)
@@ -181,8 +217,10 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
       activeWorkspaceId: activeWorkspaceIdState,
       activeWorkspace,
       isHydrated,
+      didBootstrapSync,
       hydrate,
       refreshWorkspaces,
+      bootstrapAfterLogin,
       setActiveWorkspaceId: setActiveWorkspace,
       createWorkspace,
       renameWorkspace,
@@ -193,8 +231,10 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
       activeWorkspaceIdState,
       activeWorkspace,
       isHydrated,
+      didBootstrapSync,
       hydrate,
       refreshWorkspaces,
+      bootstrapAfterLogin,
       setActiveWorkspace,
       createWorkspace,
       renameWorkspace,

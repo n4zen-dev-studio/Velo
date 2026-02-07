@@ -39,6 +39,7 @@ import {
 import { ensureBootstrappedForScope } from "@/services/db/bootstrap"
 import { logScopeAction, withScopeTransitionLock } from "@/services/session/scopeTransition"
 import { GUEST_SCOPE_KEY, userScopeKey } from "@/services/session/scope"
+import { useWorkspaceStore } from "@/stores/workspaceStore"
 
 import { useAuthViewModel } from "./useAuthViewModel"
 
@@ -62,6 +63,7 @@ export function AuthScreen() {
   const [showClaimModal, setShowClaimModal] = useState(false)
   const [pendingRemoteUserId, setPendingRemoteUserId] = useState<string | null>(null)
   const navigation = useNavigation<AuthStackScreenProps<"Auth">["navigation"]>()
+  const { bootstrapAfterLogin } = useWorkspaceStore()
 
   const googleConfig = {
     androidClientId: googleOauth.androidClientId,
@@ -249,6 +251,7 @@ export function AuthScreen() {
       await ensureBootstrappedForScope(scopeKey)
       await setActiveWorkspaceId(personalWorkspaceId(scopeKey), scopeKey)
       syncController.resume()
+      await bootstrapAfterLogin()
       goToHome()
     }, "login_remote")
   }
@@ -269,6 +272,7 @@ export function AuthScreen() {
       await ensureBootstrappedForScope(scopeKey)
       await setActiveWorkspaceId(personalWorkspaceId(scopeKey), scopeKey)
       syncController.resume()
+      await bootstrapAfterLogin()
       goToHome()
     }, "claim_offline_data")
     void syncController.triggerSync("manual")
@@ -290,6 +294,7 @@ export function AuthScreen() {
       await ensureBootstrappedForScope(scopeKey)
       await setActiveWorkspaceId(personalWorkspaceId(scopeKey), scopeKey)
       syncController.resume()
+      await bootstrapAfterLogin()
       goToHome()
     }, "discard_offline_data")
   }

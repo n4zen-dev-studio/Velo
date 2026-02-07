@@ -41,6 +41,7 @@ import {
   resolveScopeKeyForTaskId,
   resolveWorkspaceScopeKey,
 } from "@/services/db/scopeKey"
+import { upsertWorkspaceFromSync } from "@/services/db/repositories/workspacesRepository"
 
 const MAX_OPS_PER_BATCH = 50
 const MAX_BATCHES = 5
@@ -151,20 +152,41 @@ function mapChangeLogToOp(op: ChangeLogEntry) {
 type SqliteDb = Awaited<ReturnType<typeof getDb>>
 
 async function applyRemoteChange(db: SqliteDb, change: SyncChange) {
-  const hasPending = await hasPendingOpsForEntity(db, change.entityType, change.entityId)
-  if (hasPending) {
-    const localPayload = change.entityType === "task"
+  if (change.entityType === "task" || change.entityType === "comment") {
+    const hasPending = await hasPendingOpsForEntity(db, change.entityType, change.entityId)
+    if (hasPending) {
+      const localPayload = change.entityType === "task"
+        ? await getTaskById(change.entityId)
+        : await getCommentById(change.entityId)
+      await createConflict(db, change, localPayload)
+      return
+    }
+
+    const local = change.entityType === "task"
       ? await getTaskById(change.entityId)
       : await getCommentById(change.entityId)
-    await createConflict(db, change, localPayload)
-    return
+    if (local && isLocalNewer(local.updatedAt, change.updatedAt)) {
+      await createConflict(db, change, local)
+      return
+    }
   }
 
-  const local = change.entityType === "task"
-    ? await getTaskById(change.entityId)
-    : await getCommentById(change.entityId)
-  if (local && isLocalNewer(local.updatedAt, change.updatedAt)) {
-    await createConflict(db, change, local)
+  if (change.entityType === "workspace") {
+    if (change.opType === "DELETE") return
+    const payload = change.payload as any
+    const baseScope = await getActiveScopeKey()
+    await upsertWorkspaceFromSync(
+      {
+        id: payload.id,
+        label: payload.label,
+        kind: payload.kind,
+        createdAt: payload.createdAt,
+        updatedAt: payload.updatedAt,
+        remoteId: payload.remoteId ?? null,
+      },
+      baseScope,
+      db,
+    )
     return
   }
 
