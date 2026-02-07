@@ -232,45 +232,45 @@ export async function setActiveWorkspaceId(id: string, scopeKey?: string, db?: S
   )
 }
 
-export async function ensurePersonalWorkspaceExists(scopeKey?: string, db?: SQLiteDatabase) {
-  const database = db ?? (await getDb())
-  const exec = db ? executeTx : execute
-  const resolvedScope = scopeKey ?? (await getActiveScopeKey())
-  const personalId = personalWorkspaceId(resolvedScope)
-  const now = Date.now()
-  const workspace: Workspace = {
-    id: personalId,
-    label: PERSONAL_WORKSPACE_LABEL,
-    kind: "personal",
-    createdAt: now,
-    updatedAt: now,
-    remoteId: null,
-    scopeKey: resolvedScope,
-  }
-  await exec(
-    database,
-    `INSERT INTO workspaces (id, label, kind, createdAt, updatedAt, remoteId, scopeKey)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(id, scopeKey) DO UPDATE SET
-       label = excluded.label,
-       kind = excluded.kind,
-       updatedAt = excluded.updatedAt,
-       remoteId = excluded.remoteId,
-       scopeKey = excluded.scopeKey`,
-    [
-      workspace.id,
-      workspace.label,
-      workspace.kind,
-      workspace.createdAt,
-      workspace.updatedAt,
-      workspace.remoteId,
-      workspace.scopeKey,
-    ],
-  )
-  await ensureDefaultStatusesForWorkspace(workspace.id, resolvedScope, db ? database : undefined)
-  const refreshed = await getWorkspace(personalId, resolvedScope, database)
-  return refreshed ?? workspace
-}
+// export async function ensurePersonalWorkspaceExists(scopeKey?: string, db?: SQLiteDatabase) {
+//   const database = db ?? (await getDb())
+//   const exec = db ? executeTx : execute
+//   const resolvedScope = scopeKey ?? (await getActiveScopeKey())
+//   const personalId = personalWorkspaceId(resolvedScope)
+//   const now = Date.now()
+//   const workspace: Workspace = {
+//     id: personalId,
+//     label: PERSONAL_WORKSPACE_LABEL,
+//     kind: "personal",
+//     createdAt: now,
+//     updatedAt: now,
+//     remoteId: null,
+//     scopeKey: resolvedScope,
+//   }
+//   await exec(
+//     database,
+//     `INSERT INTO workspaces (id, label, kind, createdAt, updatedAt, remoteId, scopeKey)
+//      VALUES (?, ?, ?, ?, ?, ?, ?)
+//      ON CONFLICT(id, scopeKey) DO UPDATE SET
+//        label = excluded.label,
+//        kind = excluded.kind,
+//        updatedAt = excluded.updatedAt,
+//        remoteId = excluded.remoteId,
+//        scopeKey = excluded.scopeKey`,
+//     [
+//       workspace.id,
+//       workspace.label,
+//       workspace.kind,
+//       workspace.createdAt,
+//       workspace.updatedAt,
+//       workspace.remoteId,
+//       workspace.scopeKey,
+//     ],
+//   )
+//   await ensureDefaultStatusesForWorkspace(workspace.id, resolvedScope, db ? database : undefined)
+//   const refreshed = await getWorkspace(personalId, resolvedScope, database)
+//   return refreshed ?? workspace
+// }
 
 export async function ensureActiveWorkspaceIdValid(scopeKey?: string, db?: SQLiteDatabase) {
   const database = db ?? (await getDb())
@@ -305,3 +305,56 @@ export async function bootstrapWorkspaces(scopeKey?: string, db?: SQLiteDatabase
   bootstrapLocks.set(resolvedScope, run)
   return run
 }
+async function ensurePersonalWorkspaceExists(scopeKey: string, txDb: SQLiteDatabase) {
+  const id = personalWorkspaceId(scopeKey)
+  const now = Date.now()
+
+  // 1) Ensure the canonical personal workspace row exists (idempotent)
+  await executeTx(
+    txDb,
+    `
+    INSERT OR IGNORE INTO workspaces
+      (id, label, kind, createdAt, updatedAt, remoteId, scopeKey)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    `,
+    [id, "Personal", "personal", now, now, null, scopeKey],
+  )
+
+  // 2) Ensure canonical row has correct kind/label
+  await executeTx(
+    txDb,
+    `UPDATE workspaces SET kind = ?, label = ?, updatedAt = ? WHERE scopeKey = ? AND id = ?`,
+    ["personal", "Personal", now, scopeKey, id],
+  )
+
+  // 3) If duplicates exist (other rows marked personal), merge them into canonical and delete
+  // Remap tasks
+  await executeTx(
+    txDb,
+    `
+    UPDATE tasks
+    SET workspaceId = ?
+    WHERE scopeKey = ?
+      AND workspaceId IN (
+        SELECT id FROM workspaces
+        WHERE scopeKey = ?
+          AND kind = 'personal'
+          AND id <> ?
+      )
+    `,
+    [id, scopeKey, scopeKey, id],
+  )
+
+  // Delete duplicate personal workspaces
+  await executeTx(
+    txDb,
+    `
+    DELETE FROM workspaces
+    WHERE scopeKey = ?
+      AND kind = 'personal'
+      AND id <> ?
+    `,
+    [scopeKey, id],
+  )
+}
+

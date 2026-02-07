@@ -261,6 +261,7 @@ export function AuthScreen() {
     await withScopeTransitionLock(async () => {
       syncController.pause()
       const scopeKey = userScopeKey(pendingRemoteUserId)
+      await ensureBootstrappedForScope(scopeKey)
       logScopeAction("claim_offline_data", scopeKey, pendingRemoteUserId)
       await setCurrentUserId(pendingRemoteUserId)
       await setSessionMode("remote")
@@ -269,7 +270,6 @@ export function AuthScreen() {
       setShowClaimModal(false)
       await clearOfflineMode()
       await refreshAuthSession()
-      await ensureBootstrappedForScope(scopeKey)
       await setActiveWorkspaceId(personalWorkspaceId(scopeKey), scopeKey)
       syncController.resume()
       await bootstrapAfterLogin()
