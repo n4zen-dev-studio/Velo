@@ -42,6 +42,10 @@ import {
   resolveWorkspaceScopeKey,
 } from "@/services/db/scopeKey"
 import { upsertWorkspaceFromSync } from "@/services/db/repositories/workspacesRepository"
+import {
+  markTaskEventDeletedFromSync,
+  upsertTaskEventFromSync,
+} from "@/services/db/repositories/taskEventsRepository"
 
 const MAX_OPS_PER_BATCH = 50
 const MAX_BATCHES = 5
@@ -128,7 +132,7 @@ export async function runSync(reason?: string) {
 }
 
 function sanitizePatch(entityType: string, patch: Record<string, unknown>) {
-  if (entityType !== "comment") return patch
+  if (entityType !== "comment" && entityType !== "task_events") return patch
   if (patch.createdByUserId === "anonymous") {
     return { ...patch, createdByUserId: ANON_USER_ID }
   }
@@ -228,7 +232,31 @@ async function applyRemoteChange(db: SqliteDb, change: SyncChange) {
       : await resolveScopeKeyForTaskId(payload.taskId, undefined, db)
     const scoped = payload.scopeKey ? payload : { ...payload, scopeKey: resolvedScope }
     await upsertCommentFromSync(scoped, db)
+  } 
+  if (change.entityType === "task_events") {
+  if (change.opType === "DELETE") {
+    await markTaskEventDeletedFromSync(change.entityId, change.updatedAt, db)
+    return
   }
+
+  const payload = change.payload as any
+
+  if (__DEV__) {
+    console.log("[sync] apply task_events", change.entityId)
+  }
+
+  // Same scoping logic as comments: derive scopeKey from the task if not provided
+  const incomingScope =
+    typeof payload.scopeKey === "string" ? payload.scopeKey.trim() : payload.scopeKey
+  const resolvedScope = incomingScope
+    ? incomingScope
+    : await resolveScopeKeyForTaskId(payload.taskId, undefined, db)
+
+  const scoped = incomingScope ? payload : { ...payload, scopeKey: resolvedScope }
+  await upsertTaskEventFromSync(scoped, db)
+  return
+}
+
 
   if (change.entityType === "user") {
     if (change.opType === "DELETE") {
