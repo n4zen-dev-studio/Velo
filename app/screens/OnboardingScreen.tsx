@@ -43,7 +43,7 @@ export function OnboardingScreen({ navigation }: ScreenProps) {
       >
         {/* 3. The Overlay must be absolute to stay behind text */}
         <View style={themed($overlay)} />
-        <View style={themed($bottomFade)} />
+        {/* <View style={themed($bottomFade)} /> */}
 
         {/* 4. This container now controls the layout flow */}
         <View style={themed($mainContainer)}>
@@ -79,11 +79,13 @@ export function OnboardingScreen({ navigation }: ScreenProps) {
 
 const $root: ThemedStyle<ViewStyle> = () => ({ 
   flex: 1, 
-  backgroundColor: "#000" // Prevents white flashes
+  backgroundColor: "#000",// Prevents white flashes
+  zIndex: 0,
 })
 
 const $bgImage: ThemedStyle<ViewStyle> = () => ({
   flex: 1,
+  zIndex: -3,
 })
 
 const $mainContainer: ThemedStyle<ViewStyle> = () => ({
@@ -93,7 +95,7 @@ const $mainContainer: ThemedStyle<ViewStyle> = () => ({
 
 const $overlay: ThemedStyle<ViewStyle> = ({ colors }) => ({
   ...StyleSheet.absoluteFillObject,
-  backgroundColor: "rgba(0,0,0,0.3)",
+  backgroundColor: "rgba(0,0,0,0.5)",
   zIndex: -1,
 })
 
@@ -102,8 +104,8 @@ const $bottomFade: ThemedStyle<ViewStyle> = () => ({
   left: 0,
   right: 0,
   bottom: 0,
-  height: '50%',
-  backgroundColor: "rgba(0,0,0,0.6)",
+  height: "100%",
+  backgroundColor: "rgba(0, 0, 0, 0.5)",
   zIndex: -1,
 })
 
@@ -126,10 +128,10 @@ const $centerMarkWrap: ThemedStyle<ViewStyle> = () => ({
 })
 
 const $centerMark: ThemedStyle<TextStyle> = ({ colors }) => ({
-  fontSize: 60,
-  lineHeight: 120,
+  fontSize: 77,
+  lineHeight: 130,
   fontWeight: "800",
-  letterSpacing: 4,
+  letterSpacing: -4,
   color: colors.palette.neutral100,
   opacity: 0.5,
 })
