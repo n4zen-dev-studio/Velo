@@ -116,10 +116,18 @@ export function ProfileScreen() {
   }
 
   return (
-    <Screen preset="scroll" safeAreaEdges={["top", "bottom"]} contentContainerStyle={themed($screen)}>
+    <Screen
+      preset="scroll"
+      safeAreaEdges={["top", "bottom"]}
+      contentContainerStyle={themed($screen)}
+    >
       <View style={themed($header)}>
-        <Text preset="heading" text="Profile" />
-        <Text preset="formHelper" text="Update your username and avatar." />
+        <Text preset="display" text="Profile" />
+        <Text
+          preset="formHelper"
+          text="Update your Velo identity across workspaces."
+          style={themed($muted)}
+        />
       </View>
 
       <GlassCard>
@@ -129,7 +137,7 @@ export function ProfileScreen() {
             style={themed($avatarImage)}
           />
           <View style={themed($avatarActions)}>
-            <Button text="Change photo" preset="glass" onPress={handlePickImage} />
+            <Button text="Change photo" preset="filled" onPress={handlePickImage} />
           </View>
         </View>
 
@@ -163,7 +171,7 @@ export function ProfileScreen() {
 
         <View style={themed($actionsRow)}>
           <Button text="Cancel" preset="glass" onPress={() => navigation.goBack()} />
-          <Button text={isSaving ? "Saving..." : "Save"} preset="glass" onPress={handleSave} />
+          <Button text={isSaving ? "Saving..." : "Save"} preset="default" onPress={handleSave} />
         </View>
       </GlassCard>
     </Screen>
@@ -171,8 +179,9 @@ export function ProfileScreen() {
 }
 
 const $screen: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  padding: spacing.lg,
-  gap: spacing.lg,
+  paddingHorizontal: spacing.screenHorizontal,
+  paddingTop: spacing.screenVertical,
+  gap: spacing.sectionGap,
 })
 
 const $header: ThemedStyle<ViewStyle> = ({ spacing }) => ({
@@ -186,11 +195,13 @@ const $avatarRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   marginBottom: spacing.md,
 })
 
-const $avatarImage: ThemedStyle<ImageStyle> = ({ spacing }) => ({
-  width: 72,
-  height: 72,
-  borderRadius: 36,
+const $avatarImage: ThemedStyle<ImageStyle> = ({ spacing, colors }) => ({
+  width: 84,
+  height: 84,
+  borderRadius: 42,
   marginRight: spacing.sm,
+  borderWidth: 3,
+  borderColor: colors.surfaceElevated,
 })
 
 const $avatarActions: ThemedStyle<ViewStyle> = ({ spacing }) => ({
@@ -207,4 +218,8 @@ const $actionsRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
 
 const $errorText: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.error,
+})
+
+const $muted: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.textMuted,
 })

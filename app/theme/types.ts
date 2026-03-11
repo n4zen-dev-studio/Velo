@@ -6,6 +6,8 @@ import { spacing as spacingLight } from "./spacing"
 import { spacing as spacingDark } from "./spacingDark"
 import { timing } from "./timing"
 import { typography } from "./typography"
+import { radius } from "./radius"
+import { lightElevation } from "./elevation"
 
 // This supports "light" and "dark" themes by default. If undefined, it'll use the system theme
 export type ImmutableThemeContextModeT = "light" | "dark"
@@ -20,12 +22,16 @@ export type Spacing = typeof spacingLight | typeof spacingDark
 // These two are consistent across themes.
 export type Timing = typeof timing
 export type Typography = typeof typography
+export type Radius = typeof radius
+export type Elevation = typeof lightElevation
 
 // The overall Theme object should contain all of the data you need to style your app.
 export interface Theme {
   colors: Colors
   spacing: Spacing
   typography: Typography
+  radius: Radius
+  elevation: Elevation
   timing: Timing
   isDark: boolean
 }

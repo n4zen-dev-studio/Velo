@@ -3,8 +3,11 @@ import { LayoutChangeEvent, Pressable, View, ViewStyle } from "react-native"
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated"
+import { Ionicons } from "@expo/vector-icons"
 
-// Blur (optional; falls back automatically if not installed)
+import { Text } from "@/components/Text"
+import { useAppTheme } from "@/theme/context"
+
 let BlurView: any = null
 try {
   BlurView = require("expo-blur").BlurView
@@ -12,58 +15,21 @@ try {
   BlurView = null
 }
 
-import { Ionicons } from "@expo/vector-icons"
-import { Text } from "@/components/Text"
-import { useAppTheme } from "@/theme/context"
-import { colors } from "@/theme/colors"
-
-const PILL_HEIGHT = 66
-const INDICATOR_SIZE = 53 // circle size
-const INDICATOR_PADDING = 0 // inside pill padding
-
-/**
- * ✅ Edit this to control the tab bar width.
- * - "auto" = full available width (default)
- * - number = fixed px width (e.g. 280)
- * - string = percentage (e.g. "70%")
- */
-const TAB_BAR_WIDTH: number | string | "auto" = "55%"
-
-/**
- * Optional: nudge indicator position if you want it slightly more left/right.
- * Usually keep 0.
- */
-const INDICATOR_X_OFFSET = 0
+const PILL_HEIGHT = 72
+const INDICATOR_PADDING = 6
 
 export function GlassTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const { theme, themed } = useAppTheme()
   const insets = useSafeAreaInsets()
-
-  // We track the actual pill width after layout (this includes TAB_BAR_WIDTH sizing)
   const [pillWidth, setPillWidth] = useState(0)
   const hasInitialized = useRef(false)
-
-  // Accent color (your purple)
-  const active = colors.palette.primary500  ?? colors.palette.primary500 ?? "#8B5CF6"
-  const inactive = theme.colors.textDim ?? "rgba(255,255,255,0.65)"
-
-  const glassFill = theme.isDark ? "rgba(255,255,255,0.1)":  "rgba(255,255,255,0.8)"
-  const glassStroke =  theme.isDark ?"rgba(255,255,255,0.12)": "rgba(0,0,0,0.12)"
-
-  const routes = state.routes
-  const tabCount = routes.length
-
-  // Shared value for the moving circle
   const translateX = useSharedValue(0)
 
   const tabs = useMemo(() => {
-    return routes.map((route, index) => {
+    return state.routes.map((route, index) => {
       const focused = state.index === index
       const options = descriptors[route.key]?.options ?? {}
-      const label =
-        options.tabBarLabel ?? options.title ?? (typeof route.name === "string" ? route.name : "Tab")
-
-      // icon map (adjust freely)
+      const label = String(options.tabBarLabel ?? options.title ?? route.name)
       const iconName =
         route.name === "HomeTab"
           ? focused
@@ -74,130 +40,101 @@ export function GlassTabBar({ state, descriptors, navigation }: BottomTabBarProp
               ? "settings"
               : "settings-outline"
             : focused
-              ? "bug"
-              : "bug-outline"
+              ? "analytics"
+              : "analytics-outline"
 
-      return { route, index, focused, label: String(label), iconName }
+      return { route, index, focused, label, iconName }
     })
-  }, [routes, state.index, descriptors])
+  }, [descriptors, state.index, state.routes])
 
-  const calcTargetX = (w: number, index: number) => {
-    const tabWidth = w / tabCount
-    const centerX = tabWidth * index + (tabWidth / 2 ) -2
-    // indicator is absolutely positioned with left = INDICATOR_PADDING
-    // so translateX should be relative to that "left" anchor
-    return centerX - (INDICATOR_SIZE / 2 )-0+ INDICATOR_X_OFFSET
+  const calcTargetX = (width: number, index: number) => {
+    const tabWidth = width / state.routes.length
+    return tabWidth * index + INDICATOR_PADDING
   }
 
   const onPillLayout = (e: LayoutChangeEvent) => {
-    const w = e.nativeEvent.layout.width
-    setPillWidth(w)
-
-    // ✅ First time: snap to the correct position (no long travel animation)
-    translateX.value = calcTargetX(w, state.index)
+    const width = e.nativeEvent.layout.width
+    setPillWidth(width)
+    translateX.value = calcTargetX(width, state.index)
     hasInitialized.current = true
   }
 
-  // Whenever index changes and we know width, animate indicator (no overshoot)
   React.useEffect(() => {
-    if (!pillWidth) return
-    if (!hasInitialized.current) return
-
-    const target = calcTargetX(pillWidth, state.index)
-
-    translateX.value = withSpring(target, {
-      damping: 22,
-      stiffness: 260,
+    if (!pillWidth || !hasInitialized.current) return
+    translateX.value = withSpring(calcTargetX(pillWidth, state.index), {
+      damping: 20,
+      stiffness: 240,
       overshootClamping: true,
-      restDisplacementThreshold: 0.5,
-      restSpeedThreshold: 0.5,
     })
-  }, [state.index, pillWidth, tabCount])
+  }, [pillWidth, state.index])
 
-  const indicatorStyle = useAnimatedStyle(() => {
-    return {
-      transform: [{ translateX: translateX.value }],
-    }
-  })
+  const indicatorStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }],
+  }))
 
-  const bottomPad = Math.max(insets.bottom, 10)
-
-  const PillContainer = BlurView ? BlurView : View
-
-  const pillWidthStyle =
-    TAB_BAR_WIDTH === "auto"
-      ? null
-      : typeof TAB_BAR_WIDTH === "number"
-        ? { width: TAB_BAR_WIDTH }
-        : { width: TAB_BAR_WIDTH as string } // e.g. "70%"
+  const BlurContainer = BlurView ? BlurView : View
 
   return (
-    <View pointerEvents="box-none" style={[themed($root), { paddingBottom: bottomPad }]}>
-      <View style={[themed($pillShadowWrap), pillWidthStyle, { alignSelf: "center" }]}>
-        <PillContainer
-          // BlurView props
-          {...(BlurView ? { intensity: 24, tint: "dark" } : {})}
+    <View
+      pointerEvents="box-none"
+      style={[themed($root), { paddingBottom: Math.max(insets.bottom, 10) }]}
+    >
+      <BlurContainer
+        {...(BlurView
+          ? { intensity: theme.isDark ? 42 : 70, tint: theme.isDark ? "dark" : "light" }
+          : {})}
+        style={themed($pill)}
+        onLayout={onPillLayout}
+      >
+        <Animated.View
+          pointerEvents="none"
           style={[
-            themed($pill),
+            themed($indicator),
             {
-              backgroundColor: glassFill,
-              borderColor: glassStroke,
+              width: pillWidth ? pillWidth / state.routes.length - INDICATOR_PADDING * 2 : 0,
             },
+            indicatorStyle,
           ]}
-          onLayout={onPillLayout}
         >
-          {/* Sliding circle indicator */}
-          <Animated.View
-            pointerEvents="none"
-            style={[themed($indicator), { backgroundColor: active }, indicatorStyle]}
-          />
+          <View style={themed($indicatorGlowLeft)} />
+          <View style={themed($indicatorGlowRight)} />
+        </Animated.View>
 
-          {/* Tabs row */}
-          <View style={themed($row)}>
-            {tabs.map((t) => {
-              const onPress = () => {
+        <View style={themed($row)}>
+          {tabs.map((tab) => (
+            <Pressable
+              key={tab.route.key}
+              onPress={() => {
                 const event = navigation.emit({
                   type: "tabPress",
-                  target: t.route.key,
+                  target: tab.route.key,
                   canPreventDefault: true,
                 })
-                if (!t.focused && !event.defaultPrevented) {
-                  navigation.navigate(t.route.name)
-                }
-              }
-
-              const onLongPress = () => {
-                navigation.emit({ type: "tabLongPress", target: t.route.key })
-              }
-
-              return (
-                <Pressable
-                  key={t.route.key}
-                  onPress={onPress}
-                  onLongPress={onLongPress}
-                  style={themed($tabPressable)}
-                  accessibilityRole="button"
-                  accessibilityState={t.focused ? { selected: true } : {}}
-                  accessibilityLabel={t.label}
-                >
-                  <View style={themed($tabInner)}>
-                    <Ionicons
-                      name={t.iconName}
-                      size={20}
-                      color={t.focused ?   theme.isDark? "rgba(255,255,255,0.85)" :"rgba(0,0,0,0.85)"  : inactive}
-                    />
-                    <Text
-                      text={t.label}
-                      style={[themed($label), { color: t.focused ? theme.isDark? "rgba(255,255,255,0.85)" :"rgba(0,0,0,0.85)"  : inactive }]}
-                      numberOfLines={1}
-                    />
-                  </View>
-                </Pressable>
-              )
-            })}
-          </View>
-        </PillContainer>
-      </View>
+                if (!tab.focused && !event.defaultPrevented) navigation.navigate(tab.route.name)
+              }}
+              onLongPress={() => navigation.emit({ type: "tabLongPress", target: tab.route.key })}
+              style={themed($tabPressable)}
+              accessibilityRole="button"
+              accessibilityState={tab.focused ? { selected: true } : {}}
+              accessibilityLabel={tab.label}
+            >
+              <View style={themed($tabInner)}>
+                <Ionicons
+                  name={tab.iconName as any}
+                  size={20}
+                  color={tab.focused ? theme.colors.textInverse : theme.colors.textDim}
+                />
+                <Text
+                  text={tab.label}
+                  preset="caption"
+                  style={{ color: tab.focused ? theme.colors.textInverse : theme.colors.textDim }}
+                  numberOfLines={1}
+                />
+              </View>
+            </Pressable>
+          ))}
+        </View>
+      </BlurContainer>
     </View>
   )
 }
@@ -207,40 +144,51 @@ const $root = ({ spacing }: any): ViewStyle => ({
   left: 0,
   right: 0,
   bottom: 0,
-  paddingHorizontal: spacing?.md ?? 18,
+  paddingHorizontal: spacing.screenHorizontal,
   paddingTop: 10,
 })
 
-const $pillShadowWrap = (): ViewStyle => ({
-  shadowColor: "#000",
-  shadowOpacity: 0.35,
-  shadowRadius: 18,
-  shadowOffset: { width: 0, height: 10 },
-  elevation: 18,
-})
-
-const $pill = (): ViewStyle => ({
+const $pill = ({ colors, radius, elevation }: any): ViewStyle => ({
+  alignSelf: "center",
+  width: "78%",
   height: PILL_HEIGHT,
-  borderRadius: 35,
+  borderRadius: radius.pill,
   borderWidth: 1,
-  paddingHorizontal: INDICATOR_PADDING,
+  borderColor: colors.borderStrong,
+  backgroundColor: colors.surfaceGlass,
   justifyContent: "center",
   overflow: "hidden",
-//   borderColor: colors.palette.neutral900
+  ...elevation.floating,
 })
 
-const $indicator = (): ViewStyle => ({
+const $indicator = ({ colors, radius }: any): ViewStyle => ({
   position: "absolute",
-  left: INDICATOR_PADDING, // base; translateX moves it
-  width: INDICATOR_SIZE,
-  height: INDICATOR_SIZE,
-  borderRadius: INDICATOR_SIZE / 2,
-  top: (PILL_HEIGHT - INDICATOR_SIZE) / 2-1,
-  shadowColor: "#000",
-  shadowOpacity: 0.25,
-  shadowRadius: 10,
-  shadowOffset: { width: 0, height: 6 },
-  elevation: 10,
+  top: INDICATOR_PADDING,
+  bottom: INDICATOR_PADDING,
+  left: 0,
+  borderRadius: radius.pill,
+  backgroundColor: colors.primary,
+  overflow: "hidden",
+})
+
+const $indicatorGlowLeft = ({ colors }: any): ViewStyle => ({
+  position: "absolute",
+  left: -6,
+  top: -10,
+  width: 80,
+  height: 80,
+  borderRadius: 999,
+  backgroundColor: colors.gradientStart,
+})
+
+const $indicatorGlowRight = ({ colors }: any): ViewStyle => ({
+  position: "absolute",
+  right: -10,
+  top: -10,
+  width: 96,
+  height: 80,
+  borderRadius: 999,
+  backgroundColor: colors.gradientEnd,
 })
 
 const $row = (): ViewStyle => ({
@@ -259,11 +207,5 @@ const $tabInner = (): ViewStyle => ({
   flex: 1,
   alignItems: "center",
   justifyContent: "center",
-  gap: 0,
-})
-
-const $label = (): any => ({
-  fontSize: 10.5,
-  letterSpacing: 0.2,
-  lineHeight: 15,
+  gap: 2,
 })

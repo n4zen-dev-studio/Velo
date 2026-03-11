@@ -11,18 +11,31 @@ interface GlassCardProps {
 export function GlassCard({ children, style }: PropsWithChildren<GlassCardProps>) {
   const { themed } = useAppTheme()
 
-  return <View style={[themed($card), style]}>{children}</View>
+  return (
+    <View style={[themed($card), style]}>
+      <View pointerEvents="none" style={themed($wash)} />
+      {children}
+    </View>
+  )
 }
 
-const $card: ThemedStyle<ViewStyle> = ({ colors, spacing, isDark }) => ({
-  backgroundColor: isDark ? colors.palette.neutral300 : colors.palette.neutral200,
-  borderColor: isDark ? colors.palette.neutral300 : colors.palette.neutral200,
-  borderRadius: 20,
+const $card: ThemedStyle<ViewStyle> = ({ colors, spacing, radius, elevation }) => ({
+  backgroundColor: colors.card,
+  borderColor: colors.borderSubtle,
+  borderRadius: radius.large,
   borderWidth: 1,
-  padding: spacing.md,
-  shadowColor: colors.palette.neutral800,
-  shadowOpacity: 0.1,
-  shadowRadius: 16,
-  shadowOffset: { width: 0, height: 9 },
-  elevation: 6,
+  padding: spacing.cardPadding,
+  overflow: "hidden",
+  position: "relative",
+  ...elevation.card,
+})
+
+const $wash: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  position: "absolute",
+  top: -70,
+  right: -40,
+  width: 160,
+  height: 160,
+  borderRadius: 999,
+  backgroundColor: colors.glowSoft,
 })

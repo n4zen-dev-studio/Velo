@@ -14,7 +14,7 @@ const welcomeLogo = require("@assets/images/logo.png")
 const welcomeFace = require("@assets/images/welcome-face.png")
 
 export const WelcomeScreen: FC = function WelcomeScreen() {
-  const { themed, theme, toggleTheme, themeContext } = useAppTheme()
+  const { themed, theme, toggleTheme } = useAppTheme()
 
   const $bottomContainerInsets = useSafeAreaInsetsStyle(["bottom"])
 
@@ -25,23 +25,23 @@ export const WelcomeScreen: FC = function WelcomeScreen() {
         <Text
           testID="welcome-heading"
           style={themed($welcomeHeading)}
-          tx="welcomeScreen:readyForLaunch"
-          preset="heading"
+          text="Velo is ready."
+          preset="display"
         />
-        <Text tx="welcomeScreen:exciting" preset="subheading" />
+        <Text
+          text="A premium execution workspace with polished light and dark modes."
+          preset="formHelper"
+        />
         <Image
           style={$welcomeFace}
           source={welcomeFace}
           resizeMode="contain"
-          tintColor={theme.colors.palette.neutral900}
+          tintColor={theme.colors.primary}
         />
       </View>
-      <Button
-          tx="welcomeScreen:SwitchTheme"
-          onPress={toggleTheme}
-        />
+      <Button text="Switch theme" onPress={toggleTheme} />
       <View style={themed([$bottomContainer, $bottomContainerInsets])}>
-        <Text tx="welcomeScreen:postscript" size="md" />
+        <Text text="Continue to explore the refreshed brand system." size="md" />
       </View>
     </Screen>
   )
@@ -55,13 +55,13 @@ const $topContainer: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   paddingHorizontal: spacing.lg,
 })
 
-const $bottomContainer: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+const $bottomContainer: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
   flexShrink: 1,
   flexGrow: 0,
   flexBasis: "43%",
-  backgroundColor: colors.palette.neutral100,
-  borderTopLeftRadius: 16,
-  borderTopRightRadius: 16,
+  backgroundColor: colors.surfaceElevated,
+  borderTopLeftRadius: radius.large,
+  borderTopRightRadius: radius.large,
   paddingHorizontal: spacing.lg,
   justifyContent: "space-around",
 })

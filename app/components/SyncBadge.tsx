@@ -35,30 +35,30 @@ const $badge: ThemedStyle<ViewStyle> = ({ colors, spacing, isDark }) => ({
   paddingHorizontal: spacing.sm,
   paddingVertical: spacing.xxs,
   borderRadius: 999,
-  backgroundColor: isDark ? "rgba(30, 26, 36, 0.9)" : "rgba(255, 255, 255, 0.85)",
+  backgroundColor: isDark ? colors.surfaceGlass : colors.surfaceElevated,
   borderWidth: 1,
-  borderColor: colors.palette.neutral300,
+  borderColor: colors.borderSubtle,
   gap: spacing.xs,
 })
 
-const $dot = (state: ReturnType<typeof deriveSyncBadgeState>): ThemedStyle<ViewStyle> => ({
-  colors,
-}) => {
-  const tint =
-    state === "offline"
-      ? colors.palette.neutral500
-      : state === "syncing"
-        ? colors.palette.accent400
-        : state === "error"
-          ? colors.error
-          : state === "conflicts"
-            ? colors.palette.primary400
-            : colors.palette.primary300
+const $dot =
+  (state: ReturnType<typeof deriveSyncBadgeState>): ThemedStyle<ViewStyle> =>
+  ({ colors }) => {
+    const tint =
+      state === "offline"
+        ? colors.palette.neutral500
+        : state === "syncing"
+          ? colors.palette.accent400
+          : state === "error"
+            ? colors.error
+            : state === "conflicts"
+              ? colors.palette.primary400
+              : colors.palette.primary300
 
-  return {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: tint,
+    return {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: tint,
+    }
   }
-}

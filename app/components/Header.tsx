@@ -273,7 +273,7 @@ function HeaderAction(props: HeaderActionProps) {
 }
 
 const $wrapper: ViewStyle = {
-  height: 56,
+  height: 64,
   alignItems: "center",
   justifyContent: "space-between",
 }
@@ -286,25 +286,29 @@ const $title: TextStyle = {
   textAlign: "center",
 }
 
-const $actionTextContainer: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+const $actionTextContainer: ThemedStyle<ViewStyle> = ({ spacing, colors, radius }) => ({
   flexGrow: 0,
   alignItems: "center",
   justifyContent: "center",
-  height: "100%",
-  paddingHorizontal: spacing.md,
+  minHeight: 44,
+  paddingHorizontal: spacing.sm,
+  borderRadius: radius.pill,
+  backgroundColor: colors.surfaceGlass,
   zIndex: 2,
 })
 
 const $actionText: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.tint,
+  color: colors.primary,
 })
 
-const $actionIconContainer: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+const $actionIconContainer: ThemedStyle<ViewStyle> = ({ spacing, colors, radius }) => ({
   flexGrow: 0,
   alignItems: "center",
   justifyContent: "center",
-  height: "100%",
-  paddingHorizontal: spacing.md,
+  width: 44,
+  height: 44,
+  borderRadius: radius.pill,
+  backgroundColor: colors.surfaceGlass,
   zIndex: 2,
 })
 
@@ -322,7 +326,7 @@ const $titleWrapperCenter: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   height: "100%",
   width: "100%",
   position: "absolute",
-  paddingHorizontal: spacing.xxl,
+  paddingHorizontal: spacing.xxxl,
   zIndex: 1,
 })
 

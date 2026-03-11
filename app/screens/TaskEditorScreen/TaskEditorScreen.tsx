@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { Pressable, View, ViewStyle } from "react-native"
+import { Pressable, View, ViewStyle, TextStyle } from "react-native"
 import { useNavigation, useRoute } from "@react-navigation/native"
 import { Controller, useForm } from "react-hook-form"
 import { z } from "zod"
@@ -33,8 +33,7 @@ export function TaskEditorScreen() {
     assigneeOptions,
     assigneeUserId,
     setAssigneeUserId,
-  } =
-    useTaskEditorViewModel(taskId, projectId)
+  } = useTaskEditorViewModel(taskId, projectId)
   const syncState = useSyncStatus()
   const [hasConflict, setHasConflict] = useState(false)
   const { workspaces, activeWorkspaceId } = useWorkspaceStore()
@@ -91,14 +90,18 @@ export function TaskEditorScreen() {
 
   const onSubmit = handleSubmit(async (values) => {
     const saved = await saveTask(values)
-    task ? navigation.replace("TaskDetail", { taskId: saved.id }): navigation.goBack()
+    task ? navigation.replace("TaskDetail", { taskId: saved.id }) : navigation.goBack()
   })
 
   return (
-    <Screen preset="scroll" safeAreaEdges={['top', 'bottom']} contentContainerStyle={themed($screen)}>
+    <Screen
+      preset="scroll"
+      safeAreaEdges={["top", "bottom"]}
+      contentContainerStyle={themed($screen)}
+    >
       <View style={themed($header)}>
-        <Text preset="heading" text={task ? "Edit Task" : "Create Task"} />
-        <Text preset="formHelper" text={`Workspace: ${workspaceLabel}`} />
+        <Text preset="display" text={task ? "Edit task" : "Create task"} />
+        <Text preset="formHelper" text={`Workspace: ${workspaceLabel}`} style={themed($subtitle)} />
       </View>
 
       {hasConflict ? (
@@ -111,7 +114,7 @@ export function TaskEditorScreen() {
           <View style={themed($buttonRow)}>
             <Button
               text="Resolve Conflict"
-              preset="default"
+              preset="reversed"
               onPress={() =>
                 navigation.navigate("ConflictResolution", { conflictId: `task:${taskId ?? ""}` })
               }
@@ -126,7 +129,12 @@ export function TaskEditorScreen() {
           control={control}
           name="title"
           render={({ field: { value, onChange } }) => (
-            <TextField value={value} onChangeText={onChange} placeholder="Task title" editable={!hasConflict} />
+            <TextField
+              value={value}
+              onChangeText={onChange}
+              placeholder="Task title"
+              editable={!hasConflict}
+            />
           )}
         />
         <View style={themed($spacer)} />
@@ -169,10 +177,7 @@ export function TaskEditorScreen() {
             <Pressable
               key={member.userId ?? "unassigned"}
               onPress={() => !hasConflict && setAssigneeUserId(member.userId)}
-              style={[
-                themed($pill),
-                assigneeUserId === member.userId && themed($pillActive),
-              ]}
+              style={[themed($pill), assigneeUserId === member.userId && themed($pillActive)]}
             >
               <Text text={member.label} />
             </Pressable>
@@ -202,7 +207,7 @@ export function TaskEditorScreen() {
           onPress={onSubmit}
           disabled={hasConflict}
         />
-        <Button text="Cancel" preset="reversed" onPress={() => navigation.goBack()} />
+        <Button text="Cancel" preset="glass" onPress={() => navigation.goBack()} />
       </View>
       <Text
         preset="formHelper"
@@ -217,12 +222,17 @@ export function TaskEditorScreen() {
 }
 
 const $screen: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  padding: spacing.lg,
-  gap: spacing.lg,
+  paddingHorizontal: spacing.screenHorizontal,
+  paddingTop: spacing.screenVertical,
+  gap: spacing.sectionGap,
 })
 
 const $header: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.xs,
+})
+
+const $subtitle: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.textMuted,
 })
 
 const $spacer: ThemedStyle<ViewStyle> = ({ spacing }) => ({
@@ -236,18 +246,18 @@ const $pillRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   marginTop: spacing.sm,
 })
 
-const $pill: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+const $pill: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
   paddingHorizontal: spacing.sm,
   paddingVertical: spacing.xs,
-  borderRadius: 12,
-  backgroundColor: colors.palette.neutral100,
+  borderRadius: radius.pill,
+  backgroundColor: colors.surface,
   borderWidth: 1,
-  borderColor: colors.palette.neutral300,
+  borderColor: colors.borderSubtle,
 })
 
 const $pillActive: ThemedStyle<ViewStyle> = ({ colors }) => ({
-  borderColor: colors.palette.primary400,
-  backgroundColor: colors.palette.primary100,
+  borderColor: colors.primary,
+  backgroundColor: colors.glowSoft,
 })
 
 const $buttonRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({

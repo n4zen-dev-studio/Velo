@@ -1,7 +1,4 @@
-// TextField.tsx — polished “glassy” TextField (focus ring, better padding, light-mode visibility)
-// Functionality stays the same (same props, same behavior), UI is upgraded.
-
-import { ComponentType, forwardRef, Ref, useImperativeHandle, useMemo, useRef, useState } from "react"
+import { ComponentType, forwardRef, Ref, useImperativeHandle, useRef, useState } from "react"
 import {
   ImageStyle,
   Pressable,
@@ -48,13 +45,6 @@ export interface TextFieldProps extends Omit<TextInputProps, "ref"> {
   LeftAccessory?: ComponentType<TextFieldAccessoryProps>
 }
 
-/**
- * Polished glass TextField:
- * - more padding + modern radius
- * - focus ring / error ring
- * - better light-mode contrast
- * - subtle “sheen” overlay
- */
 export const TextField = forwardRef(function TextField(props: TextFieldProps, ref: Ref<TextInput>) {
   const {
     labelTx,
@@ -79,18 +69,16 @@ export const TextField = forwardRef(function TextField(props: TextFieldProps, re
 
   const input = useRef<TextInput>(null)
   const [isFocused, setIsFocused] = useState(false)
-
   const { themed, theme } = useAppTheme()
-  const colors = (theme as any)?.colors
-  const isDark = (theme as any)?.isDark ?? (theme as any)?.dark ?? false
+  const { colors } = theme
 
   const disabled = TextInputProps.editable === false || status === "disabled"
-
-  const placeholderContent = placeholderTx ? translate(placeholderTx, placeholderTxOptions) : placeholder
+  const placeholderContent = placeholderTx
+    ? translate(placeholderTx, placeholderTxOptions)
+    : placeholder
 
   function focusInput() {
-    if (disabled) return
-    input.current?.focus()
+    if (!disabled) input.current?.focus()
   }
 
   useImperativeHandle(ref, () => input.current as TextInput)
@@ -98,33 +86,17 @@ export const TextField = forwardRef(function TextField(props: TextFieldProps, re
   const showLabel = !!(label || labelTx || LabelTextProps?.children)
   const showHelper = !!(helper || helperTx || HelperTextProps?.children)
 
-  const wrapperStateStyle = useMemo<StyleProp<ViewStyle>>(() => {
-    if (disabled) return themed([$wrapperDisabled])
-    if (status === "error") return themed([$wrapperError])
-    if (isFocused) return themed([$wrapperFocused])
-    return null
-  }, [disabled, status, isFocused, themed])
-
-  const lightBoostStyle = !isDark
-    ? ({
-        backgroundColor: "rgba(0,0,0,0.03)",
-        borderColor: "rgba(0,0,0,0.10)",
-      } satisfies ViewStyle)
-    : null
-
-  const $containerStyles = [$containerStyleOverride]
-
-  const $labelStyles = themed([$labelStyle, LabelTextProps?.style])
-  const $helperStyles = themed([
-    $helperStyle,
-    status === "error" && { color: colors?.error },
-    HelperTextProps?.style,
-  ])
+  const wrapperStateStyle = disabled
+    ? themed($wrapperDisabled)
+    : status === "error"
+      ? themed($wrapperError)
+      : isFocused
+        ? themed($wrapperFocused)
+        : null
 
   const $inputWrapperStyles = themed([
     $styles.row,
     $inputWrapperStyle,
-    lightBoostStyle,
     wrapperStateStyle,
     TextInputProps.multiline && $multilineWrapper,
     LeftAccessory && $hasLeftAccessory,
@@ -134,7 +106,7 @@ export const TextField = forwardRef(function TextField(props: TextFieldProps, re
 
   const $inputStyles: ThemedStyleArray<TextStyle> = [
     $inputStyle,
-    disabled && { color: colors?.textDim },
+    disabled && { color: colors.textDim },
     isRTL && { textAlign: "right" as TextStyle["textAlign"] },
     TextInputProps.multiline && $multilineInput,
     $inputStyleOverride,
@@ -143,25 +115,23 @@ export const TextField = forwardRef(function TextField(props: TextFieldProps, re
   return (
     <Pressable
       onPress={focusInput}
-      style={$containerStyles}
+      style={$containerStyleOverride}
       accessibilityState={{ disabled }}
-      // keeps it feeling like a field, not a button
-      android_ripple={undefined as any}
     >
       {showLabel ? (
-        <View style={themed($labelRow)}>
-          <Text
-            preset="formLabel"
-            text={label}
-            tx={labelTx}
-            txOptions={labelTxOptions}
-            {...LabelTextProps}
-            style={$labelStyles}
-          />
-        </View>
+        <Text
+          preset="formLabel"
+          text={label}
+          tx={labelTx}
+          txOptions={labelTxOptions}
+          {...LabelTextProps}
+          style={themed([$labelStyle, LabelTextProps?.style])}
+        />
       ) : null}
 
       <View style={$inputWrapperStyles}>
+        <View pointerEvents="none" style={themed($fieldWash)} />
+
         {!!LeftAccessory && (
           <LeftAccessory
             style={themed($leftAccessoryStyle)}
@@ -173,10 +143,10 @@ export const TextField = forwardRef(function TextField(props: TextFieldProps, re
 
         <TextInput
           ref={input}
-          underlineColorAndroid={colors?.transparent}
+          underlineColorAndroid={colors.transparent}
           textAlignVertical={TextInputProps.multiline ? "top" : "center"}
           placeholder={placeholderContent}
-          placeholderTextColor={colors?.textDim}
+          placeholderTextColor={colors.textDim}
           {...TextInputProps}
           editable={!disabled}
           onFocus={(e) => {
@@ -198,9 +168,6 @@ export const TextField = forwardRef(function TextField(props: TextFieldProps, re
             multiline={TextInputProps.multiline ?? false}
           />
         )}
-
-        {/* subtle glass sheen overlay */}
-        <View pointerEvents="none" style={[themed($sheen), !isDark && $sheenLight]} />
       </View>
 
       {showHelper ? (
@@ -210,77 +177,68 @@ export const TextField = forwardRef(function TextField(props: TextFieldProps, re
           tx={helperTx}
           txOptions={helperTxOptions}
           {...HelperTextProps}
-          style={$helperStyles}
+          style={themed([
+            $helperStyle,
+            status === "error" && { color: colors.error },
+            HelperTextProps?.style,
+          ])}
         />
       ) : null}
     </Pressable>
   )
 })
 
-/** Layout */
-const $labelRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+const $labelStyle: ThemedStyle<TextStyle> = ({ spacing }) => ({
   marginBottom: spacing.xs,
-})
-
-const $labelStyle: ThemedStyle<TextStyle> = () => ({
-  opacity: 0.95,
 })
 
 const $helperStyle: ThemedStyle<TextStyle> = ({ spacing }) => ({
   marginTop: spacing.xs,
-  opacity: 0.85,
 })
 
-/** Wrapper base */
-const $inputWrapperStyle: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+const $inputWrapperStyle: ThemedStyle<ViewStyle> = ({ colors, spacing, radius, elevation }) => ({
   alignItems: "center",
   borderWidth: 1,
-  borderRadius: 18,
+  borderRadius: radius.medium,
   overflow: "hidden",
-
-  // comfortable touch + iOS-like padding
   paddingHorizontal: spacing.md,
   paddingVertical: spacing.sm,
-
-  // dark-mode glass baseline
-  backgroundColor: colors.card ?? "rgba(255,255,255,0.06)",
-  borderColor: "rgba(255,255,255,0.14)",
+  backgroundColor: colors.surface,
+  borderColor: colors.borderSubtle,
+  position: "relative",
+  ...elevation.card,
 })
 
-/** Focus / Error / Disabled rings */
-const $wrapperFocused: ThemedStyle<ViewStyle> = ({ colors }) => ({
-  borderColor: colors.palette.primary400 ?? "rgba(255,255,255,0.22)",
-  backgroundColor: "rgba(255,255,255,0.08)",
-  shadowColor: colors.palette.primary500 ?? "#000",
-  shadowOpacity: 0.14,
-  shadowRadius: 14,
-  shadowOffset: { width: 0, height: 8 },
-  elevation: 3,
+const $wrapperFocused: ThemedStyle<ViewStyle> = ({ colors, elevation }) => ({
+  borderColor: colors.primary,
+  backgroundColor: colors.surfaceElevated,
+  ...elevation.glow,
 })
 
 const $wrapperError: ThemedStyle<ViewStyle> = ({ colors }) => ({
   borderColor: colors.error,
-  shadowColor: colors.error,
-  shadowOpacity: 0.12,
-  shadowRadius: 14,
-  shadowOffset: { width: 0, height: 8 },
-  elevation: 3,
 })
 
 const $wrapperDisabled: ThemedStyle<ViewStyle> = () => ({
-  opacity: 0.6,
+  opacity: 0.55,
 })
 
-/** Input text */
+const $fieldWash: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  position: "absolute",
+  top: -40,
+  right: -10,
+  width: 120,
+  height: 120,
+  borderRadius: 999,
+  backgroundColor: colors.glowSoft,
+  opacity: 0.8,
+})
+
 const $inputStyle: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
   flex: 1,
   alignSelf: "stretch",
-  fontFamily: typography.primary.normal,
+  ...typography.roles.body,
   color: colors.text,
-  fontSize: 15,
-  lineHeight: 20,
-
-  // cleaner vertical rhythm
   paddingVertical: 0,
   paddingHorizontal: 0,
   margin: 0,
@@ -289,14 +247,13 @@ const $inputStyle: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
 const $multilineWrapper: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   alignItems: "flex-start",
   paddingVertical: spacing.md,
-  minHeight: 120,
+  minHeight: 132,
 })
 
 const $multilineInput: ThemedStyle<TextStyle> = () => ({
   height: "auto",
 })
 
-/** Accessories */
 const $leftAccessoryStyle: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   marginEnd: spacing.sm,
   justifyContent: "center",
@@ -316,16 +273,3 @@ const $hasLeftAccessory: ThemedStyle<ViewStyle> = ({ spacing }) => ({
 const $hasRightAccessory: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   paddingEnd: spacing.sm,
 })
-
-/** Sheen overlay */
-const $sheen: ThemedStyle<ViewStyle> = () => ({
-  position: "absolute",
-  inset: 0,
-  backgroundColor: "rgba(255,255,255,0.06)",
-  opacity: 0.6,
-})
-
-const $sheenLight: ViewStyle = {
-  backgroundColor: "rgba(255,255,255,0.45)",
-  opacity: 0.85,
-}

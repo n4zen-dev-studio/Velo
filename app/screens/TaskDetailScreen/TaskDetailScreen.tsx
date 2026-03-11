@@ -20,8 +20,17 @@ export function TaskDetailScreen() {
   const navigation = useNavigation<HomeStackScreenProps<"TaskDetail">["navigation"]>()
   const route = useRoute<HomeStackScreenProps<"TaskDetail">["route"]>()
   const { taskId } = route.params
-  const { task, comments, events, statusMap, deleteTask, addComment, isSavingComment, commentError, refresh } =
-    useTaskDetailViewModel(taskId)
+  const {
+    task,
+    comments,
+    events,
+    statusMap,
+    deleteTask,
+    addComment,
+    isSavingComment,
+    commentError,
+    refresh,
+  } = useTaskDetailViewModel(taskId)
   const [commentDraft, setCommentDraft] = useState("")
   const [assigneeLabel, setAssigneeLabel] = useState<string>("Unassigned")
 
@@ -88,17 +97,29 @@ export function TaskDetailScreen() {
   }
 
   return (
-    <Screen preset="scroll" safeAreaEdges={["top", "bottom"]} contentContainerStyle={themed($screen)}>
-      {/* Header */}
+    <Screen
+      preset="scroll"
+      safeAreaEdges={["top", "bottom"]}
+      contentContainerStyle={themed($screen)}
+    >
       <View style={themed($header)}>
-        <Text preset="heading" text={task.title} />
+        <Text preset="display" text={task.title} style={themed($title)} />
+        <Text
+          preset="formHelper"
+          text="Execution detail and activity stream."
+          style={themed($subtitle)}
+        />
 
         <View style={themed($metaRow)}>
           <View style={themed($metaPill)}>
             <Text preset="formHelper" text={`Status: ${statusLabel}`} style={themed($metaText)} />
           </View>
           <View style={themed($metaPill)}>
-            <Text preset="formHelper" text={`Priority: ${priorityLabel}`} style={themed($metaText)} />
+            <Text
+              preset="formHelper"
+              text={`Priority: ${priorityLabel}`}
+              style={themed($metaText)}
+            />
           </View>
           <View style={themed($metaPill)}>
             <Text
@@ -112,12 +133,12 @@ export function TaskDetailScreen() {
         <View style={themed($buttonRow)}>
           <Button
             text="Edit"
-            preset="glass"
+            preset="filled"
             onPress={() => navigation.navigate("TaskEditor", { taskId: task.id })}
           />
           <Button
             text="Delete"
-            preset="glass"
+            preset="reversed"
             onPress={async () => {
               await deleteTask()
               navigation.goBack()
@@ -126,10 +147,9 @@ export function TaskDetailScreen() {
         </View>
       </View>
 
-      {/* Summary */}
       <GlassCard>
         <View style={themed($sectionHeader)}>
-          <Text preset="subheading" text="Summary" />
+          <Text preset="sectionTitle" text="Summary" />
         </View>
         <Text
           preset="formHelper"
@@ -138,12 +158,11 @@ export function TaskDetailScreen() {
         />
       </GlassCard>
 
-      {/* Comments */}
       <GlassCard>
         <View style={themed($sectionHeaderBetween)}>
           <View>
-            <Text preset="subheading" text="Comments" />
-            <Text preset="formHelper" text={`${comments.length} total`} style={themed($muted)} />
+            <Text preset="sectionTitle" text="Comments" />
+            <Text preset="caption" text={`${comments.length} total`} style={themed($muted)} />
           </View>
         </View>
 
@@ -162,7 +181,7 @@ export function TaskDetailScreen() {
           <View style={themed($composerActions)}>
             <Button
               text={isSavingComment ? "Sending..." : "Send"}
-              preset="glass"
+              preset="default"
               onPress={async () => {
                 const created = await addComment(commentDraft)
                 if (created) {
@@ -195,12 +214,11 @@ export function TaskDetailScreen() {
         </View>
       </GlassCard>
 
-      {/* Timeline */}
       <GlassCard>
         <View style={themed($sectionHeaderBetween)}>
           <View>
-            <Text preset="subheading" text="Timeline" />
-            <Text preset="formHelper" text={`${events.length} events`} style={themed($muted)} />
+            <Text preset="sectionTitle" text="Timeline" />
+            <Text preset="caption" text={`${events.length} events`} style={themed($muted)} />
           </View>
         </View>
 
@@ -211,7 +229,9 @@ export function TaskDetailScreen() {
             timelineItems.map((item) => (
               <View key={item.id} style={themed($eventCard)}>
                 <Text preset="formLabel" text={item.title} />
-                {item.detail ? <Text preset="formHelper" text={item.detail} style={themed($muted)} /> : null}
+                {item.detail ? (
+                  <Text preset="formHelper" text={item.detail} style={themed($muted)} />
+                ) : null}
                 <Text
                   preset="formHelper"
                   text={`by ${item.authorLabel} · ${formatDateTime(item.createdAt)}`}
@@ -227,13 +247,22 @@ export function TaskDetailScreen() {
 }
 
 const $screen: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  padding: spacing.lg,
-  gap: spacing.lg,
-  paddingBottom: spacing.xxl,
+  paddingHorizontal: spacing.screenHorizontal,
+  paddingTop: spacing.screenVertical,
+  gap: spacing.sectionGap,
+  paddingBottom: spacing.xxxl,
 })
 
 const $header: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.sm,
+})
+
+const $title: ThemedStyle<TextStyle> = () => ({
+  lineHeight: 42,
+})
+
+const $subtitle: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.textMuted,
 })
 
 const $metaRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
@@ -242,11 +271,11 @@ const $metaRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.sm,
 })
 
-const $metaPill: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
-  borderRadius: 999,
+const $metaPill: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
+  borderRadius: radius.pill,
   borderWidth: 1,
-  borderColor: "rgba(255,255,255,0.14)",
-  backgroundColor: colors.card ?? "rgba(255,255,255,0.06)",
+  borderColor: colors.borderStrong,
+  backgroundColor: colors.surfaceGlass,
   paddingHorizontal: spacing.sm,
   paddingVertical: spacing.xxs,
 })
@@ -287,12 +316,12 @@ const $stack: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.sm,
 })
 
-const $commentCard: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+const $commentCard: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
   padding: spacing.sm,
-  borderRadius: 16,
+  borderRadius: radius.medium,
   borderWidth: 1,
-  borderColor: "rgba(255,255,255,0.14)",
-  backgroundColor: colors.card ?? "rgba(255,255,255,0.06)",
+  borderColor: colors.borderSubtle,
+  backgroundColor: colors.surfaceGlass,
 })
 
 const $commentHeader: ThemedStyle<ViewStyle> = ({ spacing }) => ({
@@ -302,17 +331,17 @@ const $commentHeader: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   marginBottom: spacing.xs,
 })
 
-const $eventCard: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+const $eventCard: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
   gap: spacing.xxs,
   padding: spacing.sm,
-  borderRadius: 16,
+  borderRadius: radius.medium,
   borderWidth: 1,
-  borderColor: "rgba(255,255,255,0.14)",
-  backgroundColor: colors.card ?? "rgba(255,255,255,0.06)",
+  borderColor: colors.borderSubtle,
+  backgroundColor: colors.surfaceGlass,
 })
 
-const $muted: ThemedStyle<TextStyle> = () => ({
-  opacity: 0.85,
+const $muted: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.textMuted,
 })
 
 const $errorText: ThemedStyle<TextStyle> = ({ colors }) => ({

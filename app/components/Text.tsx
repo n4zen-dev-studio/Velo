@@ -1,5 +1,4 @@
 import { ReactNode, forwardRef, ForwardedRef } from "react"
-// eslint-disable-next-line no-restricted-imports
 import { StyleProp, Text as RNText, TextProps as RNTextProps, TextStyle } from "react-native"
 import { TOptions } from "i18next"
 
@@ -11,7 +10,17 @@ import { typography } from "@/theme/typography"
 
 type Sizes = keyof typeof $sizeStyles
 type Weights = keyof typeof typography.primary
-type Presets = "default" | "bold" | "heading" | "subheading" | "formLabel" | "formHelper"
+type Presets =
+  | "default"
+  | "bold"
+  | "heading"
+  | "subheading"
+  | "formLabel"
+  | "formHelper"
+  | "display"
+  | "sectionTitle"
+  | "caption"
+  | "overline"
 
 export interface TextProps extends RNTextProps {
   tx?: TxKeyPath
@@ -30,8 +39,8 @@ export const Text = forwardRef(function Text(props: TextProps, ref: ForwardedRef
 
   const i18nText = tx && translate(tx, txOptions)
   const content = i18nText || text || children
-
   const preset: Presets = props.preset ?? "default"
+
   const $styles: StyleProp<TextStyle> = [
     $rtlStyle,
     themed($presets[preset]),
@@ -47,85 +56,51 @@ export const Text = forwardRef(function Text(props: TextProps, ref: ForwardedRef
   )
 })
 
-/**
- * Slightly more modern typographic scale:
- * - headings not absurdly large
- * - tighter line height & subtle letterSpacing
- */
 const $sizeStyles = {
-  xxl: { fontSize: 30, lineHeight: 36 } satisfies TextStyle,
-  xl: { fontSize: 24, lineHeight: 30 } satisfies TextStyle,
-  lg: { fontSize: 18, lineHeight: 24 } satisfies TextStyle,
-  md: { fontSize: 16, lineHeight: 22 } satisfies TextStyle,
-  sm: { fontSize: 14, lineHeight: 20 } satisfies TextStyle,
-  xs: { fontSize: 12, lineHeight: 18 } satisfies TextStyle,
-  xxs: { fontSize: 11, lineHeight: 16 } satisfies TextStyle,
+  xxl: { fontSize: 34, lineHeight: 40 } satisfies TextStyle,
+  xl: { fontSize: 28, lineHeight: 34 } satisfies TextStyle,
+  lg: { fontSize: 22, lineHeight: 28 } satisfies TextStyle,
+  md: { fontSize: 17, lineHeight: 24 } satisfies TextStyle,
+  sm: { fontSize: 15, lineHeight: 22 } satisfies TextStyle,
+  xs: { fontSize: 13, lineHeight: 18 } satisfies TextStyle,
+  xxs: { fontSize: 12, lineHeight: 16 } satisfies TextStyle,
 }
 
 const $fontWeightStyles = Object.entries(typography.primary).reduce((acc, [w, fontFamily]) => {
   return { ...acc, [w]: { fontFamily } }
 }, {}) as Record<Weights, TextStyle>
 
-/**
- * Base stays theme-driven (important: used everywhere)
- */
-const $baseStyle: ThemedStyle<TextStyle> = (theme) => ({
-  ...$sizeStyles.sm,
-  ...$fontWeightStyles.normal,
-  color: theme.colors.text,
+const $baseStyle: ThemedStyle<TextStyle> = ({ colors, typography }) => ({
+  ...typography.roles.body,
+  color: colors.text,
 })
 
 const $presets: Record<Presets, ThemedStyleArray<TextStyle>> = {
-  default: [
-    $baseStyle,
-    {
-      letterSpacing: 0.2,
-    },
-  ],
-
-  bold: [
-    $baseStyle,
-    {
-      ...$fontWeightStyles.bold,
-      letterSpacing: 0.15,
-    },
-  ],
-
-  heading: [
-    $baseStyle,
-    {
-      ...$sizeStyles.xxl,
-      ...$fontWeightStyles.bold,
-      letterSpacing: -0.3,
-    },
-  ],
-
-  subheading: [
-    $baseStyle,
-    {
-      ...$sizeStyles.lg,
-      ...$fontWeightStyles.medium,
-      letterSpacing: -0.1,
-    },
-  ],
-
+  default: [$baseStyle],
+  bold: [$baseStyle, ({ typography }) => typography.roles.body, { ...$fontWeightStyles.bold }],
+  heading: [$baseStyle, ({ typography }) => typography.roles.title1],
+  subheading: [$baseStyle, ({ typography }) => typography.roles.title3],
   formLabel: [
     $baseStyle,
-    {
-      ...$sizeStyles.sm,
-      ...$fontWeightStyles.medium,
-      letterSpacing: 0.15,
-    },
+    ({ typography, colors }) => ({ ...typography.roles.label, color: colors.textMuted }),
   ],
-
   formHelper: [
     $baseStyle,
-    {
-      ...$sizeStyles.xs,
-      ...$fontWeightStyles.normal,
-      opacity: 0.85,
-      letterSpacing: 0.2,
-    },
+    ({ typography, colors }) => ({ ...typography.roles.bodySmall, color: colors.textDim }),
+  ],
+  display: [$baseStyle, ({ typography }) => typography.roles.display],
+  sectionTitle: [$baseStyle, ({ typography }) => typography.roles.sectionTitle],
+  caption: [
+    $baseStyle,
+    ({ typography, colors }) => ({ ...typography.roles.caption, color: colors.textDim }),
+  ],
+  overline: [
+    $baseStyle,
+    ({ typography, colors }) => ({
+      ...typography.roles.overline,
+      color: colors.textDim,
+      textTransform: "uppercase",
+    }),
   ],
 }
 

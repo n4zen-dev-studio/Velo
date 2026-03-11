@@ -5,6 +5,7 @@ import {
   View,
   ViewStyle,
   TextStyle,
+  ImageStyle,
   StyleSheet,
   Dimensions,
 } from "react-native"
@@ -22,23 +23,22 @@ type ScreenProps = NativeStackScreenProps<RootStackParamList, "Onboarding">
 
 const onboardingMain = require("@assets/onboarding/onboarding-main.png")
 
-
 export function OnboardingScreen({ navigation }: ScreenProps) {
   const { themed } = useAppTheme()
 
   return (
     // 1. Ensure Screen doesn't add padding and uses the full window
-    <Screen 
-      preset="fixed" 
-      safeAreaEdges={[]} 
+    <Screen
+      preset="fixed"
+      safeAreaEdges={[]}
       contentContainerStyle={{ flex: 1 }} // Force the internal container to fill
       style={themed($root)}
     >
-      <ImageBackground 
-        source={onboardingMain} 
-        resizeMode="cover" 
+      <ImageBackground
+        source={onboardingMain}
+        resizeMode="cover"
         // 2. Use style for the container, imageStyle for the actual bitmap
-        style={StyleSheet.absoluteFill} 
+        style={StyleSheet.absoluteFill}
         imageStyle={themed($bgImage)}
       >
         {/* 3. The Overlay must be absolute to stay behind text */}
@@ -48,18 +48,17 @@ export function OnboardingScreen({ navigation }: ScreenProps) {
         {/* 4. This container now controls the layout flow */}
         <View style={themed($mainContainer)}>
           <View style={themed($centerMarkWrap)} pointerEvents="none">
-            <Text text="TaskTrak" style={themed($centerMark)} />
+            <Text text="VELO" style={themed($centerMark)} />
           </View>
 
           <View style={themed($content)}>
             <View style={themed($copy)}>
-              <Text text={"Your Work.\nOrganized."} style={themed($title)} />
+              <Text text={"Momentum for\nmodern teams."} style={themed($title)} />
               <Text
-                text="Offline-first task tracking with reliable sync and conflict resolution."
+                text="A polished execution workspace built for clarity, speed, and dependable offline progress."
                 style={themed($subtitle)}
               />
             </View>
-
 
             <SliderCTA
               text="Get Started"
@@ -76,14 +75,13 @@ export function OnboardingScreen({ navigation }: ScreenProps) {
   )
 }
 
-
-const $root: ThemedStyle<ViewStyle> = () => ({ 
-  flex: 1, 
-  backgroundColor: "#000",// Prevents white flashes
+const $root: ThemedStyle<ViewStyle> = () => ({
+  flex: 1,
+  backgroundColor: "#05060D",
   zIndex: 0,
 })
 
-const $bgImage: ThemedStyle<ViewStyle> = () => ({
+const $bgImage: ThemedStyle<ImageStyle> = () => ({
   flex: 1,
   zIndex: -3,
 })
@@ -95,7 +93,7 @@ const $mainContainer: ThemedStyle<ViewStyle> = () => ({
 
 const $overlay: ThemedStyle<ViewStyle> = ({ colors }) => ({
   ...StyleSheet.absoluteFillObject,
-  backgroundColor: "rgba(0,0,0,0.5)",
+  backgroundColor: "rgba(6,8,18,0.44)",
   zIndex: -1,
 })
 
@@ -110,14 +108,12 @@ const $bottomFade: ThemedStyle<ViewStyle> = () => ({
 })
 
 const $content: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  paddingHorizontal: spacing.lg,
-  paddingBottom: spacing.xl + 20, // Extra padding for home indicator
-  gap: spacing.lg,
+  paddingHorizontal: spacing.screenHorizontal,
+  paddingBottom: spacing.xxxl,
+  gap: spacing.sectionGap,
 })
 
 const $bg: ThemedStyle<ViewStyle> = () => ({ flex: 1 })
-
-
 
 const $centerMarkWrap: ThemedStyle<ViewStyle> = () => ({
   position: "absolute",
@@ -128,12 +124,12 @@ const $centerMarkWrap: ThemedStyle<ViewStyle> = () => ({
 })
 
 const $centerMark: ThemedStyle<TextStyle> = ({ colors }) => ({
-  fontSize: 77,
+  fontSize: 68,
   lineHeight: 130,
   fontWeight: "800",
-  letterSpacing: -4,
+  letterSpacing: 6,
   color: colors.palette.neutral100,
-  opacity: 0.5,
+  opacity: 0.2,
 })
 
 const $copy: ThemedStyle<ViewStyle> = ({ spacing }) => ({
@@ -143,15 +139,15 @@ const $copy: ThemedStyle<ViewStyle> = ({ spacing }) => ({
 
 const $title: ThemedStyle<TextStyle> = () => ({
   fontSize: 44,
-  lineHeight: 46,
+  lineHeight: 48,
   fontWeight: "800",
   color: "#FFFFFF",
 })
 
 const $subtitle: ThemedStyle<TextStyle> = ({ colors }) => ({
-  fontSize: 14,
-  lineHeight: 20,
-  color: colors.palette.neutral500,
+  fontSize: 15,
+  lineHeight: 22,
+  color: "rgba(244,247,255,0.78)",
 })
 
 const $cta: ThemedStyle<ViewStyle> = ({ spacing }) => ({
@@ -202,4 +198,3 @@ const $ctaChevron: ThemedStyle<TextStyle> = ({ colors }) => ({
   letterSpacing: 2,
   color: colors.palette.neutral600,
 })
-
