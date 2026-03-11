@@ -39,20 +39,7 @@ export interface ButtonProps extends PressableProps {
   disabled?: boolean
   disabledStyle?: StyleProp<ViewStyle>
 }
-function isDarkFromColors(colors: any) {
-  // Most Ignite themes use a dark background in dark mode
-  // Fallback is safe and non-breaking
-  const bg = colors.background ?? "#000"
-  return bg.startsWith("#0") || bg.startsWith("#1") || bg.startsWith("#2")
-}
 
-/**
- * Glassy modern button:
- * - rounded pill
- * - subtle glass fill + stroke
- * - soft highlight overlay
- * - accent-filled variant
- */
 export function Button(props: ButtonProps) {
   const {
     tx,
@@ -68,24 +55,18 @@ export function Button(props: ButtonProps) {
     LeftAccessory,
     disabled,
     disabledStyle: $disabledViewStyleOverride,
+    preset = "default",
     ...rest
   } = props
 
-  const { themed, theme } = useAppTheme()
-  const isDark = theme.isDark
-
-  const preset: Presets = props.preset ?? "glass"
+  const { themed } = useAppTheme()
 
   function $viewStyle({ pressed }: PressableStateCallbackType): StyleProp<ViewStyle> {
-      const isGlass = preset === "glass"
-
     return [
       themed($viewPresets[preset]),
       $viewStyleOverride,
-      isGlass && !isDark && $glassLightBoost,
-
-      !!pressed && themed([$pressedViewPresets[preset], $pressedViewStyleOverride]),
-      !!disabled && themed([$disabledViewPreset, $disabledViewStyleOverride as any]),
+      pressed && themed([$pressedViewPresets[preset], $pressedViewStyleOverride]),
+      disabled && themed([$disabledViewPreset, $disabledViewStyleOverride as any]),
     ]
   }
 
@@ -93,8 +74,8 @@ export function Button(props: ButtonProps) {
     return [
       themed($textPresets[preset]),
       $textStyleOverride,
-      !!pressed && themed([$pressedTextPresets[preset], $pressedTextStyleOverride]),
-      !!disabled && themed([$disabledTextPreset, $disabledTextStyleOverride as any]),
+      pressed && themed([$pressedTextPresets[preset], $pressedTextStyleOverride]),
+      disabled && themed([$disabledTextPreset, $disabledTextStyleOverride as any]),
     ]
   }
 
@@ -103,13 +84,19 @@ export function Button(props: ButtonProps) {
       style={$viewStyle}
       accessibilityRole="button"
       accessibilityState={{ disabled: !!disabled }}
-      {...rest}
       disabled={disabled}
+      {...rest}
     >
       {(state) => (
         <>
-          {/* subtle sheen overlay (no pointer events) */}
-          <View pointerEvents="none" style={themed($sheenOverlay)} />
+          {preset === "default" ? (
+            <>
+              <View pointerEvents="none" style={themed($gradientWash)} />
+              <View pointerEvents="none" style={themed($gradientBlobLeft)} />
+              <View pointerEvents="none" style={themed($gradientBlobRight)} />
+            </>
+          ) : null}
+          {preset === "glass" ? <View pointerEvents="none" style={themed($glassSheen)} /> : null}
 
           {!!LeftAccessory && (
             <LeftAccessory style={$leftAccessoryStyle} pressableState={state} disabled={disabled} />
@@ -120,7 +107,11 @@ export function Button(props: ButtonProps) {
           </Text>
 
           {!!RightAccessory && (
-            <RightAccessory style={$rightAccessoryStyle} pressableState={state} disabled={disabled} />
+            <RightAccessory
+              style={$rightAccessoryStyle}
+              pressableState={state}
+              disabled={disabled}
+            />
           )}
         </>
       )}
@@ -128,233 +119,139 @@ export function Button(props: ButtonProps) {
   )
 }
 
-const $baseViewStyle: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  minHeight: 48,
-  borderRadius: 18,
+const $baseViewStyle: ThemedStyle<ViewStyle> = ({ spacing, radius }) => ({
+  minHeight: 54,
+  borderRadius: radius.pill,
   justifyContent: "center",
   alignItems: "center",
   paddingVertical: spacing.sm,
-  paddingHorizontal: spacing.md,
+  paddingHorizontal: spacing.lg,
   overflow: "hidden",
+  position: "relative",
 })
 
 const $baseTextStyle: ThemedStyle<TextStyle> = ({ typography }) => ({
-  fontSize: 15,
-  lineHeight: 18,
-  fontFamily: typography.primary.medium,
+  ...typography.roles.button,
   textAlign: "center",
   flexShrink: 1,
-  flexGrow: 0,
   zIndex: 2,
-  letterSpacing: 0.2,
 })
 
 const $rightAccessoryStyle: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   marginStart: spacing.xs,
   zIndex: 2,
 })
+
 const $leftAccessoryStyle: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   marginEnd: spacing.xs,
   zIndex: 2,
 })
 
-/**
- * A subtle "sheen" for glassy feel.
- * Kept very light so it works in both light/dark themes.
- */
-const $sheenOverlay: ThemedStyle<ViewStyle> = ({}) => ({
-  position: "absolute",
-  inset: 0,
-  zIndex: 1,
-  opacity: 0.9,
-  backgroundColor: "rgba(255,255,255,0.03)",
+const $gradientWash: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  ...$absoluteFill,
+  backgroundColor: colors.primary,
+  opacity: 0.26,
 })
 
-const $glassLightBoost: ViewStyle = {
-  // More visible glass on light backgrounds
-  backgroundColor: "rgba(0,0,0,0.1)",
-  borderColor: "rgba(0,0,0,0.04)",
-  // opacity:1,
+const $gradientBlobLeft: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  position: "absolute",
+  left: -10,
+  top: -16,
+  width: 110,
+  height: 110,
+  borderRadius: 999,
+  backgroundColor: colors.gradientStart,
+  opacity: 0.92,
+})
 
-  // subtle lift so it reads like a component, not flat text
-  shadowColor: "#000",
-  shadowOpacity: 0.08,
-  shadowRadius: 14,
-  shadowOffset: { width: 0, height: 8 },
-  // elevation: 5,
-}
+const $gradientBlobRight: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  position: "absolute",
+  right: -18,
+  top: -14,
+  width: 130,
+  height: 110,
+  borderRadius: 999,
+  backgroundColor: colors.gradientEnd,
+  opacity: 0.88,
+})
 
-const $regularPurpleGlassView: ThemedStyle<ViewStyle> = ({ colors }) => {
-  const isDark = isDarkFromColors(colors)
-
-  const bg = isDark
-    ? "rgba(190, 155, 255, 0.18)" // light purple glass on dark bg
-    : "rgba(88, 52, 170, 0.22)"   // darker purple glass on light bg
-
-  const border = isDark
-    ? "rgba(230, 210, 255, 0.28)"
-    : "rgba(88, 52, 170, 0.30)"
-
-  return {
-    borderWidth: 1,
-    borderColor: border,
-    backgroundColor: bg,
-
-    shadowColor: "#000",
-    shadowOpacity: isDark ? 0.22 : 0.12,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 10 },
-  }
-}
-
-const $regularPurpleGlassText: ThemedStyle<TextStyle> = ({ colors }) => {
-  const isDark = isDarkFromColors(colors)
-
-  return {
-    color: isDark
-      ? "rgba(255,255,255,0.94)"
-      : "rgba(0,0,0,0.96)",
-  }
-}
-
-const $regularPurpleGlassPressedView: ThemedStyle<ViewStyle> = ({ colors }) => {
-  const isDark = isDarkFromColors(colors)
-
-  return {
-    backgroundColor: isDark
-      ? "rgba(190, 155, 255, 0.26)"
-      : "rgba(88, 52, 170, 0.30)",
-    borderColor: isDark
-      ? "rgba(240, 225, 255, 0.34)"
-      : "rgba(88, 52, 170, 0.36)",
-  }
-}
-
-
+const $glassSheen: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  ...$absoluteFill,
+  backgroundColor: colors.glowSoft,
+  opacity: 0.55,
+})
 
 const $viewPresets: Record<Presets, ThemedStyleArray<ViewStyle>> = {
-  // ✅ regular presets now use purple glass styling
-  default: [$styles.row, $baseViewStyle, $regularPurpleGlassView],
-  filled: [$styles.row, $baseViewStyle, $regularPurpleGlassView],
-  reversed: [$styles.row, $baseViewStyle, $regularPurpleGlassView],
-
-  // ✅ KEEP THIS EXACTLY THE SAME AS YOU SAID
+  default: [
+    $styles.row,
+    $baseViewStyle,
+    ({ colors, elevation }) => ({
+      backgroundColor: colors.primary,
+      borderWidth: 1,
+      borderColor: "rgba(255,255,255,0.24)",
+      ...elevation.glow,
+    }),
+  ],
+  filled: [
+    $styles.row,
+    $baseViewStyle,
+    ({ colors, elevation }) => ({
+      backgroundColor: colors.surfaceElevated,
+      borderWidth: 1,
+      borderColor: colors.borderSubtle,
+      ...elevation.card,
+    }),
+  ],
+  reversed: [
+    $styles.row,
+    $baseViewStyle,
+    ({ colors }) => ({
+      backgroundColor: colors.surfaceGlass,
+      borderWidth: 1,
+      borderColor: colors.borderStrong,
+    }),
+  ],
   glass: [
     $styles.row,
     $baseViewStyle,
     ({ colors }) => ({
+      backgroundColor: colors.surfaceGlass,
       borderWidth: 1,
-      borderColor: "rgba(255,255,255,0.14)",
-      backgroundColor: colors.card ?? "rgba(255,255,255,0.1)",
+      borderColor: colors.borderStrong,
     }),
   ],
 }
-
-
-// const $viewPresets: Record<Presets, ThemedStyleArray<ViewStyle>> = {
-//   // keep legacy presets working
-//   default: [
-//     $styles.row,
-//     $baseViewStyle,
-//     ({ colors }) => ({
-//       borderWidth: 1,
-//       borderColor: colors.palette.neutral400,
-//       backgroundColor: colors.palette.neutral100,
-//     }),
-//   ],
-//   filled: [$styles.row, $baseViewStyle, ({ colors }) => ({ backgroundColor: colors.palette.neutral300 })],
-//   reversed: [$styles.row, $baseViewStyle, ({ colors }) => ({ backgroundColor: colors.palette.neutral800 })],
-
-//   /**
-//    * ✅ Modern "glass" default:
-//    * - translucent fill
-//    * - thin bright stroke
-//    * - uses your theme card/background values if present
-//    */
-//   glass: [
-//     $styles.row,
-//     $baseViewStyle,
-//     ({ colors }) => ({
-//       borderWidth: 1,
-//       borderColor: "rgba(255,255,255,0.14)",
-//       backgroundColor: colors.card ?? "rgba(255,255,255,0.1)",
-//     }),
-//   ],
-// }
-
-// const $textPresets: Record<Presets, ThemedStyleArray<TextStyle>> = {
-//   default: [$baseTextStyle],
-//   filled: [$baseTextStyle],
-//   reversed: [$baseTextStyle, ({ colors }) => ({ color: colors.palette.neutral100 })],
-//   glass: [
-//     $baseTextStyle,
-//     ({ colors }) => ({
-//       color: colors.text ?? "rgba(255,255,255,0.92)",
-//     }),
-//   ],
-// }
 
 const $textPresets: Record<Presets, ThemedStyleArray<TextStyle>> = {
-  default: [$baseTextStyle, $regularPurpleGlassText],
-  filled: [$baseTextStyle, $regularPurpleGlassText],
-  reversed: [$baseTextStyle, $regularPurpleGlassText],
-
-  // ✅ KEEP THIS EXACTLY THE SAME
-  glass: [
-    $baseTextStyle,
-    ({ colors }) => ({
-      color: colors.text ?? "rgba(255,255,255,0.92)",
-    }),
-  ],
+  default: [$baseTextStyle, ({ colors }) => ({ color: colors.textInverse })],
+  filled: [$baseTextStyle, ({ colors }) => ({ color: colors.text })],
+  reversed: [$baseTextStyle, ({ colors }) => ({ color: colors.text })],
+  glass: [$baseTextStyle, ({ colors }) => ({ color: colors.text })],
 }
 
-
-// const $pressedViewPresets: Record<Presets, ThemedStyle<ViewStyle>> = {
-//   default: ({ colors }) => ({ backgroundColor: colors.palette.neutral200 }),
-//   filled: ({ colors }) => ({ backgroundColor: colors.palette.neutral400 }),
-//   reversed: ({ colors }) => ({ backgroundColor: colors.palette.neutral700 }),
-
-//   /**
-//    * Glass press: slightly brighter + subtle scale-ish feel (via padding/opacity)
-//    */
-//   glass: () => ({
-//     backgroundColor: "rgba(0,0,0,0.12)",
-//     borderColor: "rgba(255,255,255,0.18)",
-//   }),
-// }
-
 const $pressedViewPresets: Record<Presets, ThemedStyle<ViewStyle>> = {
-  default: $regularPurpleGlassPressedView,
-  filled: $regularPurpleGlassPressedView,
-  reversed: $regularPurpleGlassPressedView,
-
-  // (you can keep yours as-is; this doesn’t change it)
-  glass: () => ({
-    backgroundColor: "rgba(0,0,0,0.12)",
-    borderColor: "rgba(255,255,255,0.18)",
-  }),
+  default: () => ({ transform: [{ scale: 0.985 }], opacity: 0.96 }),
+  filled: () => ({ transform: [{ scale: 0.985 }], opacity: 0.94 }),
+  reversed: () => ({ transform: [{ scale: 0.985 }], opacity: 0.92 }),
+  glass: () => ({ transform: [{ scale: 0.985 }], opacity: 0.92 }),
 }
 
 const $pressedTextPresets: Record<Presets, ThemedStyle<TextStyle>> = {
-  default: () => ({ opacity: 0.9 }),
-  filled: () => ({ opacity: 0.9 }),
-  reversed: () => ({ opacity: 0.9 }),
-  glass: () => ({ opacity: 0.92 }),
+  default: () => ({ opacity: 0.98 }),
+  filled: () => ({ opacity: 0.96 }),
+  reversed: () => ({ opacity: 0.96 }),
+  glass: () => ({ opacity: 0.96 }),
 }
 
 const $disabledViewPreset: ThemedStyle<ViewStyle> = () => ({
-  opacity: 0.45,
+  opacity: 0.5,
 })
 
 const $disabledTextPreset: ThemedStyle<TextStyle> = () => ({
-  opacity: 0.9,
+  opacity: 0.82,
 })
 
-/**
- * Optional: Add a "primary/glassFilled" behavior without creating a new preset
- * by passing style override like:
- * style={{ backgroundColor: theme.colors.tint, borderColor: "transparent" }}
- * textStyle={{ color: "rgba(0,0,0,0.85)" }}
- *
- * But if you DO want it as a preset, tell me and I’ll add `glassFilled`.
- */
+const $absoluteFill: ViewStyle = {
+  position: "absolute",
+  inset: 0,
+}

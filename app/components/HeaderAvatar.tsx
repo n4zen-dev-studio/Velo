@@ -4,6 +4,7 @@ import { Image, Pressable, ViewStyle, ImageStyle } from "react-native"
 import { useSyncStatus } from "@/services/sync/syncStore"
 import { getCurrentUserId } from "@/services/sync/identity"
 import { resolveUserMeta } from "@/utils/userLabel"
+import { useAppTheme } from "@/theme/context"
 
 const fallbackAvatar = require("@assets/images/avatar_placeholder.jpg")
 
@@ -13,6 +14,7 @@ type HeaderAvatarProps = {
 }
 
 export function HeaderAvatar({ onPress, size = 36 }: HeaderAvatarProps) {
+  const { theme } = useAppTheme()
   const syncStatus = useSyncStatus()
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
 
@@ -30,10 +32,13 @@ export function HeaderAvatar({ onPress, size = 36 }: HeaderAvatarProps) {
   }, [syncStatus.lastSyncedAt])
 
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [$avatarButton(size), pressed && { opacity: 0.8 }]}>
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [$avatarButton(size), pressed && { opacity: 0.8 }]}
+    >
       <Image
         source={avatarUrl ? { uri: avatarUrl } : fallbackAvatar}
-        style={$avatarImage(size)}
+        style={$avatarImage(size, theme.colors.background)}
       />
     </Pressable>
   )
@@ -46,8 +51,10 @@ const $avatarButton = (size: number): ViewStyle => ({
   overflow: "hidden",
 })
 
-const $avatarImage = (size: number): ImageStyle => ({
+const $avatarImage = (size: number, backgroundColor: string): ImageStyle => ({
   width: size,
   height: size,
   borderRadius: size / 2,
+  borderWidth: 2,
+  borderColor: backgroundColor,
 })

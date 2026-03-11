@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { Platform, View, ViewStyle } from "react-native"
+import { Platform, View, ViewStyle, TextStyle } from "react-native"
 import { useNavigation } from "@react-navigation/native"
 import * as AppleAuthentication from "expo-apple-authentication"
 import * as Google from "expo-auth-session/providers/google"
@@ -79,15 +79,7 @@ export function AuthScreen() {
 
   // UI: pick a subtle accent based on your theme if it exists
   const accent = useMemo(() => {
-    // If your theme has a known accent field, prefer it.
-    // Fallbacks keep this safe even if fields don’t exist.
-    return (
-      // @ts-expect-error theme shape may vary
-      theme?.colors?.tint ??
-      // @ts-expect-error theme shape may vary
-      theme?.colors?.primary ??
-      "#7C5CFF"
-    )
+    return theme.colors.tint ?? theme.colors.primary ?? "#7C5CFF"
   }, [theme])
 
   useEffect(() => {
@@ -163,7 +155,9 @@ export function AuthScreen() {
         baseURL: e?.config?.baseURL,
         url: e?.config?.url,
       })
-      setError(e?.response?.data?.error ?? `Sign up failed (${e?.response?.status ?? "no status"}).`)
+      setError(
+        e?.response?.data?.error ?? `Sign up failed (${e?.response?.status ?? "no status"}).`,
+      )
     }
   }
 
@@ -210,7 +204,9 @@ export function AuthScreen() {
   const handleContinueOffline = async () => {
     setError(null)
     const normalizedEmail = email.trim().toLowerCase()
-    const userId = normalizedEmail ? await deriveUserIdFromEmail(normalizedEmail) : await generateUuidV4()
+    const userId = normalizedEmail
+      ? await deriveUserIdFromEmail(normalizedEmail)
+      : await generateUuidV4()
     await withScopeTransitionLock(async () => {
       syncController.pause()
       logScopeAction("continue_offline", GUEST_SCOPE_KEY, userId)
@@ -300,40 +296,38 @@ export function AuthScreen() {
   }
 
   return (
-    <Screen preset="scroll" safeAreaEdges={['top', 'bottom']} contentContainerStyle={themed($screen)}>
-      {/* HERO HEADER */}
+    <Screen
+      preset="scroll"
+      safeAreaEdges={["top", "bottom"]}
+      contentContainerStyle={themed($screen)}
+    >
       <View style={themed($hero)}>
-        <View style={themed($heroGlowWrap)}>
-          <View style={themed($heroGlow(accent))} />
+        <View style={themed($heroOrbLeft(accent))} />
+        <View style={themed($heroOrbRight)} />
+        <View style={themed($heroInner)}>
+          <View style={themed($heroBadge)}>
+            <Text preset="overline" text="Velo" style={themed($heroBadgeText)} />
+          </View>
           <View style={themed($heroRow)}>
             <View style={themed($robotWrap)}>
-              <LottieView
-                source={ROBOT_ANIM}
-                autoPlay
-                loop
-                style={themed($robot)}
-                // iOS sometimes needs hardware rendering off for Lottie depending on setup;
-                // leaving default to avoid changing runtime behavior.
-              />
+              <LottieView source={ROBOT_ANIM} autoPlay loop style={themed($robot)} />
             </View>
-
             <View style={themed($heroTextCol)}>
-              <Text preset="heading" text="TaskTrak" />
-              <Text preset="subheading" text="Offline-first Jira-lite" />
+              <Text preset="display" text="Move work forward." style={themed($heroTitle)} />
               <Text
                 preset="formHelper"
-                text="Sign in, or continue offline — your work stays on-device until you’re ready to sync."
+                text="A premium offline-first execution workspace with reliable sync when you need it."
+                style={themed($heroBody)}
               />
             </View>
           </View>
         </View>
       </View>
 
-      {/* MAIN AUTH CARD */}
       <GlassCard>
         <View style={themed($cardHeader)}>
-          <Text preset="formLabel" text="Welcome back" />
-          <Text preset="formHelper" text="Use email/password, or a provider." />
+          <Text preset="sectionTitle" text="Welcome to Velo" />
+          <Text preset="formHelper" text="Sign in with your account or keep working locally." />
         </View>
 
         <View style={themed($fieldBlock)}>
@@ -367,56 +361,60 @@ export function AuthScreen() {
           />
         </View>
 
-        {(error || signupMessage) ? (
+        {error || signupMessage ? (
           <View style={themed($messageWrap)}>
-            {error ? <Text preset="formHelper" text={error} /> : null}
-            {signupMessage ? <Text preset="formHelper" text={signupMessage} /> : null}
+            {error ? <Text preset="formHelper" text={error} style={themed($errorText)} /> : null}
+            {signupMessage ? (
+              <Text preset="formHelper" text={signupMessage} style={themed($successText)} />
+            ) : null}
           </View>
         ) : null}
 
-        {/* PRIMARY ACTIONS */}
         <View style={themed($buttonStack)}>
-          <Button text="Login" preset="default" onPress={handleLogin} />
-          <Button text="Sign up" preset="reversed" onPress={handleSignup} />
+          <Button text="Sign in" preset="default" onPress={handleLogin} />
+          <Button text="Create account" preset="filled" onPress={handleSignup} />
         </View>
 
-        {/* VERIFICATION ACTIONS */}
         {signupMessage ? (
           <View style={themed($buttonStackTight)}>
-            <Button text="Resend verification email" preset="reversed" onPress={handleResendVerification} />
+            <Button
+              text="Resend verification email"
+              preset="glass"
+              onPress={handleResendVerification}
+            />
             <Button
               text="Enter verification token"
-              preset="reversed"
-              onPress={() => navigation.navigate("VerifyEmail", { email: email.trim().toLowerCase() })}
+              preset="glass"
+              onPress={() =>
+                navigation.navigate("VerifyEmail", { email: email.trim().toLowerCase() })
+              }
             />
           </View>
         ) : null}
 
-        {/* SECONDARY */}
         <View style={themed($buttonStackTight)}>
           <Button
             text="Forgot password?"
-            preset="reversed"
+            preset="glass"
             onPress={() => navigation.navigate("PasswordResetRequest")}
           />
-          <Button text="Continue Offline" preset="reversed" onPress={handleContinueOffline} />
+          <Button text="Continue offline" preset="reversed" onPress={handleContinueOffline} />
         </View>
 
-        {/* OAUTH */}
         <View style={themed($divider)} />
         <View style={themed($buttonStackTight)}>
           {showGoogleButton ? (
-            <Button text="Continue with Google" preset="default" onPress={handleGoogleLogin} />
+            <Button text="Continue with Google" preset="filled" onPress={handleGoogleLogin} />
           ) : null}
           {showAppleButton ? (
-            <Button text="Continue with Apple" preset="reversed" onPress={handleAppleLogin} />
+            <Button text="Continue with Apple" preset="filled" onPress={handleAppleLogin} />
           ) : null}
         </View>
       </GlassCard>
 
-      {/* FOOTER NOTICE */}
       <GlassCard>
-        <Text preset="formHelper" text={offlineNotice} />
+        <Text preset="overline" text="Offline ready" />
+        <Text preset="formHelper" text={offlineNotice} style={themed($noticeText)} />
       </GlassCard>
 
       <ClaimOfflineDataModal
@@ -434,10 +432,7 @@ function parseUserIdFromJwt(token: string) {
     const base64 = payload.replace(/-/g, "+").replace(/_/g, "/")
     const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), "=")
     const decoded =
-      typeof atob === "function"
-        ? atob(padded)
-        : // @ts-expect-error Buffer may exist in RN
-          Buffer.from(padded, "base64").toString("binary")
+      typeof atob === "function" ? atob(padded) : Buffer.from(padded, "base64").toString("binary")
     const data = JSON.parse(decoded)
     return data.sub as string | undefined
   } catch {
@@ -446,57 +441,95 @@ function parseUserIdFromJwt(token: string) {
 }
 
 const $screen: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  padding: spacing.lg,
-  paddingTop: spacing.xl,
+  paddingHorizontal: spacing.screenHorizontal,
+  paddingTop: spacing.screenVertical,
+  paddingBottom: spacing.xxxl,
+  gap: spacing.sectionGap,
+})
+
+const $hero: ThemedStyle<ViewStyle> = ({ colors, radius, elevation, spacing }) => ({
+  position: "relative",
+  overflow: "hidden",
+  borderRadius: radius.xl,
+  backgroundColor: colors.surfaceElevated,
+  borderWidth: 1,
+  borderColor: colors.borderSubtle,
+  padding: spacing.xl,
+  ...elevation.floating,
+})
+
+const $heroOrbLeft =
+  (accent: string): ThemedStyle<ViewStyle> =>
+  () => ({
+    position: "absolute",
+    top: -70,
+    left: -40,
+    width: 190,
+    height: 190,
+    borderRadius: 999,
+    backgroundColor: accent,
+    opacity: 0.2,
+  })
+
+const $heroOrbRight: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  position: "absolute",
+  right: -48,
+  bottom: -76,
+  width: 220,
+  height: 220,
+  borderRadius: 999,
+  backgroundColor: colors.gradientEnd,
+  opacity: 0.16,
+})
+
+const $heroInner: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.lg,
 })
 
-const $hero: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  marginBottom: spacing.xs,
+const $heroBadge: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
+  alignSelf: "flex-start",
+  paddingHorizontal: spacing.sm,
+  paddingVertical: spacing.xxs,
+  borderRadius: radius.pill,
+  backgroundColor: colors.surfaceGlass,
+  borderWidth: 1,
+  borderColor: colors.borderStrong,
 })
 
-const $heroGlowWrap: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  position: "relative",
-  borderRadius: 24,
-  overflow: "hidden",
-  padding: spacing.lg,
+const $heroBadgeText: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.primary,
 })
-
-const $heroGlow =
-  (accent: string): ThemedStyle<ViewStyle> =>
-  ({}) => ({
-    position: "absolute",
-    top: -120,
-    left: -120,
-    width: 260,
-    height: 260,
-    borderRadius: 260,
-    backgroundColor: accent,
-    opacity: 0.18,
-    transform: [{ scale: 1.05 }],
-  })
 
 const $heroRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexDirection: "row",
   alignItems: "center",
-  gap: spacing.md,
+  gap: spacing.lg,
 })
 
-const $robotWrap: ThemedStyle<ViewStyle> = ({}) => ({
-  width: 86,
-  height: 86,
-  borderRadius: 22,
+const $robotWrap: ThemedStyle<ViewStyle> = ({ colors, radius }) => ({
+  width: 96,
+  height: 96,
+  borderRadius: radius.large,
   overflow: "hidden",
+  backgroundColor: colors.surfaceGlass,
 })
 
-const $robot: ThemedStyle<ViewStyle> = ({}) => ({
-  width: 86,
-  height: 86,
+const $robot: ThemedStyle<ViewStyle> = () => ({
+  width: 96,
+  height: 96,
 })
 
 const $heroTextCol: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flex: 1,
   gap: spacing.xs,
+})
+
+const $heroTitle: ThemedStyle<TextStyle> = () => ({
+  maxWidth: 260,
+})
+
+const $heroBody: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.textMuted,
 })
 
 const $cardHeader: ThemedStyle<ViewStyle> = ({ spacing }) => ({
@@ -512,7 +545,7 @@ const $fieldBlock: ThemedStyle<ViewStyle> = ({ spacing }) => ({
 const $messageWrap: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   marginTop: spacing.sm,
   gap: spacing.xs,
-  paddingVertical: spacing.xs,
+  paddingVertical: spacing.sm,
 })
 
 const $buttonStack: ThemedStyle<ViewStyle> = ({ spacing }) => ({
@@ -527,8 +560,20 @@ const $buttonStackTight: ThemedStyle<ViewStyle> = ({ spacing }) => ({
 
 const $divider: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   height: 1,
-  opacity: 0.18,
+  opacity: 1,
   marginTop: spacing.md,
   marginBottom: spacing.md,
-  // Leave color to GlassCard background; divider reads as subtle line via opacity.
+  backgroundColor: "rgba(255,255,255,0.12)",
+})
+
+const $noticeText: ThemedStyle<TextStyle> = ({ spacing }) => ({
+  marginTop: spacing.xs,
+})
+
+const $errorText: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.danger,
+})
+
+const $successText: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.success,
 })

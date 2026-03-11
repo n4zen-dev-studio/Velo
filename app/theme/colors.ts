@@ -1,102 +1,113 @@
 export const palette = {
-  // Neutrals (light theme)
+  white: "#FFFFFF",
+  black: "#0A0B14",
+  ink: "#171A2A",
+  mist: "#F8F7FF",
+  cloud: "#F2F5FF",
+  lilac50: "#F7F2FF",
+  lilac100: "#EFE5FF",
+  lilac200: "#E5D4FF",
+  lilac300: "#D4B6FF",
+  lilac400: "#BE95FF",
+  lilac500: "#A56FFF",
+  lilac600: "#8C54F5",
+  cyan100: "#DDF8FF",
+  cyan300: "#9EEBFF",
+  cyan500: "#4FD4FF",
+  sky100: "#DFF1FF",
+  sky300: "#A7D9FF",
+  sky500: "#5BA8FF",
+  rose100: "#FFE3F0",
+  rose300: "#FFB9DC",
+  rose500: "#F77EB7",
+  peach100: "#FFEBDD",
+  peach300: "#FFC9A5",
+  mint100: "#DDF8EB",
+  mint400: "#55C58F",
+  amber100: "#FFF4D7",
+  amber400: "#F2B645",
+  red100: "#FFE2E0",
+  red400: "#E56C69",
+  navy900: "#111422",
+  navy800: "#1B2033",
+  navy700: "#252B43",
+  navy600: "#353D5B",
+  slate500: "#6F7792",
+  slate400: "#98A0BA",
+  slate300: "#C7CCE0",
+  slate200: "#E4E8F4",
+  slate100: "#F4F6FC",
+  overlayDark: "rgba(13, 16, 31, 0.58)",
+  overlayLight: "rgba(125, 134, 167, 0.16)",
   neutral100: "#FFFFFF",
-  neutral200: "#F6F5F8",
-  neutral300: "#E6E3EA",
-  neutral400: "#C9C3D1",
-  neutral500: "#A69FB1",
-  neutral600: "#5B5566",
-  neutral700: "#3C3744",
-  neutral800: "#221F27",
-  neutral900: "#171418",
-
-  // Primary (purple scale) — anchor: D5B3FF
-  primary100: "#F4ECFF",
-  primary200: "#E8D7FF",
-  primary300: "#D5B3FF", // main
-  primary400: "#B687FF",
-  primary500: "#8F55FF",
-  primary600: "#6B2FE6",
-  primary: "#8F55FF",
-
-  // Secondary (cool slate / desaturated purple-gray)
-  secondary100: "#EEF0F6",
-  secondary200: "#D6DAE8",
-  secondary300: "#B2B8D1",
-  secondary400: "#7A839E",
-  secondary500: "#4D556B",
-
-  // Accent (soft light yellow)
-  accent100: "#FFF9DB",
-  accent200: "#FFF1AE",
-  accent300: "#FFE57A",
-  accent400: "#FFD84A",
-  accent500: "#FFC61A",
-
-  // Priority tokens
-  priorityLow: "#2E8B57",
-  priorityMedium: "#E0B422",
-  priorityHigh: "#D64545",
-
-  angry100: "#F2D6CD",
-  angry500: "#C03403",
-
-  // Overlays based on your dark anchor (171418)
-  overlay20: "rgba(23, 20, 24, 0.2)",
-  overlay50: "rgba(23, 20, 24, 0.5)",
+  neutral200: "#F7F8FF",
+  neutral300: "#E4E8F4",
+  neutral400: "#C7CCE0",
+  neutral500: "#98A0BA",
+  neutral600: "#7D86A7",
+  neutral700: "#56607D",
+  neutral800: "#171A2A",
+  neutral900: "#0A0B14",
+  primary100: "#F7F2FF",
+  primary200: "#EFE5FF",
+  primary300: "#D4B6FF",
+  primary400: "#BE95FF",
+  primary500: "#A56FFF",
+  primary600: "#8C54F5",
+  primary: "#A56FFF",
+  secondary100: "#DFF1FF",
+  secondary200: "#A7D9FF",
+  secondary300: "#98A0BA",
+  secondary400: "#7D86A7",
+  secondary500: "#56607D",
+  accent100: "#FFF4D7",
+  accent200: "#FFEBDD",
+  accent300: "#FFC9A5",
+  accent400: "#F2B645",
+  accent500: "#D38F34",
+  angry100: "#FFE2E0",
+  angry500: "#E56C69",
+  overlay20: "rgba(13, 16, 31, 0.20)",
+  overlay50: "rgba(13, 16, 31, 0.50)",
 } as const
 
 export const colors = {
-  /**
-   * The palette is available to use, but prefer using the name.
-   * This is only included for rare, one-off cases. Try to use
-   * semantic names as much as possible.
-   */
   palette,
-  /**
-   * A helper for making something see-thru.
-   */
   transparent: "rgba(0, 0, 0, 0)",
-  /**
-   * The default text color in many components.
-   */
-  text: palette.neutral800,
-  /**
-   * Secondary text information.
-   */
-  textDim: palette.neutral600,
-  /**
-   * The default color of the screen background.
-   */
-  background: palette.neutral200,
-  /**
-   * The default border color.
-   */
-  border: palette.neutral400,
-  /**
-   * The main tinting color.
-   */
-  tint: palette.primary500,
-  /**
-   * The inactive tinting color.
-   */
-  tintInactive: palette.neutral300,
-  /**
-   * A subtle color used for lines.
-   */
-  separator: palette.neutral300,
-  /**
-   * Error messages.
-   */
-  error: palette.angry500,
-  /**
-   * Error Background.
-   */
-  errorBackground: palette.angry100,
-  /**
-   * Task priority colors.
-   */
-  priorityLow: palette.priorityLow,
-  priorityMedium: palette.priorityMedium,
-  priorityHigh: palette.priorityHigh,
+  background: "#F7F8FF",
+  backgroundSecondary: "#EEF3FF",
+  surface: "rgba(255,255,255,0.78)",
+  surfaceElevated: "#FFFFFF",
+  surfaceGlass: "rgba(255,255,255,0.58)",
+  card: "rgba(255,255,255,0.82)",
+  cardMuted: "rgba(246,248,255,0.92)",
+  border: "rgba(161, 171, 205, 0.32)",
+  borderSubtle: "rgba(161, 171, 205, 0.18)",
+  borderStrong: "rgba(132, 143, 181, 0.48)",
+  text: "#171A2A",
+  textMuted: "#56607D",
+  textDim: "#7D86A7",
+  textInverse: "#FFFFFF",
+  primary: "#A56FFF",
+  primaryAlt: "#5BA8FF",
+  accent: "#4FD4FF",
+  success: "#55C58F",
+  warning: "#F2B645",
+  danger: "#E56C69",
+  info: "#5BA8FF",
+  shadow: "rgba(87, 95, 138, 0.22)",
+  overlay: "rgba(18, 22, 40, 0.22)",
+  gradientStart: "#D9A8FF",
+  gradientMid: "#A98CFF",
+  gradientEnd: "#69B7FF",
+  glowSoft: "rgba(175, 145, 255, 0.18)",
+  glowStrong: "rgba(98, 196, 255, 0.24)",
+  tint: "#A56FFF",
+  tintInactive: "#C7CCE0",
+  separator: "rgba(161, 171, 205, 0.18)",
+  error: "#E56C69",
+  errorBackground: "#FFE2E0",
+  priorityLow: "#55C58F",
+  priorityMedium: "#F2B645",
+  priorityHigh: "#E56C69",
 } as const

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react"
+import React, { useCallback, useEffect, useMemo, useState } from "react"
 import {
   LayoutAnimation,
   Modal,
@@ -32,7 +32,7 @@ import { BASE_URL } from "@/config/api"
 import { useHomeViewModel } from "./useHomeViewModel"
 
 export function HomeScreen() {
-  const { themed, toggleTheme } = useAppTheme()
+  const { themed, theme } = useAppTheme()
   const insets = useSafeAreaInsets()
   const navigation = useNavigation<HomeStackScreenProps<"Home">["navigation"]>()
 
@@ -52,6 +52,10 @@ export function HomeScreen() {
 
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false)
   const [pendingInvitesCount, setPendingInvitesCount] = useState(0)
+  const totalTasks = useMemo(
+    () => uiTasksByStatus.reduce((sum, lane) => sum + lane.tasks.length, 0),
+    [uiTasksByStatus],
+  )
 
   const fabBottom = Math.max(insets.bottom, 0) + 50
 
@@ -77,15 +81,22 @@ export function HomeScreen() {
   }, [])
 
   return (
-    <Screen preset="fixed" safeAreaEdges={["top", "bottom"]} contentContainerStyle={themed($screen)}>
-      {/* Header */}
+    <Screen
+      preset="fixed"
+      safeAreaEdges={["top", "bottom"]}
+      contentContainerStyle={themed($screen)}
+    >
       <View style={themed($header)}>
-         <View style={themed($headerActions)}>
+        <View style={themed($headerActions)}>
           <HeaderAvatar onPress={goToProfile} size={50} />
         </View>
         <View style={themed($titleBlock)}>
-          <Text preset="heading" text="Home" />
-          {/* Single workspace indicator (button opens dropdown) */}
+          <Text preset="display" text="Velo" style={themed($homeTitle)} />
+          <Text
+            preset="formHelper"
+            text="Momentum for the work that matters."
+            style={themed($homeSubtitle)}
+          />
           <Pressable
             accessibilityRole="button"
             onPress={() => setWorkspaceMenuOpen(true)}
@@ -107,31 +118,45 @@ export function HomeScreen() {
         </View>
       </View>
 
-      {/* Scroll content */}
+      <GlassCard style={themed($heroCard)}>
+        <View style={themed($heroGlow)} />
+        <Text preset="overline" text="Workspace pulse" />
+        <View style={themed($heroStats)}>
+          <View style={themed($statCard)}>
+            <Text preset="caption" text="Open lanes" />
+            <Text preset="heading" text={`${uiTasksByStatus.length}`} />
+          </View>
+          <View style={themed($statCard)}>
+            <Text preset="caption" text="Tasks in motion" />
+            <Text preset="heading" text={`${totalTasks}`} />
+          </View>
+        </View>
+      </GlassCard>
+
       <ScrollView
         contentContainerStyle={themed($scrollContent)}
-        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={() => refreshAll({ mode: "hard" })} />}
+        refreshControl={
+          <RefreshControl
+            tintColor={theme.colors.primary}
+            refreshing={isRefreshing}
+            onRefresh={() => refreshAll({ mode: "hard" })}
+          />
+        }
         showsVerticalScrollIndicator={false}
       >
         {activeWorkspace?.kind !== "personal" ? (
           <View style={themed($filterRow)}>
             <Pressable
               onPress={() => setAssigneeFilter("all")}
-              style={[
-                themed($filterPill),
-                assigneeFilter === "all" && themed($filterPillActive),
-              ]}
+              style={[themed($filterPill), assigneeFilter === "all" && themed($filterPillActive)]}
             >
-              <Text preset="formHelper" text="All tasks" />
+              <Text preset="caption" text="All tasks" />
             </Pressable>
             <Pressable
               onPress={() => setAssigneeFilter("mine")}
-              style={[
-                themed($filterPill),
-                assigneeFilter === "mine" && themed($filterPillActive),
-              ]}
+              style={[themed($filterPill), assigneeFilter === "mine" && themed($filterPillActive)]}
             >
-              <Text preset="formHelper" text="Assigned to me" />
+              <Text preset="caption" text="Assigned to me" />
             </Pressable>
           </View>
         ) : null}
@@ -142,8 +167,8 @@ export function HomeScreen() {
             style={themed($section)}
           >
             <View style={themed($sectionHeader)}>
-              <Text preset="subheading" text={status.name} />
-              <Text preset="formHelper" text={`${tasks.length} tasks`} />
+              <Text preset="sectionTitle" text={status.name} />
+              <Text preset="caption" text={`${tasks.length} tasks`} />
             </View>
 
             {tasks.length === 0 ? (
@@ -169,7 +194,12 @@ export function HomeScreen() {
                             <Pressable
                               onPress={(e) => {
                                 e.stopPropagation?.()
-                                console.log("[ArrowPress]", { taskId: task.id, laneIndex, dir: "up", task })
+                                console.log("[ArrowPress]", {
+                                  taskId: task.id,
+                                  laneIndex,
+                                  dir: "up",
+                                  task,
+                                })
                                 LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut)
                                 void bumpTaskStatus(task.id, laneIndex, "up")
                               }}
@@ -179,14 +209,19 @@ export function HomeScreen() {
                               ]}
                               hitSlop={6}
                             >
-                              <Text preset="formHelper" text="↑" style={themed($statusArrow)} />
+                              <Text preset="caption" text="↑" style={themed($statusArrow)} />
                             </Pressable>
                           ) : null}
                           {laneIndex < uiTasksByStatus.length - 1 ? (
                             <Pressable
                               onPress={(e) => {
                                 e.stopPropagation?.()
-                                console.log("[ArrowPress]", { taskId: task.id, laneIndex, dir: "down", task })
+                                console.log("[ArrowPress]", {
+                                  taskId: task.id,
+                                  laneIndex,
+                                  dir: "down",
+                                  task,
+                                })
                                 LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut)
                                 void bumpTaskStatus(task.id, laneIndex, "down")
                               }}
@@ -196,19 +231,23 @@ export function HomeScreen() {
                               ]}
                               hitSlop={6}
                             >
-                              <Text preset="formHelper" text="↓" style={themed($statusArrow)} />
+                              <Text preset="caption" text="↓" style={themed($statusArrow)} />
                             </Pressable>
                           ) : null}
                         </View>
                       </View>
                       {!!task.description && (
-                        <Text preset="formHelper" text={task.description} style={themed($taskDesc)} />
+                        <Text
+                          preset="formHelper"
+                          text={task.description}
+                          style={themed($taskDesc)}
+                        />
                       )}
                       <Text
-                        preset="formHelper"
+                        preset="caption"
                         text={`Assignee: ${
                           task.assigneeUserId
-                            ? assigneeLabels[task.assigneeUserId] ?? "Member"
+                            ? (assigneeLabels[task.assigneeUserId] ?? "Member")
                             : "Unassigned"
                         }`}
                         style={themed($taskMeta)}
@@ -231,11 +270,16 @@ export function HomeScreen() {
         style={[themed($fab), { bottom: fabBottom }]}
         onPress={() => navigation.navigate("TaskEditor")}
       >
-        <Text preset="heading" text="+" />
+        <Text preset="heading" text="+" style={themed($fabText)} />
       </Pressable>
 
       {/* Workspace dropdown */}
-      <Modal visible={workspaceMenuOpen} transparent animationType="fade" onRequestClose={() => setWorkspaceMenuOpen(false)}>
+      <Modal
+        visible={workspaceMenuOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setWorkspaceMenuOpen(false)}
+      >
         <Pressable style={themed($modalBackdrop)} onPress={() => setWorkspaceMenuOpen(false)}>
           <Pressable style={themed($menuCard)} onPress={() => {}}>
             <View style={themed($menuHeader)}>
@@ -284,22 +328,26 @@ export function HomeScreen() {
                   goToSettingsTab()
                 }}
               />
-                {pendingInvitesCount > 0 ? (
-              <View style={themed($menuFooterRow)}>
-                <Button
-                  text="Workspace Invites"
-                  preset="reversed"
-                  onPress={() => {
-                    setWorkspaceMenuOpen(false)
-                    goToInvites()
-                  }}
-                  style={{ marginTop:  10, flex: 1 }}
-                />
+              {pendingInvitesCount > 0 ? (
+                <View style={themed($menuFooterRow)}>
+                  <Button
+                    text="Workspace Invites"
+                    preset="reversed"
+                    onPress={() => {
+                      setWorkspaceMenuOpen(false)
+                      goToInvites()
+                    }}
+                    style={{ marginTop: 10, flex: 1 }}
+                  />
                   <View style={themed($inviteBadge)}>
-                    <Text preset="formHelper" text={`${pendingInvitesCount}`} style={themed($inviteBadgeText)} />
+                    <Text
+                      preset="formHelper"
+                      text={`${pendingInvitesCount}`}
+                      style={themed($inviteBadgeText)}
+                    />
                   </View>
-              </View>
-                ) : null}
+                </View>
+              ) : null}
             </View>
           </Pressable>
         </Pressable>
@@ -310,10 +358,11 @@ export function HomeScreen() {
 
 const $screen: ThemedStyle<ViewStyle> = () => ({
   flex: 1,
+  backgroundColor: "transparent",
 })
 
 const $header: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  paddingHorizontal: spacing.lg,
+  paddingHorizontal: spacing.screenHorizontal,
   paddingTop: spacing.md,
   flexDirection: "row",
   alignItems: "flex-start",
@@ -326,34 +375,68 @@ const $titleBlock: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.xs,
 })
 
+const $homeTitle: ThemedStyle<TextStyle> = () => ({
+  lineHeight: 40,
+})
+
+const $homeSubtitle: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.textMuted,
+})
+
 const $headerActions: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexDirection: "row",
   alignItems: "center",
   gap: spacing.sm,
 })
 
-const $tempRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  paddingHorizontal: spacing.lg,
-  paddingTop: spacing.sm,
+const $heroCard: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  marginHorizontal: spacing.screenHorizontal,
+  marginTop: spacing.md,
+})
+
+const $heroGlow: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  position: "absolute",
+  right: -30,
+  top: -50,
+  width: 180,
+  height: 180,
+  borderRadius: 999,
+  backgroundColor: colors.glowStrong,
+})
+
+const $heroStats: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  gap: spacing.md,
+  marginTop: spacing.sm,
+})
+
+const $statCard: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
+  flex: 1,
+  borderRadius: radius.medium,
+  padding: spacing.md,
+  backgroundColor: colors.surfaceGlass,
+  borderWidth: 1,
+  borderColor: colors.borderSubtle,
+  gap: spacing.xxs,
 })
 
 const $scrollContent: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  paddingTop: spacing.lg,
-  paddingBottom: spacing.xl,
-  gap: spacing.lg,
+  paddingTop: spacing.sectionGap,
+  paddingBottom: spacing.xxl,
+  gap: spacing.sectionGap,
 })
 
-const $workspacePill: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+const $workspacePill: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
   alignSelf: "flex-start",
   flexDirection: "row",
   alignItems: "center",
   gap: spacing.xs,
   paddingHorizontal: spacing.sm,
   paddingVertical: spacing.xs,
-  borderRadius: 999,
+  borderRadius: radius.pill,
   borderWidth: 1,
-  borderColor: colors.border,
-  backgroundColor: colors.background, // works well with your glass theme (and stays readable)
+  borderColor: colors.borderStrong,
+  backgroundColor: colors.surfaceGlass,
 })
 
 const $workspacePillText: ThemedStyle<TextStyle> = () => ({
@@ -365,7 +448,7 @@ const $chev: ThemedStyle<TextStyle> = () => ({
 })
 
 const $section: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  paddingHorizontal: spacing.lg,
+  paddingHorizontal: spacing.screenHorizontal,
   gap: spacing.sm,
 })
 
@@ -402,8 +485,8 @@ const $taskTitle: ThemedStyle<TextStyle> = () => ({
   flex: 1,
 })
 
-const $taskDesc: ThemedStyle<TextStyle> = () => ({
-  opacity: 0.9,
+const $taskDesc: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.textMuted,
 })
 
 const $statusControls: ThemedStyle<ViewStyle> = ({ spacing }) => ({
@@ -411,20 +494,20 @@ const $statusControls: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.xs,
 })
 
-const $statusButton: ThemedStyle<ViewStyle> = ({ colors }) => ({
+const $statusButton: ThemedStyle<ViewStyle> = ({ colors, radius }) => ({
   width: 28,
   height: 28,
-  borderRadius: 10,
+  borderRadius: radius.small,
   alignItems: "center",
   justifyContent: "center",
   borderWidth: 1,
-  borderColor: colors.border,
-  backgroundColor: colors.background,
+  borderColor: colors.borderSubtle,
+  backgroundColor: colors.surfaceGlass,
 })
 
 const $statusButtonPressed: ThemedStyle<ViewStyle> = ({ colors }) => ({
-  borderColor: colors.palette.primary300,
-  backgroundColor: colors.palette.primary100,
+  borderColor: colors.primary,
+  backgroundColor: colors.glowSoft,
 })
 
 const $statusArrow: ThemedStyle<TextStyle> = ({ colors }) => ({
@@ -435,42 +518,44 @@ const $statusArrow: ThemedStyle<TextStyle> = ({ colors }) => ({
 const $filterRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexDirection: "row",
   gap: spacing.sm,
-  paddingHorizontal: spacing.lg,
+  paddingHorizontal: spacing.screenHorizontal,
 })
 
-const $filterPill: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+const $filterPill: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
   paddingHorizontal: spacing.sm,
   paddingVertical: spacing.xs,
-  borderRadius: 12,
-  backgroundColor: colors.palette.neutral100,
+  borderRadius: radius.pill,
+  backgroundColor: colors.surface,
   borderWidth: 1,
-  borderColor: colors.palette.neutral300,
+  borderColor: colors.borderSubtle,
 })
 
 const $filterPillActive: ThemedStyle<ViewStyle> = ({ colors }) => ({
-  backgroundColor: colors.palette.neutral200,
-  borderColor: colors.palette.neutral500,
+  backgroundColor: colors.glowSoft,
+  borderColor: colors.primary,
 })
 
 const $taskMeta: ThemedStyle<TextStyle> = ({ colors, spacing }) => ({
-  color: colors.palette.neutral600,
+  color: colors.textDim,
   marginTop: spacing.xs,
 })
 
-const $fab: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+const $fab: ThemedStyle<ViewStyle> = ({ colors, spacing, elevation }) => ({
   position: "absolute",
-  right: spacing.lg,
-  width: 56,
-  height: 56,
-  borderRadius: 28,
+  right: spacing.screenHorizontal,
+  width: 62,
+  height: 62,
+  borderRadius: 31,
   alignItems: "center",
   justifyContent: "center",
-  backgroundColor: colors.palette.primary,
-  shadowColor: colors.palette.neutral900,
-  shadowOpacity: 0.2,
-  shadowRadius: 12,
-  shadowOffset: { width: 0, height: 6 },
-  elevation: 8,
+  backgroundColor: colors.primary,
+  borderWidth: 1,
+  borderColor: "rgba(255,255,255,0.2)",
+  ...elevation.glow,
+})
+
+const $fabText: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.textInverse,
 })
 
 const $modalBackdrop: ThemedStyle<ViewStyle> = () => ({
@@ -480,13 +565,14 @@ const $modalBackdrop: ThemedStyle<ViewStyle> = () => ({
   padding: 16,
 })
 
-const $menuCard: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
-  borderRadius: 20,
+const $menuCard: ThemedStyle<ViewStyle> = ({ colors, spacing, radius, elevation }) => ({
+  borderRadius: radius.large,
   borderWidth: 1,
-  borderColor: colors.border,
-  backgroundColor: colors.background,
+  borderColor: colors.borderSubtle,
+  backgroundColor: colors.surfaceElevated,
   padding: spacing.md,
   gap: spacing.md,
+  ...elevation.floating,
 })
 
 const $menuHeader: ThemedStyle<ViewStyle> = ({ spacing }) => ({
@@ -500,26 +586,28 @@ const $menuList: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.sm,
 })
 
-const $menuItem: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+const $menuItem: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
   flexDirection: "row",
   alignItems: "center",
   justifyContent: "space-between",
   paddingVertical: spacing.sm,
   paddingHorizontal: spacing.sm,
-  borderRadius: 14,
+  borderRadius: radius.medium,
   borderWidth: 1,
-  borderColor: colors.border,
+  borderColor: colors.borderSubtle,
+  backgroundColor: colors.surface,
 })
 
-const $menuItemActive: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+const $menuItemActive: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
   flexDirection: "row",
   alignItems: "center",
   justifyContent: "space-between",
   paddingVertical: spacing.sm,
   paddingHorizontal: spacing.sm,
-  borderRadius: 14,
+  borderRadius: radius.medium,
   borderWidth: 1,
-  borderColor: colors.palette.primary500,
+  borderColor: colors.primary,
+  backgroundColor: colors.glowSoft,
 })
 
 const $menuItemLeft: ThemedStyle<ViewStyle> = ({ spacing }) => ({
@@ -542,13 +630,13 @@ const $inviteBadge: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
   paddingHorizontal: spacing.xs,
   paddingVertical: 2,
   borderRadius: 999,
-  backgroundColor: colors.tint,
+  backgroundColor: colors.primary,
   alignItems: "center",
   justifyContent: "center",
   marginTop: 10,
 })
 
 const $inviteBadgeText: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.background,
+  color: colors.textInverse,
   padding: 3,
 })
