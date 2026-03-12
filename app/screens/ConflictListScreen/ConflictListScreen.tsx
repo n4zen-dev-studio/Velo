@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { Pressable, View, ViewStyle } from "react-native"
+import { Pressable, TouchableOpacity, View, ViewStyle } from "react-native"
 import { useNavigation } from "@react-navigation/native"
 
 import { GlassCard } from "@/components/GlassCard"
@@ -11,9 +11,10 @@ import type { ConflictRecord } from "@/services/db/types"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
 import { formatDateTime } from "@/utils/dateFormat"
+import { Ionicons } from "@expo/vector-icons"
 
 export function ConflictListScreen() {
-  const { themed } = useAppTheme()
+  const { themed, theme } = useAppTheme()
   const navigation = useNavigation<HomeStackScreenProps<"ConflictList">["navigation"]>()
   const [conflicts, setConflicts] = useState<ConflictRecord[]>([])
 
@@ -22,9 +23,20 @@ export function ConflictListScreen() {
   }, [])
 
   return (
-    <Screen preset="scroll" contentContainerStyle={themed($screen)}>
+    <Screen preset="scroll" safeAreaEdges={['top', 'bottom']} contentContainerStyle={themed($screen)}>
       <View style={themed($header)}>
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          <TouchableOpacity onPress={() => navigation.goBack()}>
+            <Ionicons
+              name={"arrow-back"}
+              size={25}
+              color={theme.colors.text}
+              style={{ padding: 5 }}
+            />
+          </TouchableOpacity>
+
         <Text preset="heading" text="Conflicts" />
+        </View>
         <Text preset="formHelper" text="Resolve before editing" />
       </View>
 

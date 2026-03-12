@@ -1,4 +1,4 @@
-import { View, ViewStyle } from "react-native"
+import { TouchableOpacity, View, ViewStyle } from "react-native"
 
 import { Button } from "@/components/Button"
 import { GlassCard } from "@/components/GlassCard"
@@ -6,17 +6,29 @@ import { Screen } from "@/components/Screen"
 import { Text } from "@/components/Text"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
+import { Ionicons } from "@expo/vector-icons"
 
 import { useConflictResolutionViewModel } from "./useConflictResolutionViewModel"
 
 export function ConflictResolutionScreen() {
-  const { themed } = useAppTheme()
+  const { themed, theme } = useAppTheme()
   const { title, local, server } = useConflictResolutionViewModel()
 
   return (
     <Screen preset="scroll" contentContainerStyle={themed($screen)}>
       <View style={themed($header)}>
-        <Text preset="heading" text="Resolve conflict" />
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          <TouchableOpacity onPress={() => navigation.goBack()}>
+            <Ionicons
+              name={"arrow-back"}
+              size={25}
+              color={theme.colors.text}
+              style={{ padding: 5 }}
+            />
+          </TouchableOpacity>
+
+          <Text preset="heading" text="Resolve conflict" />
+        </View>
         <Text preset="formHelper" text={title} />
       </View>
 

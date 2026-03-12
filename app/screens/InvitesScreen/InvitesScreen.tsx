@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
-import { View, ViewStyle, TextStyle } from "react-native"
+import { View, ViewStyle, TextStyle, TouchableOpacity } from "react-native"
 import { useNavigation } from "@react-navigation/native"
 
 import { Button } from "@/components/Button"
@@ -16,10 +16,12 @@ import { upsertWorkspaceMemberFromSync } from "@/services/db/repositories/worksp
 import { getActiveScopeKey } from "@/services/session/scope"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
+import { Ionicons } from "@expo/vector-icons"
+
 import type { HomeStackScreenProps } from "@/navigators/navigationTypes"
 
 export function InvitesScreen() {
-  const { themed } = useAppTheme()
+  const { themed, theme } = useAppTheme()
   const navigation = useNavigation<HomeStackScreenProps<"Invites">["navigation"]>()
   const { refreshWorkspaces } = useWorkspaceStore()
   const [invites, setInvites] = useState<InviteSummary[]>([])
@@ -85,9 +87,24 @@ export function InvitesScreen() {
   )
 
   return (
-    <Screen preset="scroll" contentContainerStyle={themed($screen)}>
+    <Screen
+      preset="scroll"
+      safeAreaEdges={["top", "bottom"]}
+      contentContainerStyle={themed($screen)}
+    >
       <View style={themed($header)}>
-        <Text preset="heading" text="Project invites" />
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          <TouchableOpacity onPress={() => navigation.goBack()}>
+            <Ionicons
+              name={"arrow-back"}
+              size={25}
+              color={theme.colors.text}
+              style={{ padding: 5 }}
+            />
+          </TouchableOpacity>
+
+          <Text preset="heading" text="Project invites" />
+        </View>
         <Text preset="formHelper" text="Pending invitations to join shared projects" />
       </View>
 

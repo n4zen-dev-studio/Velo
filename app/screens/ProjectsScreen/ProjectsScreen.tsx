@@ -1,5 +1,16 @@
 import { useCallback, useMemo, useState } from "react"
-import { Alert, Modal, Pressable, TextStyle, View, ViewStyle } from "react-native"
+import {
+  Alert,
+  LayoutAnimation,
+  Modal,
+  Platform,
+  Pressable,
+  TextStyle,
+  TouchableOpacity,
+  UIManager,
+  View,
+  ViewStyle,
+} from "react-native"
 import { useFocusEffect, useNavigation } from "@react-navigation/native"
 
 import { Button } from "@/components/Button"
@@ -7,17 +18,36 @@ import { GlassCard } from "@/components/GlassCard"
 import { Screen } from "@/components/Screen"
 import { Text } from "@/components/Text"
 import { TextField } from "@/components/TextField"
+import { BASE_URL } from "@/config/api"
 import { goToInvites } from "@/navigation/navigationActions"
 import type { ProjectsStackScreenProps } from "@/navigators/navigationTypes"
+import { createHttpClient } from "@/services/api/httpClient"
+import {
+  deleteWorkspace as deleteWorkspaceApi,
+  inviteToWorkspace,
+  listWorkspaceInvites,
+  removeWorkspaceMember,
+  revokeWorkspaceInvite,
+  type WorkspaceInvite,
+} from "@/services/api/invitesApi"
+import { listWorkspaceMembers as listWorkspaceMembersApi } from "@/services/api/workspacesApi"
 import { useAuthSession } from "@/services/auth/session"
 import { listProjects } from "@/services/db/repositories/projectsRepository"
 import { listStatuses } from "@/services/db/repositories/statusesRepository"
 import { listTasksByWorkspace } from "@/services/db/repositories/tasksRepository"
+import { listByWorkspaceId as listWorkspaceMembersLocal } from "@/services/db/repositories/workspaceMembersRepository"
 import type { Workspace } from "@/services/db/types"
+import { syncController } from "@/services/sync/SyncController"
 import { useWorkspaceStore } from "@/stores/workspaceStore"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
 import { formatDateTime } from "@/utils/dateFormat"
+import { resolveUserLabel, resolveUserMeta } from "@/utils/userLabel"
+import { Ionicons } from "@expo/vector-icons"
+
+if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true)
+}
 
 type ProjectCard = {
   workspace: Workspace
@@ -28,8 +58,15 @@ type ProjectCard = {
   updatedAt: string | null
 }
 
+type MemberSummary = {
+  id: string
+  label: string
+  role: string
+  assignments: number
+}
+
 export function ProjectsScreen() {
-  const { themed } = useAppTheme()
+  const { themed, theme } = useAppTheme()
   const navigation = useNavigation<ProjectsStackScreenProps<"ProjectsHome">["navigation"]>()
   const authSession = useAuthSession()
   const {
@@ -43,11 +80,25 @@ export function ProjectsScreen() {
 
   const [cards, setCards] = useState<ProjectCard[]>([])
   const [filter, setFilter] = useState<"all" | "shared" | "personal">("all")
+  const [expandedWorkspaceId, setExpandedWorkspaceId] = useState<string | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [createLabel, setCreateLabel] = useState("")
   const [renameTarget, setRenameTarget] = useState<Workspace | null>(null)
+  const [renameLabel, setRenameLabel] = useState("")
   const [deleteTarget, setDeleteTarget] = useState<Workspace | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
+  const [membersByWorkspaceId, setMembersByWorkspaceId] = useState<Record<string, MemberSummary[]>>(
+    {},
+  )
+  const [invitesByWorkspaceId, setInvitesByWorkspaceId] = useState<
+    Record<string, WorkspaceInvite[]>
+  >({})
+  const [inviteEmailByWorkspaceId, setInviteEmailByWorkspaceId] = useState<Record<string, string>>(
+    {},
+  )
+  const [feedbackByWorkspaceId, setFeedbackByWorkspaceId] = useState<Record<string, string | null>>(
+    {},
+  )
 
   const loadCards = useCallback(async () => {
     const rows = await Promise.all(
@@ -83,10 +134,72 @@ export function ProjectsScreen() {
     setCards(rows)
   }, [workspaces])
 
+  const loadManagementData = useCallback(
+    async (workspace: Workspace) => {
+      const [tasks, localMembers] = await Promise.all([
+        listTasksByWorkspace(workspace.id),
+        listWorkspaceMembersLocal(workspace.id),
+      ])
+
+      const localSummaries = await Promise.all(
+        localMembers.map(async (member) => {
+          const meta = await resolveUserMeta(member.userId)
+          return {
+            id: member.userId,
+            label: meta.label,
+            role: member.role,
+            assignments: tasks.filter((task) => task.assigneeUserId === member.userId).length,
+          }
+        }),
+      )
+      setMembersByWorkspaceId((prev) => ({ ...prev, [workspace.id]: localSummaries }))
+
+      if (!authSession.isAuthenticated) {
+        setInvitesByWorkspaceId((prev) => ({ ...prev, [workspace.id]: [] }))
+        return
+      }
+
+      try {
+        const client = createHttpClient(BASE_URL)
+        const [remoteMembers, remoteInvites] = await Promise.all([
+          listWorkspaceMembersApi(client, workspace.id),
+          listWorkspaceInvites(client, workspace.id),
+        ])
+
+        const remoteSummaries = await Promise.all(
+          remoteMembers.map(async (member) => ({
+            id: member.userId,
+            label:
+              member.user?.displayName ??
+              member.user?.username ??
+              member.user?.email ??
+              (await resolveUserLabel(member.userId)),
+            role: member.role,
+            assignments: tasks.filter((task) => task.assigneeUserId === member.userId).length,
+          })),
+        )
+        setMembersByWorkspaceId((prev) => ({ ...prev, [workspace.id]: remoteSummaries }))
+        setInvitesByWorkspaceId((prev) => ({ ...prev, [workspace.id]: remoteInvites }))
+      } catch {
+        setInvitesByWorkspaceId((prev) => ({ ...prev, [workspace.id]: [] }))
+      }
+    },
+    [authSession.isAuthenticated],
+  )
+
   useFocusEffect(
     useCallback(() => {
       void loadCards()
     }, [loadCards]),
+  )
+
+  useFocusEffect(
+    useCallback(() => {
+      const expandedWorkspace = workspaces.find((workspace) => workspace.id === expandedWorkspaceId)
+      if (expandedWorkspace) {
+        void loadManagementData(expandedWorkspace)
+      }
+    }, [expandedWorkspaceId, loadManagementData, workspaces]),
   )
 
   const filteredCards = useMemo(() => {
@@ -94,11 +207,6 @@ export function ProjectsScreen() {
     if (filter === "shared") return cards.filter((card) => card.workspace.kind !== "personal")
     return cards
   }, [cards, filter])
-
-  const activeCard = useMemo(
-    () => cards.find((card) => card.workspace.id === activeWorkspaceId) ?? filteredCards[0] ?? null,
-    [activeWorkspaceId, cards, filteredCards],
-  )
 
   const totalOpen = filteredCards.reduce((sum, card) => sum + card.openTasks, 0)
   const totalActive = filteredCards.filter((card) => card.openTasks > 0).length
@@ -113,6 +221,31 @@ export function ProjectsScreen() {
     )
     if (exists) return "A project with that name already exists."
     return null
+  }
+
+  const openProject = async (workspaceId: string) => {
+    await setActiveWorkspaceId(workspaceId)
+    navigation.navigate("ProjectDetail", { workspaceId })
+  }
+
+  const toggleManage = async (workspace: Workspace) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut)
+    const nextId = expandedWorkspaceId === workspace.id ? null : workspace.id
+    setExpandedWorkspaceId(nextId)
+    if (nextId) {
+      await loadManagementData(workspace)
+    }
+  }
+
+  const handleCreatePress = () => {
+    if (!authSession.isAuthenticated) {
+      Alert.alert(
+        "Sign in to create projects",
+        "You're currently in guest mode. Sign in to create and sync projects.",
+      )
+      return
+    }
+    setCreateOpen(true)
   }
 
   const handleCreate = async () => {
@@ -130,39 +263,127 @@ export function ProjectsScreen() {
 
   const handleRename = async () => {
     if (!renameTarget) return
-    const error = validateLabel(createLabel, renameTarget.id)
+    const error = validateLabel(renameLabel, renameTarget.id)
     if (error) {
       setFormError(error)
       return
     }
-    await renameWorkspace(renameTarget.id, createLabel.trim())
-    setCreateLabel("")
-    setFormError(null)
+    await renameWorkspace(renameTarget.id, renameLabel.trim())
     setRenameTarget(null)
+    setRenameLabel("")
+    setFormError(null)
     await loadCards()
   }
 
   const handleDelete = async () => {
     if (!deleteTarget) return
+    if (authSession.isAuthenticated) {
+      const client = createHttpClient(BASE_URL)
+      await deleteWorkspaceApi(client, deleteTarget.id)
+      await syncController.triggerSync("manual")
+    }
     await deleteWorkspace(deleteTarget.id)
     setDeleteTarget(null)
+    if (expandedWorkspaceId === deleteTarget.id) setExpandedWorkspaceId(null)
     await loadCards()
   }
 
-  const openProject = async (workspaceId: string) => {
-    await setActiveWorkspaceId(workspaceId)
-    navigation.navigate("ProjectDetail", { workspaceId })
-  }
-
-  const handleCreatePress = () => {
+  const handleInviteMember = async (workspace: Workspace) => {
+    if (workspace.kind === "personal") return
     if (!authSession.isAuthenticated) {
       Alert.alert(
-        "Sign in to create projects",
-        "You're currently in guest mode. Sign in to create and sync projects.",
+        "Sign in to manage projects",
+        "Guest mode supports local work, but project management requires an account.",
       )
       return
     }
-    setCreateOpen(true)
+
+    const trimmed = (inviteEmailByWorkspaceId[workspace.id] ?? "").trim().toLowerCase()
+    if (!trimmed) {
+      setFeedbackByWorkspaceId((prev) => ({ ...prev, [workspace.id]: "Enter an email to invite." }))
+      return
+    }
+
+    try {
+      const client = createHttpClient(BASE_URL)
+      await inviteToWorkspace(client, workspace.id, trimmed, workspace.label)
+      setInviteEmailByWorkspaceId((prev) => ({ ...prev, [workspace.id]: "" }))
+      setFeedbackByWorkspaceId((prev) => ({ ...prev, [workspace.id]: "Invite sent." }))
+      await loadManagementData(workspace)
+    } catch (error) {
+      setFeedbackByWorkspaceId((prev) => ({
+        ...prev,
+        [workspace.id]: error instanceof Error ? error.message : "Invite failed.",
+      }))
+    }
+  }
+
+  const handleRevokeInvite = (workspace: Workspace, invite: WorkspaceInvite) => {
+    if (!authSession.isAuthenticated) {
+      Alert.alert(
+        "Sign in to manage projects",
+        "Guest mode supports local work, but project management requires an account.",
+      )
+      return
+    }
+
+    Alert.alert("Revoke invite?", `Revoke invite for ${invite.email}?`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Revoke",
+        style: "destructive",
+        onPress: () => {
+          void (async () => {
+            try {
+              const client = createHttpClient(BASE_URL)
+              await revokeWorkspaceInvite(client, workspace.id, invite.id)
+              setFeedbackByWorkspaceId((prev) => ({ ...prev, [workspace.id]: "Invite revoked." }))
+              await loadManagementData(workspace)
+            } catch (error) {
+              setFeedbackByWorkspaceId((prev) => ({
+                ...prev,
+                [workspace.id]: error instanceof Error ? error.message : "Revoke failed.",
+              }))
+            }
+          })()
+        },
+      },
+    ])
+  }
+
+  const handleRemoveMember = (workspace: Workspace, member: MemberSummary, ownerCount: number) => {
+    if (!authSession.isAuthenticated) {
+      Alert.alert(
+        "Sign in to manage projects",
+        "Guest mode supports local work, but project management requires an account.",
+      )
+      return
+    }
+    if (member.role === "OWNER" && ownerCount <= 1) return
+
+    Alert.alert("Remove member?", `Remove ${member.label} from this project?`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove",
+        style: "destructive",
+        onPress: () => {
+          void (async () => {
+            try {
+              const client = createHttpClient(BASE_URL)
+              await removeWorkspaceMember(client, workspace.id, member.id)
+              await syncController.triggerSync("manual")
+              setFeedbackByWorkspaceId((prev) => ({ ...prev, [workspace.id]: "Member removed." }))
+              await loadManagementData(workspace)
+            } catch (error) {
+              setFeedbackByWorkspaceId((prev) => ({
+                ...prev,
+                [workspace.id]: error instanceof Error ? error.message : "Remove failed.",
+              }))
+            }
+          })()
+        },
+      },
+    ])
   }
 
   return (
@@ -174,10 +395,21 @@ export function ProjectsScreen() {
       <View style={themed($header)}>
         <View style={themed($headerCopy)}>
           <Text preset="overline" text="Projects" />
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+                      <TouchableOpacity onPress={() => navigation.goBack()}>
+                        <Ionicons
+                          name={"arrow-back"}
+                          size={25}
+                          color={theme.colors.text}
+                          style={{ padding: 5 }}
+                        />
+                      </TouchableOpacity>
+          
           <Text preset="heading" text="Manage projects" />
+                    </View>
           <Text
             preset="caption"
-            text="Switch projects, create new ones, and manage invites without leaving the workspace flow."
+            text="Open project workspaces fast, or expand a project card to manage its members, invites, and settings."
             style={themed($subtitle)}
           />
         </View>
@@ -221,56 +453,60 @@ export function ProjectsScreen() {
         </Pressable>
       </View>
 
-      {activeCard ? (
-        <GlassCard style={themed($activeCard)}>
-          <View style={themed($activeCardHeader)}>
-            <View style={themed($activeCardCopy)}>
-              <Text preset="caption" text="Current project" style={themed($metricLabel)} />
-              <Text preset="sectionTitle" text={activeCard.workspace.label} />
-              <Text
-                preset="caption"
-                text={
-                  activeCard.updatedAt
-                    ? `Updated ${formatDateTime(activeCard.updatedAt)}`
-                    : "No recent activity"
-                }
-                style={themed($subtitle)}
-              />
-            </View>
-            <Text preset="caption" text="Open from list below" style={themed($metricLabel)} />
-          </View>
-          <View style={themed($miniStatsRow)}>
-            <ProjectStatPill label="Open" value={`${activeCard.openTasks}`} />
-            <ProjectStatPill label="In motion" value={`${activeCard.inProgressTasks}`} />
-            <ProjectStatPill label="Tracks" value={`${activeCard.streamsCount}`} />
+      {!authSession.isAuthenticated ? (
+        <GlassCard>
+          <View style={themed($guestNotice)}>
+            <Text preset="formLabel" text="Sign in to manage projects" />
+            <Text
+              preset="caption"
+              text="Guest mode still lets you open and work inside projects. Creation, membership, invites, and sync-enabled admin actions require login."
+              style={themed($subtitle)}
+            />
           </View>
         </GlassCard>
       ) : null}
 
       <View style={themed($cardsStack)}>
         {filteredCards.map((card) => {
-          const isActive = card.workspace.id === activeWorkspaceId
+          const isExpanded = expandedWorkspaceId === card.workspace.id
+          const members = membersByWorkspaceId[card.workspace.id] ?? []
+          const invites = invitesByWorkspaceId[card.workspace.id] ?? []
+          const currentMemberRole =
+            members.find((member) => member.id === authSession.currentUserId)?.role ?? null
+          const ownerCount = members.filter((member) => member.role === "OWNER").length
+          const canManageProject =
+            authSession.isAuthenticated && ["OWNER", "ADMIN"].includes(currentMemberRole ?? "")
+          const canDeleteProject = authSession.isAuthenticated && currentMemberRole === "OWNER"
 
           return (
-            <CompactProjectCard
+            <ExpandableProjectCard
               key={card.workspace.id}
               card={card}
-              isActive={isActive}
+              isCurrent={card.workspace.id === activeWorkspaceId}
+              isExpanded={isExpanded}
+              members={members}
+              invites={invites}
+              inviteEmail={inviteEmailByWorkspaceId[card.workspace.id] ?? ""}
+              feedback={feedbackByWorkspaceId[card.workspace.id] ?? null}
+              canManageProject={canManageProject}
+              canDeleteProject={canDeleteProject}
+              authRestricted={!authSession.isAuthenticated}
+              currentUserId={authSession.currentUserId}
               onOpen={() => void openProject(card.workspace.id)}
-              onRename={
-                card.workspace.kind !== "personal"
-                  ? () => {
-                      setRenameTarget(card.workspace)
-                      setCreateLabel(card.workspace.label)
-                      setFormError(null)
-                    }
-                  : undefined
-              }
-              onDelete={
-                card.workspace.kind !== "personal"
-                  ? () => setDeleteTarget(card.workspace)
-                  : undefined
-              }
+              onToggleManage={() => void toggleManage(card.workspace)}
+              onRename={() => {
+                setRenameTarget(card.workspace)
+                setRenameLabel(card.workspace.label)
+                setFormError(null)
+              }}
+              onInviteEmailChange={(value) => {
+                setInviteEmailByWorkspaceId((prev) => ({ ...prev, [card.workspace.id]: value }))
+                setFeedbackByWorkspaceId((prev) => ({ ...prev, [card.workspace.id]: null }))
+              }}
+              onInvite={() => void handleInviteMember(card.workspace)}
+              onRevokeInvite={(invite) => handleRevokeInvite(card.workspace, invite)}
+              onRemoveMember={(member) => handleRemoveMember(card.workspace, member, ownerCount)}
+              onDelete={() => setDeleteTarget(card.workspace)}
             />
           )
         })}
@@ -297,16 +533,16 @@ export function ProjectsScreen() {
       <ProjectModal
         visible={!!renameTarget}
         title="Rename project"
-        value={createLabel}
+        value={renameLabel}
         error={formError}
         confirmText="Save"
         onChangeText={(value) => {
-          setCreateLabel(value)
+          setRenameLabel(value)
           if (formError) setFormError(null)
         }}
         onClose={() => {
           setRenameTarget(null)
-          setCreateLabel("")
+          setRenameLabel("")
           setFormError(null)
         }}
         onConfirm={handleRename}
@@ -319,7 +555,9 @@ export function ProjectsScreen() {
             <Text
               preset="formHelper"
               text={
-                deleteTarget ? `Delete ${deleteTarget.label}? This removes the project shell.` : ""
+                deleteTarget
+                  ? `Delete ${deleteTarget.label}? This removes the project shell and its shared admin surface.`
+                  : ""
               }
             />
             <View style={themed($modalActions)}>
@@ -333,6 +571,215 @@ export function ProjectsScreen() {
   )
 }
 
+function ExpandableProjectCard(props: {
+  card: ProjectCard
+  isCurrent: boolean
+  isExpanded: boolean
+  members: MemberSummary[]
+  invites: WorkspaceInvite[]
+  inviteEmail: string
+  feedback: string | null
+  canManageProject: boolean
+  canDeleteProject: boolean
+  authRestricted: boolean
+  currentUserId?: string | null
+  onOpen: () => void
+  onToggleManage: () => void
+  onRename: () => void
+  onInviteEmailChange: (value: string) => void
+  onInvite: () => void
+  onRevokeInvite: (invite: WorkspaceInvite) => void
+  onRemoveMember: (member: MemberSummary) => void
+  onDelete: () => void
+}) {
+  const { themed } = useAppTheme()
+  const ownerCount = props.members.filter((member) => member.role === "OWNER").length
+
+  return (
+    <GlassCard style={themed(props.isExpanded ? $projectCardExpanded : $projectCard)}>
+      <View style={themed($projectMain)}>
+        <View style={themed($projectTitleRow)}>
+          <Text preset="formLabel" text={props.card.workspace.label} />
+          {props.isCurrent ? (
+            <Text preset="caption" text="Current" style={themed($currentBadge)} />
+          ) : null}
+          {props.isExpanded ? (
+            <Text preset="caption" text="Managing" style={themed($expandedBadge)} />
+          ) : null}
+        </View>
+
+        <Text
+          preset="caption"
+          text={
+            props.card.workspace.kind === "personal"
+              ? "Personal project"
+              : `${props.card.workspace.membersCount ?? props.members.length} members · ${props.card.streamsCount} tracks`
+          }
+          style={themed($subtitle)}
+        />
+
+        <View style={themed($projectMetaRow)}>
+          <ProjectStatPill label="Open" value={`${props.card.openTasks}`} />
+          <ProjectStatPill label="Flow" value={`${props.card.inProgressTasks}`} />
+          <ProjectStatPill label="Done" value={`${props.card.doneTasks}`} />
+        </View>
+
+        <View style={themed($cardActionRow)}>
+          <Button text="Open" preset="glass" onPress={props.onOpen} style={themed($inlineAction)} />
+          <Button
+            text={props.isExpanded ? "Close" : "Manage"}
+            onPress={props.onToggleManage}
+            style={themed($inlineAction)}
+          />
+        </View>
+
+        {props.isExpanded ? (
+          <View style={themed($expandedContent)}>
+            {props.authRestricted ? (
+              <View style={themed($inlineNotice)}>
+                <Text preset="caption" text="Guest mode" style={themed($metricLabel)} />
+                <Text
+                  preset="caption"
+                  text="Open remains available. Project admin actions unlock after login."
+                  style={themed($subtitle)}
+                />
+              </View>
+            ) : null}
+
+            <View style={themed($expandedSection)}>
+              <SectionHeader title="General" subtitle="Project-level settings" />
+              {props.card.workspace.kind === "personal" ? (
+                <Text
+                  preset="caption"
+                  text="Personal projects stay local and do not support sharing, rename, or destructive admin controls."
+                  style={themed($subtitle)}
+                />
+              ) : (
+                <View style={themed($cardActionRow)}>
+                  <Button
+                    text="Rename project"
+                    preset="glass"
+                    onPress={props.onRename}
+                    disabled={!props.canManageProject}
+                    style={themed($inlineAction)}
+                  />
+                </View>
+              )}
+              {props.feedback ? (
+                <Text preset="caption" text={props.feedback} style={themed($feedbackText)} />
+              ) : null}
+            </View>
+
+            <View style={themed($expandedSection)}>
+              <SectionHeader title="Members" subtitle="Admin and collaborator controls" />
+              {props.members.length === 0 ? (
+                <Text preset="caption" text="No synced members yet." style={themed($subtitle)} />
+              ) : (
+                props.members.map((member) => (
+                  <View key={member.id} style={themed($managementRow)}>
+                    <View style={themed($managementCopy)}>
+                      <Text preset="caption" text={member.label} />
+                      <Text
+                        preset="caption"
+                        text={`${member.role} · ${member.assignments} assigned`}
+                        style={themed($subtitle)}
+                      />
+                    </View>
+                    {props.canManageProject &&
+                    member.id !== props.currentUserId &&
+                    !(member.role === "OWNER" && ownerCount <= 1) ? (
+                      <Button
+                        text="Remove"
+                        preset="glass"
+                        onPress={() => props.onRemoveMember(member)}
+                        style={themed($dangerAction)}
+                      />
+                    ) : null}
+                  </View>
+                ))
+              )}
+            </View>
+
+            <View style={themed($expandedSection)}>
+              <SectionHeader title="Invites" subtitle="Add and revoke access" />
+              {props.card.workspace.kind === "personal" ? (
+                <Text
+                  preset="caption"
+                  text="Personal projects cannot be shared."
+                  style={themed($subtitle)}
+                />
+              ) : (
+                <View style={themed($managementStack)}>
+                  <TextField
+                    value={props.inviteEmail}
+                    onChangeText={props.onInviteEmailChange}
+                    placeholder="teammate@company.com"
+                    autoCapitalize="none"
+                    keyboardType="email-address"
+                    editable={props.canManageProject}
+                  />
+                  <Button
+                    text="Send invite"
+                    onPress={props.onInvite}
+                    disabled={!props.canManageProject}
+                  />
+                  {props.invites.length === 0 ? (
+                    <Text preset="caption" text="No pending invites." style={themed($subtitle)} />
+                  ) : (
+                    props.invites.map((invite) => (
+                      <View key={invite.id} style={themed($managementRow)}>
+                        <View style={themed($managementCopy)}>
+                          <Text preset="caption" text={invite.email} />
+                          <Text
+                            preset="caption"
+                            text={`${invite.role} · ${invite.status} · Expires ${formatDateTime(invite.expiresAt)}`}
+                            style={themed($subtitle)}
+                          />
+                        </View>
+                        {props.canManageProject && invite.status === "PENDING" ? (
+                          <Button
+                            text="Revoke"
+                            preset="glass"
+                            onPress={() => props.onRevokeInvite(invite)}
+                            style={themed($dangerAction)}
+                          />
+                        ) : null}
+                      </View>
+                    ))
+                  )}
+                </View>
+              )}
+            </View>
+
+            {props.card.workspace.kind !== "personal" ? (
+              <View style={themed($expandedSection)}>
+                <SectionHeader title="Danger zone" subtitle="Destructive project actions" />
+                <Button
+                  text="Delete project"
+                  preset="glass"
+                  onPress={props.onDelete}
+                  disabled={!props.canDeleteProject}
+                  style={themed($dangerAction)}
+                />
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+      </View>
+    </GlassCard>
+  )
+}
+
+function SectionHeader({ title, subtitle }: { title: string; subtitle: string }) {
+  const { themed } = useAppTheme()
+  return (
+    <View style={themed($sectionHeader)}>
+      <Text preset="caption" text={title} />
+      <Text preset="caption" text={subtitle} style={themed($subtitle)} />
+    </View>
+  )
+}
+
 function ProjectStatPill({ label, value }: { label: string; value: string }) {
   const { themed } = useAppTheme()
   return (
@@ -340,61 +787,6 @@ function ProjectStatPill({ label, value }: { label: string; value: string }) {
       <Text preset="caption" text={label} style={themed($metricLabel)} />
       <Text preset="caption" text={value} />
     </View>
-  )
-}
-
-function CompactProjectCard({
-  card,
-  isActive,
-  onOpen,
-  onRename,
-  onDelete,
-}: {
-  card: ProjectCard
-  isActive: boolean
-  onOpen: () => void
-  onRename?: () => void
-  onDelete?: () => void
-}) {
-  const { themed } = useAppTheme()
-  return (
-    <Pressable onPress={onOpen}>
-      <GlassCard style={themed(isActive ? $projectCardActive : $projectCard)}>
-        <View style={themed($projectRow)}>
-          <View style={themed($projectMain)}>
-            <View style={themed($projectTitleRow)}>
-              <Text preset="formLabel" text={card.workspace.label} />
-              {isActive ? (
-                <Text preset="caption" text="Current" style={themed($currentBadge)} />
-              ) : null}
-            </View>
-            <Text
-              preset="caption"
-              text={
-                card.workspace.kind === "personal"
-                  ? "Personal project"
-                  : `${card.workspace.membersCount ?? 0} members · ${card.streamsCount} tracks`
-              }
-              style={themed($subtitle)}
-            />
-            <View style={themed($projectMetaRow)}>
-              <ProjectStatPill label="Open" value={`${card.openTasks}`} />
-              <ProjectStatPill label="Flow" value={`${card.inProgressTasks}`} />
-              <ProjectStatPill label="Done" value={`${card.doneTasks}`} />
-            </View>
-          </View>
-          <View style={themed($projectAside)}>
-            <Text
-              preset="caption"
-              text={isActive ? "Current" : "Tap to open"}
-              style={themed(isActive ? $currentBadge : $subtitle)}
-            />
-            {onRename ? <Button text="Edit" preset="glass" onPress={onRename} /> : null}
-            {onDelete ? <Button text="Delete" preset="reversed" onPress={onDelete} /> : null}
-          </View>
-        </View>
-      </GlassCard>
-    </Pressable>
   )
 }
 
@@ -520,23 +912,43 @@ const $filterChipActive: ThemedStyle<ViewStyle> = ({ colors }) => ({
   backgroundColor: colors.glowSoft,
 })
 
-const $activeCard: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+const $guestNotice: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: spacing.xs,
+})
+
+const $cardsStack: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.sm,
 })
 
-const $activeCardHeader: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+const $projectCard: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: spacing.sm,
+})
+
+const $projectCardExpanded: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+  gap: spacing.sm,
+  borderColor: colors.primary,
+})
+
+const $projectMain: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: spacing.sm,
+})
+
+const $projectTitleRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexDirection: "row",
   alignItems: "center",
-  justifyContent: "space-between",
-  gap: spacing.sm,
+  flexWrap: "wrap",
+  gap: spacing.xs,
 })
 
-const $activeCardCopy: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  flex: 1,
-  gap: spacing.xxxs,
+const $currentBadge: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.primary,
 })
 
-const $miniStatsRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+const $expandedBadge: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.textMuted,
+})
+
+const $projectMetaRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexDirection: "row",
   flexWrap: "wrap",
   gap: spacing.xs,
@@ -554,49 +966,63 @@ const $projectStatPill: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) =
   gap: spacing.xs,
 })
 
-const $cardsStack: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  gap: spacing.sm,
-})
-
-const $projectCard: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  gap: spacing.sm,
-})
-
-const $projectCardActive: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
-  gap: spacing.sm,
-  borderColor: colors.primary,
-})
-
-const $projectRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  flexDirection: "row",
-  gap: spacing.sm,
-  alignItems: "flex-start",
-})
-
-const $projectMain: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  flex: 1,
-  gap: spacing.xs,
-})
-
-const $projectTitleRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  flexDirection: "row",
-  alignItems: "center",
-  gap: spacing.xs,
-})
-
-const $currentBadge: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.primary,
-})
-
-const $projectMetaRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+const $cardActionRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexDirection: "row",
   flexWrap: "wrap",
   gap: spacing.xs,
 })
 
-const $projectAside: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  width: 88,
-  gap: spacing.xs,
+const $inlineAction: ThemedStyle<ViewStyle> = () => ({
+  flexGrow: 1,
+})
+
+const $expandedContent: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+  gap: spacing.md,
+  paddingTop: spacing.sm,
+  borderTopWidth: 1,
+  borderTopColor: colors.borderSubtle,
+})
+
+const $expandedSection: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: spacing.sm,
+})
+
+const $sectionHeader: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: spacing.xxxs,
+})
+
+const $inlineNotice: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
+  borderRadius: radius.medium,
+  borderWidth: 1,
+  borderColor: colors.borderSubtle,
+  backgroundColor: colors.surface,
+  paddingHorizontal: spacing.sm,
+  paddingVertical: spacing.sm,
+  gap: spacing.xxxs,
+})
+
+const $managementStack: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: spacing.sm,
+})
+
+const $managementRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: spacing.sm,
+})
+
+const $managementCopy: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flex: 1,
+  gap: spacing.xxxs,
+})
+
+const $feedbackText: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.primary,
+})
+
+const $dangerAction: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  borderColor: colors.danger,
 })
 
 const $modalBackdrop: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({

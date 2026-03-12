@@ -1,4 +1,4 @@
-import { View, ViewStyle, TextStyle } from "react-native"
+import { View, ViewStyle, TextStyle, TouchableOpacity } from "react-native"
 import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native"
 import { useCallback, useEffect, useMemo, useState } from "react"
 
@@ -12,11 +12,12 @@ import type { ThemedStyle } from "@/theme/types"
 import type { HomeStackScreenProps } from "@/navigators/navigationTypes"
 import { formatDateTime } from "@/utils/dateFormat"
 import { resolveUserLabel } from "@/utils/userLabel"
+import { Ionicons } from "@expo/vector-icons"
 
 import { useTaskDetailViewModel } from "./useTaskDetailViewModel"
 
 export function TaskDetailScreen() {
-  const { themed } = useAppTheme()
+  const { themed, theme } = useAppTheme()
   const navigation = useNavigation<HomeStackScreenProps<"TaskDetail">["navigation"]>()
   const route = useRoute<HomeStackScreenProps<"TaskDetail">["route"]>()
   const { taskId } = route.params
@@ -103,7 +104,18 @@ export function TaskDetailScreen() {
       contentContainerStyle={themed($screen)}
     >
       <View style={themed($header)}>
-        <Text preset="display" text={task.title} style={themed($title)} />
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          <TouchableOpacity onPress={() => navigation.goBack()}>
+            <Ionicons
+              name={"arrow-back"}
+              size={25}
+              color={theme.colors.text}
+              style={{ padding: 5 }}
+            />
+          </TouchableOpacity>
+
+          <Text preset="heading" text={`${task.title}`} style={themed($title)} />
+        </View>
         <Text
           preset="formHelper"
           text="Execution detail and activity stream."

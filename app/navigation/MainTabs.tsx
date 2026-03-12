@@ -5,6 +5,7 @@ import { GlassTabBar } from "@/components/navigation/GlassTabBar"
 import { SyncDebugScreen } from "@/devtools/SyncDebugScreen"
 import { HomeStack } from "@/navigation/HomeStack"
 import { ProjectsStack } from "@/navigation/ProjectsStack"
+import { getDeepestFocusedRouteName, shouldHideFloatingTabs } from "@/navigation/tabBarVisibility"
 import type { MainTabParamList } from "@/navigators/navigationTypes"
 import { SettingsScreen } from "@/screens/SettingsScreen"
 
@@ -24,7 +25,12 @@ export function MainTabs() {
           elevation: 0,
         },
       }}
-      tabBar={(props) => <GlassTabBar {...props} />}
+      tabBar={(props) => {
+        const activeRoute = props.state.routes[props.state.index]
+        const focusedTabRoute = getDeepestFocusedRouteName(activeRoute as any)
+        const hidden = shouldHideFloatingTabs(focusedTabRoute)
+        return <GlassTabBar {...props} hidden={hidden} />
+      }}
     >
       <Tab.Screen name="DashboardTab" component={HomeStack} options={{ title: "Dashboard" }} />
       <Tab.Screen
@@ -37,7 +43,7 @@ export function MainTabs() {
           },
         })}
       />
-      <Tab.Screen name="DebugTab" component={SyncDebugScreen} options={{ title: "Debug" }} />
+      <Tab.Screen name="DebugTab" component={SyncDebugScreen} options={{ title: "Sync" }} />
       <Tab.Screen name="SettingsTab" component={SettingsScreen} options={{ title: "Settings" }} />
     </Tab.Navigator>
   )

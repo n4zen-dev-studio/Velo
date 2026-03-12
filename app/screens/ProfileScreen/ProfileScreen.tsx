@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { Image, View, ViewStyle, TextStyle, ImageStyle } from "react-native"
+import { Image, View, ViewStyle, TextStyle, ImageStyle, TouchableOpacity } from "react-native"
 import { useNavigation } from "@react-navigation/native"
 
 import { Button } from "@/components/Button"
@@ -15,11 +15,12 @@ import type { User } from "@/services/db/types"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
 import { userScopeKey } from "@/services/session/scope"
+import { Ionicons } from "@expo/vector-icons"
 
 const fallbackAvatar = require("@assets/images/avatar_placeholder.jpg")
 
 export function ProfileScreen() {
-  const { themed } = useAppTheme()
+  const { themed, theme } = useAppTheme()
   const navigation = useNavigation<HomeStackScreenProps<"Profile">["navigation"]>()
   const [userId, setUserId] = useState<string | null>(null)
   const [userRow, setUserRow] = useState<User | null>(null)
@@ -122,7 +123,18 @@ export function ProfileScreen() {
       contentContainerStyle={themed($screen)}
     >
       <View style={themed($header)}>
-        <Text preset="display" text="Profile" />
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          <TouchableOpacity onPress={() => navigation.goBack()}>
+            <Ionicons
+              name={"arrow-back"}
+              size={25}
+              color={theme.colors.text}
+              style={{ padding: 5 }}
+            />
+          </TouchableOpacity>
+
+          <Text preset="heading" text="Profile" />
+        </View>
         <Text
           preset="formHelper"
           text="Update your Velo identity across projects."
