@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Pressable, ScrollView, View, ViewStyle, TextStyle } from "react-native"
 
 import { GlassCard } from "@/components/GlassCard"
@@ -61,81 +61,74 @@ export function SyncDebugScreen() {
   )
 
   return (
-    <Screen preset="scroll" safeAreaEdges={["top", "bottom"]} contentContainerStyle={themed($screen)}>
-      {/* Header */}
+    <Screen
+      preset="scroll"
+      safeAreaEdges={["top", "bottom"]}
+      contentContainerStyle={themed($screen)}
+    >
       <View style={themed($header)}>
         <View style={themed($headerTop)}>
           <View style={themed($headerTitles)}>
-            <Text preset="heading" text="Sync debug" />
-            <Text preset="formHelper" text="Inspect local change log and sync state" />
+            <Text preset="overline" text="Debug" />
+            <Text preset="heading" text="Sync console" />
+            <Text
+              preset="caption"
+              text="Inspect queued operations, sync state, and recovery tools."
+              style={themed($muted)}
+            />
           </View>
-
-          {/* Connection chip */}
           <View style={themed(syncState.isOnline ? $chipOnline : $chipOffline)}>
             <View style={themed(syncState.isOnline ? $chipDotOnline : $chipDotOffline)} />
-            <Text preset="formHelper" text={isOnlineLabel} style={themed($chipText)} />
+            <Text preset="caption" text={isOnlineLabel} style={themed($chipText)} />
           </View>
         </View>
 
         {hasError ? (
           <View style={themed($errorBanner)}>
-            <Text preset="formHelper" text={`Last error: ${syncState.lastError}`} style={themed($errorText)} />
+            <Text
+              preset="caption"
+              text={`Last error: ${syncState.lastError}`}
+              style={themed($errorText)}
+            />
           </View>
         ) : null}
       </View>
 
-      {/* Quick stats row (glassy cards, compact) */}
       <View style={themed($statsGrid)}>
         {topStats.map((s) => (
-          <View key={s.label} style={themed($statsCell)}>
-            <GlassCard>
-              <View style={themed($statCard)}>
-                <Text preset="formHelper" text={s.label} style={themed($muted)} />
-                <Text preset="subheading" text={s.value} />
-              </View>
-            </GlassCard>
-          </View>
+          <CompactStatTile key={s.label} label={s.label} value={s.value} />
         ))}
       </View>
 
-
-      {/* Sync state (cursor, phase, last synced) */}
       <GlassCard>
         <View style={themed($cardHeaderRow)}>
           <Text preset="formLabel" text="Sync state" />
-          <Text preset="formHelper" text={`Phase: ${phaseLabel}`} style={themed($muted)} />
+          <Text preset="caption" text={`Phase: ${phaseLabel}`} style={themed($muted)} />
         </View>
 
-        <View style={themed($kv)}>
-          <Text preset="formHelper" text="Cursor" style={themed($muted)} />
-          <Text preset="formHelper" text={cursor ?? "—"} />
-        </View>
-
-        <View style={themed($kv)}>
-          <Text preset="formHelper" text="Last synced" style={themed($muted)} />
-          <Text preset="formHelper" text={lastSyncedLabel} />
+        <View style={themed($infoGrid)}>
+          <CompactInfoRow label="Cursor" value={cursor ?? "—"} />
+          <CompactInfoRow label="Last synced" value={lastSyncedLabel} />
         </View>
       </GlassCard>
 
-      {/* Lists */}
       <GlassCard>
         <View style={themed($cardHeaderRow)}>
           <Text preset="formLabel" text="Pending ops" />
-          <Text preset="formHelper" text={`${pendingOps.length} shown`} style={themed($muted)} />
+          <Text preset="caption" text={`${pendingOps.length} shown`} style={themed($muted)} />
         </View>
 
         <ScrollView style={themed($list)} nestedScrollEnabled showsVerticalScrollIndicator={false}>
           {pendingOps.length === 0 ? (
-            <Text preset="formHelper" text="No pending ops." />
+            <Text preset="caption" text="No pending ops." style={themed($muted)} />
           ) : (
             pendingOps.map((op) => (
-              <View key={op.opId} style={themed($row)}>
-                <View style={themed($rowTop)}>
-                  <Text preset="formLabel" text={`${op.entityType} · ${op.opType}`} style={themed($rowTitle)} />
-                  <Text preset="formHelper" text={op.createdAt} style={themed($muted)} />
-                </View>
-                <Text preset="formHelper" text={`${op.entityId}`} style={themed($muted)} />
-              </View>
+              <CompactOpRow
+                key={op.opId}
+                title={`${op.entityType} · ${op.opType}`}
+                meta={op.createdAt}
+                detail={`${op.entityId}`}
+              />
             ))
           )}
         </ScrollView>
@@ -144,71 +137,138 @@ export function SyncDebugScreen() {
       <GlassCard>
         <View style={themed($cardHeaderRow)}>
           <Text preset="formLabel" text="Failed ops" />
-          <Text preset="formHelper" text={`${failedOps.length} shown`} style={themed($muted)} />
+          <Text preset="caption" text={`${failedOps.length} shown`} style={themed($muted)} />
         </View>
 
         <ScrollView style={themed($list)} nestedScrollEnabled showsVerticalScrollIndicator={false}>
           {failedOps.length === 0 ? (
-            <Text preset="formHelper" text="No failed ops." />
+            <Text preset="caption" text="No failed ops." style={themed($muted)} />
           ) : (
             failedOps.map((op) => (
-              <View key={op.opId} style={themed($row)}>
-                <View style={themed($rowTop)}>
-                  <Text preset="formLabel" text={`${op.entityType} · ${op.opType}`} style={themed($rowTitle)} />
-                  <Text preset="formHelper" text={`Attempts: ${op.attemptCount}`} style={themed($muted)} />
-                </View>
-                <Text preset="formHelper" text={`${op.entityId}`} style={themed($muted)} />
-              </View>
+              <CompactOpRow
+                key={op.opId}
+                title={`${op.entityType} · ${op.opType}`}
+                meta={`Attempts: ${op.attemptCount}`}
+                detail={`${op.entityId}`}
+              />
             ))
           )}
         </ScrollView>
       </GlassCard>
 
-      {/* Primary actions (better UX grouping; same handlers) */}
-      <View style={themed($actionsBlock)}>
-        <Text preset="formLabel" text="Actions" style={themed($actionsTitle)} />
-
-        <View style={themed($buttonRow)}>
-          <Pressable style={themed($button)} onPress={() => syncController.triggerSync("manual").then(load)}>
-            <Text preset="formLabel" text="Trigger sync" style={themed($buttonPrimaryText)} />
-          </Pressable>
-
-          <Pressable style={themed($button)} onPress={() => resetFailedToPending().then(load)}>
-            <Text preset="formLabel" text="Retry failed → pending" />
-          </Pressable>
+      <GlassCard>
+        <View style={themed($cardHeaderRow)}>
+          <Text preset="formLabel" text="Actions" />
+          <Text preset="caption" text="Recovery and diagnostics" style={themed($muted)} />
         </View>
 
-        {__DEV__ ? (
-          <View style={themed($buttonRow)}>
-            <Pressable style={themed($button)} onPress={() => clearSentOps().then(load)}>
-              <Text preset="formLabel" text="Clear SENT ops" />
-            </Pressable>
-
-            <Pressable style={themed($button)} onPress={() => pruneSentOps(2000, 7).then(load)}>
-              <Text preset="formLabel" text="Prune SENT ops" />
-            </Pressable>
-          </View>
-        ) : null}
-
-        <Pressable
-          style={themed($buttonFull)}
-          onPress={async () => {
-            const snapshot = await buildDebugSnapshot()
-            console.log("[SYNC] Debug snapshot", snapshot)
-          }}
-        >
-          <Text preset="formLabel" text="Export debug snapshot" />
-          <Text preset="formHelper" text="Logs a compact snapshot to console" style={themed($muted)} />
-        </Pressable>
-      </View>
+        <View style={themed($actionGrid)}>
+          <CompactActionTile
+            label="Trigger sync"
+            helper="Run a manual sync"
+            onPress={() => syncController.triggerSync("manual").then(load)}
+            emphasis="primary"
+          />
+          <CompactActionTile
+            label="Retry failed"
+            helper="Move failed ops back to pending"
+            onPress={() => resetFailedToPending().then(load)}
+          />
+          {__DEV__ ? (
+            <>
+              <CompactActionTile
+                label="Clear sent"
+                helper="Remove SENT ops"
+                onPress={() => clearSentOps().then(load)}
+              />
+              <CompactActionTile
+                label="Prune sent"
+                helper="Trim old SENT ops"
+                onPress={() => pruneSentOps(2000, 7).then(load)}
+              />
+            </>
+          ) : null}
+          <CompactActionTile
+            label="Export snapshot"
+            helper="Log a compact snapshot to console"
+            onPress={async () => {
+              const snapshot = await buildDebugSnapshot()
+              console.log("[SYNC] Debug snapshot", snapshot)
+            }}
+          />
+        </View>
+      </GlassCard>
     </Screen>
   )
 }
 
+function CompactStatTile({ label, value }: { label: string; value: string }) {
+  const { themed } = useAppTheme()
+  return (
+    <View style={themed($statsCell)}>
+      <View style={themed($statTile)}>
+        <Text preset="caption" text={label} style={themed($muted)} />
+        <Text preset="caption" text={value} style={themed($statValue)} />
+      </View>
+    </View>
+  )
+}
+
+function CompactInfoRow({ label, value }: { label: string; value: string }) {
+  const { themed } = useAppTheme()
+  return (
+    <View style={themed($kv)}>
+      <Text preset="caption" text={label} style={themed($muted)} />
+      <Text preset="caption" text={value} numberOfLines={2} style={themed($rowTitle)} />
+    </View>
+  )
+}
+
+function CompactOpRow({ title, meta, detail }: { title: string; meta: string; detail: string }) {
+  const { themed } = useAppTheme()
+  return (
+    <View style={themed($row)}>
+      <View style={themed($rowTop)}>
+        <Text preset="caption" text={title} style={themed($rowTitle)} />
+        <Text preset="caption" text={meta} style={themed($muted)} />
+      </View>
+      <Text preset="caption" text={detail} style={themed($muted)} numberOfLines={2} />
+    </View>
+  )
+}
+
+function CompactActionTile(props: {
+  label: string
+  helper: string
+  onPress: () => void | Promise<void>
+  emphasis?: "primary" | "default"
+}) {
+  const { themed } = useAppTheme()
+  return (
+    <Pressable
+      style={[
+        themed($actionTile),
+        props.emphasis === "primary" ? themed($actionTilePrimary) : null,
+      ]}
+      onPress={props.onPress}
+    >
+      <Text
+        preset="caption"
+        text={props.label}
+        style={
+          props.emphasis === "primary" ? themed($actionTileTextPrimary) : themed($actionTileText)
+        }
+      />
+      <Text preset="caption" text={props.helper} style={themed($muted)} />
+    </Pressable>
+  )
+}
+
 const $screen: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  padding: spacing.lg,
-  gap: spacing.lg,
-  paddingBottom: 50
+  paddingHorizontal: spacing.screenHorizontal,
+  paddingTop: spacing.md,
+  gap: spacing.md,
+  paddingBottom: 50,
 })
 
 const $header: ThemedStyle<ViewStyle> = ({ spacing }) => ({
@@ -219,106 +279,111 @@ const $headerTop: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexDirection: "row",
   alignItems: "flex-start",
   justifyContent: "space-between",
-  gap: spacing.md,
+  gap: spacing.sm,
 })
 
 const $headerTitles: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flex: 1,
-  gap: spacing.xs,
-})
-
-const $statsRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  flexDirection: "row",
-  gap: spacing.sm,
+  gap: spacing.xxxs,
 })
 
 const $statsGrid: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexDirection: "row",
   flexWrap: "wrap",
-  gap: spacing.sm,
+  gap: spacing.xs,
 })
 
-/**
- * 2 columns on most phones:
- * - each cell takes ~half width
- * - uses flexBasis to ensure wrapping
- */
-const $statsCell: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+const $statsCell: ThemedStyle<ViewStyle> = () => ({
   flexGrow: 1,
-  flexBasis: "48%", // ~2 per row
-  minWidth: 140, // prevents tiny cards on very narrow screens
+  flexBasis: "31%",
+  minWidth: 104,
 })
 
-const $statCard: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  gap: spacing.xxs,
+const $statTile: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
+  minHeight: 72,
+  borderRadius: radius.medium,
+  borderWidth: 1,
+  borderColor: colors.borderSubtle,
+  backgroundColor: colors.surface,
+  paddingHorizontal: spacing.sm,
+  paddingVertical: spacing.xs,
+  justifyContent: "center",
+  gap: spacing.xxxs,
 })
 
+const $statValue: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.text,
+})
 
-const $muted: ThemedStyle<TextStyle> = () => ({
-  opacity: 0.85,
+const $muted: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.textDim,
 })
 
 const $cardHeaderRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexDirection: "row",
   alignItems: "baseline",
   justifyContent: "space-between",
-  gap: spacing.sm,
+  gap: spacing.xs,
   marginBottom: spacing.xs,
+})
+
+const $infoGrid: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: spacing.xxxs,
 })
 
 const $kv: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexDirection: "row",
   justifyContent: "space-between",
-  alignItems: "center",
-  gap: spacing.md,
-  paddingVertical: spacing.xs,
+  alignItems: "flex-start",
+  gap: spacing.sm,
+  paddingVertical: spacing.xxxs,
 })
 
 const $list: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  maxHeight: 200,
-  marginTop: spacing.sm,
+  maxHeight: 176,
+  marginTop: spacing.xs,
 })
 
 const $row: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
-  paddingVertical: spacing.sm,
+  paddingVertical: spacing.xs,
   borderBottomWidth: 1,
-  borderBottomColor: colors.border,
-  gap: spacing.xxs,
+  borderBottomColor: colors.borderSubtle,
+  gap: spacing.xxxs,
 })
 
 const $rowTop: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexDirection: "row",
   justifyContent: "space-between",
   alignItems: "baseline",
-  gap: spacing.sm,
+  gap: spacing.xs,
 })
 
 const $rowTitle: ThemedStyle<TextStyle> = () => ({
   flex: 1,
 })
 
-const $chipOnline: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+const $chipOnline: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
   flexDirection: "row",
   alignItems: "center",
   gap: spacing.xs,
   paddingHorizontal: spacing.sm,
   paddingVertical: spacing.xs,
-  borderRadius: 999,
+  borderRadius: radius.pill,
   borderWidth: 1,
-  borderColor: colors.border,
-  backgroundColor: colors.background,
+  borderColor: colors.borderSubtle,
+  backgroundColor: colors.surfaceGlass,
 })
 
-const $chipOffline: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+const $chipOffline: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
   flexDirection: "row",
   alignItems: "center",
   gap: spacing.xs,
   paddingHorizontal: spacing.sm,
   paddingVertical: spacing.xs,
-  borderRadius: 999,
+  borderRadius: radius.pill,
   borderWidth: 1,
-  borderColor: colors.border,
-  backgroundColor: colors.background,
+  borderColor: colors.borderSubtle,
+  backgroundColor: colors.surfaceGlass,
   opacity: 0.9,
 })
 
@@ -343,69 +408,48 @@ const $chipText: ThemedStyle<TextStyle> = () => ({
   opacity: 0.9,
 })
 
-const $errorBanner: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
-  borderRadius: 16,
+const $errorBanner: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
+  borderRadius: radius.medium,
   borderWidth: 1,
-  borderColor: colors.border,
-  backgroundColor: colors.background,
-  padding: spacing.sm,
+  borderColor: colors.danger,
+  backgroundColor: colors.surface,
+  paddingHorizontal: spacing.sm,
+  paddingVertical: spacing.xs,
 })
 
-const $errorText: ThemedStyle<TextStyle> = () => ({
-  opacity: 0.95,
+const $errorText: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.danger,
 })
 
-const $actionsBlock: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  gap: spacing.sm,
-})
-
-const $actionsTitle: ThemedStyle<TextStyle> = () => ({
-  opacity: 0.9,
-})
-
-const $buttonRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+const $actionGrid: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexDirection: "row",
-  gap: spacing.sm,
+  flexWrap: "wrap",
+  gap: spacing.xs,
 })
 
-const $button: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
-  flex: 1,
-  alignItems: "center",
-  justifyContent: "center",
-  paddingVertical: spacing.sm,
+const $actionTile: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
+  flexBasis: "48%",
+  borderWidth: 1,
+  borderColor: colors.borderSubtle,
+  backgroundColor: colors.surface,
+  borderRadius: radius.medium,
   paddingHorizontal: spacing.sm,
-  borderRadius: 16,
-  borderWidth: 1,
-  borderColor: colors.border,
-  backgroundColor: colors.background,
-})
-
-const $buttonPrimary: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
-  flex: 1,
-  alignItems: "center",
-  justifyContent: "center",
   paddingVertical: spacing.sm,
-  paddingHorizontal: spacing.sm,
-  borderRadius: 16,
-  borderWidth: 1,
-  borderColor: colors.palette.primary500,
-  backgroundColor: colors.palette.primary500,
+  gap: spacing.xxxs,
+  minHeight: 72,
 })
 
-const $buttonPrimaryText: ThemedStyle<TextStyle> = () => ({
-  opacity: 1,
+const $actionTilePrimary: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  borderColor: colors.primary,
+  backgroundColor: colors.glowSoft,
 })
 
-const $buttonFull: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
-  alignItems: "center",
-  justifyContent: "center",
-  paddingVertical: spacing.md,
-  paddingHorizontal: spacing.md,
-  borderRadius: 18,
-  borderWidth: 1,
-  borderColor: colors.border,
-  backgroundColor: colors.background,
-  gap: spacing.xxs,
+const $actionTileText: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.text,
+})
+
+const $actionTileTextPrimary: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.text,
 })
 
 async function getSyncStateRow() {
