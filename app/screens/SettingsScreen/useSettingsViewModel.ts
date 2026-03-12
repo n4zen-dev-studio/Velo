@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react"
 
-export type SettingsOptionId = "auto_sync" | "wifi_only" | "biometrics"
+export type SettingsOptionId = "biometrics"
 
 type Option = {
   id: SettingsOptionId
@@ -12,8 +12,6 @@ type Option = {
 type SettingsState = Record<SettingsOptionId, boolean>
 
 const DEFAULTS: SettingsState = {
-  auto_sync: true,
-  wifi_only: false,
   biometrics: false,
 }
 
@@ -34,16 +32,6 @@ export const useSettingsViewModel = () => {
 
   const options: Option[] = useMemo(
     () => [
-      {
-        id: "auto_sync",
-        label: "Auto-sync on launch",
-        value: values.auto_sync,
-      },
-      {
-        id: "wifi_only",
-        label: "Sync on Wi-Fi only",
-        value: values.wifi_only,
-      },
       {
         id: "biometrics",
         label: "Unlock with biometrics",

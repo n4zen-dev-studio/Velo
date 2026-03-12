@@ -33,6 +33,12 @@ import { clearOfflineMode } from "@/services/storage/session"
 import { clearCurrentUserId, getCurrentUserId, setSessionMode } from "@/services/sync/identity"
 import { resetOfflineClaimHandled } from "@/services/sync/offlineClaim"
 import { syncController } from "@/services/sync/SyncController"
+import {
+  describeSyncBehavior,
+  setSyncMode,
+  setSyncNetworkPolicy,
+  useSyncPreferences,
+} from "@/services/sync/syncPreferences"
 import { useSyncStatus } from "@/services/sync/syncStore"
 import { useWorkspaceStore } from "@/stores/workspaceStore"
 import { useAppTheme } from "@/theme/context"
@@ -55,7 +61,14 @@ export function SettingsScreen() {
   const { workspaces, activeWorkspace, createWorkspace, renameWorkspace, deleteWorkspace } =
     useWorkspaceStore()
   const syncStatus = useSyncStatus()
+  const syncPreferences = useSyncPreferences()
   const authSession = useAuthSession()
+
+  const syncBehaviorText = describeSyncBehavior({
+    preferences: syncPreferences,
+    isOnline: syncStatus.isOnline,
+    connectionType: syncStatus.networkType,
+  })
 
   const [showLogoutModal, setShowLogoutModal] = useState(false)
   const [logoutError, setLogoutError] = useState<string | null>(null)
@@ -549,6 +562,71 @@ export function SettingsScreen() {
           <CompactMetaPill label="Current" value={activeWorkspace?.label ?? "Personal"} />
         </View>
       </View>
+
+      <GlassCard>
+        <CompactSectionHeader
+          title="Sync"
+          subtitle={syncPreferences.syncMode === "manual" ? "Manual mode" : "Automatic mode"}
+        />
+        <View style={themed($syncStack)}>
+          <View style={themed($syncBlock)}>
+            <Text preset="caption" text="Sync mode" style={themed($subsectionLabel)} />
+            <View style={themed($segmentedRow)}>
+              <SegmentOption
+                label="Manual"
+                selected={syncPreferences.syncMode === "manual"}
+                onPress={() => void setSyncMode("manual")}
+              />
+              <SegmentOption
+                label="Automatic"
+                selected={syncPreferences.syncMode === "automatic"}
+                onPress={() => void setSyncMode("automatic")}
+              />
+            </View>
+          </View>
+
+          <View
+            style={[
+              themed($syncBlock),
+              syncPreferences.syncMode === "manual" ? themed($disabledSection) : null,
+            ]}
+          >
+            <Text preset="caption" text="Connection preference" style={themed($subsectionLabel)} />
+            <View style={themed($segmentedRow)}>
+              <SegmentOption
+                label="Wi-Fi only"
+                selected={syncPreferences.syncNetworkPolicy === "wifi_only"}
+                onPress={() => void setSyncNetworkPolicy("wifi_only")}
+                disabled={syncPreferences.syncMode === "manual"}
+              />
+              <SegmentOption
+                label="Any internet"
+                selected={syncPreferences.syncNetworkPolicy === "any"}
+                onPress={() => void setSyncNetworkPolicy("any")}
+                disabled={syncPreferences.syncMode === "manual"}
+              />
+            </View>
+          </View>
+
+          <View style={themed($syncHintCard)}>
+            <Text preset="caption" text={syncBehaviorText} style={themed($muted)} />
+            <View style={themed($syncMetaRow)}>
+              <Text
+                preset="caption"
+                text={`Connection: ${formatConnectionLabel(syncStatus.networkType)}`}
+                style={themed($muted)}
+              />
+              <Text
+                preset="caption"
+                text={
+                  syncStatus.pendingCount > 0 ? `${syncStatus.pendingCount} queued` : "Queue clear"
+                }
+                style={themed($strongText)}
+              />
+            </View>
+          </View>
+        </View>
+      </GlassCard>
 
       <GlassCard>
         <CompactSectionHeader title="Preferences" subtitle={`${options.length} controls`} />
@@ -1104,6 +1182,38 @@ function CompactSubsectionLabel({ text }: { text: string }) {
   return <Text preset="caption" text={text} style={themed($subsectionLabel)} />
 }
 
+function SegmentOption(props: {
+  label: string
+  selected: boolean
+  onPress: () => void
+  disabled?: boolean
+}) {
+  const { themed } = useAppTheme()
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={props.onPress}
+      disabled={props.disabled}
+      style={[
+        themed($segmentOption),
+        props.selected ? themed($segmentOptionActive) : null,
+        props.disabled ? themed($segmentOptionDisabled) : null,
+      ]}
+    >
+      <Text preset="caption" text={props.label} style={themed($strongText)} />
+    </Pressable>
+  )
+}
+
+function formatConnectionLabel(type: string) {
+  if (type === "wifi") return "Wi-Fi"
+  if (type === "cellular") return "Cellular"
+  if (type === "ethernet") return "Ethernet"
+  if (type === "none") return "Offline"
+  if (type === "other") return "Connected"
+  return "Unknown"
+}
+
 const $screen: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   paddingHorizontal: spacing.screenHorizontal,
   paddingTop: spacing.md,
@@ -1191,6 +1301,62 @@ const $groupedList: ThemedStyle<ViewStyle> = ({ colors, radius }) => ({
 const $inlineDivider: ThemedStyle<ViewStyle> = ({ colors }) => ({
   height: 1,
   backgroundColor: colors.borderSubtle,
+})
+
+const $syncStack: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: spacing.sm,
+})
+
+const $syncBlock: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: spacing.xs,
+})
+
+const $segmentedRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  gap: spacing.xs,
+})
+
+const $segmentOption: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
+  flex: 1,
+  minHeight: 42,
+  borderRadius: radius.pill,
+  borderWidth: 1,
+  borderColor: colors.borderSubtle,
+  backgroundColor: colors.surface,
+  alignItems: "center",
+  justifyContent: "center",
+  paddingHorizontal: spacing.sm,
+  paddingVertical: spacing.xs,
+})
+
+const $segmentOptionActive: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  borderColor: colors.primary,
+  backgroundColor: colors.glowSoft,
+})
+
+const $segmentOptionDisabled: ThemedStyle<ViewStyle> = () => ({
+  opacity: 0.5,
+})
+
+const $disabledSection: ThemedStyle<ViewStyle> = () => ({
+  opacity: 0.6,
+})
+
+const $syncHintCard: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
+  borderRadius: radius.medium,
+  borderWidth: 1,
+  borderColor: colors.borderSubtle,
+  backgroundColor: colors.surfaceGlass,
+  paddingHorizontal: spacing.sm,
+  paddingVertical: spacing.sm,
+  gap: spacing.xs,
+})
+
+const $syncMetaRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: spacing.sm,
 })
 
 const $rowLeft: ThemedStyle<ViewStyle> = ({ spacing }) => ({
