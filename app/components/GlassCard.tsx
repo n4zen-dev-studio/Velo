@@ -18,7 +18,7 @@ export function GlassCard({ children, style }: PropsWithChildren<GlassCardProps>
         width={160}
         height={190}
         color={theme.colors.glowSoft}
-        opacity={0.5}
+        opacity={0.2}
         style={themed($wash)}
       />
       {children}
