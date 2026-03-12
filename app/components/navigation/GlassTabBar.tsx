@@ -31,17 +31,21 @@ export function GlassTabBar({ state, descriptors, navigation }: BottomTabBarProp
       const options = descriptors[route.key]?.options ?? {}
       const label = String(options.tabBarLabel ?? options.title ?? route.name)
       const iconName =
-        route.name === "HomeTab"
+        route.name === "DashboardTab"
           ? focused
-            ? "home"
-            : "home-outline"
-          : route.name === "SettingsTab"
+            ? "grid"
+            : "grid-outline"
+          : route.name === "ProjectsTab"
             ? focused
-              ? "settings"
-              : "settings-outline"
-            : focused
-              ? "analytics"
-              : "analytics-outline"
+              ? "layers"
+              : "layers-outline"
+            : route.name === "SettingsTab"
+              ? focused
+                ? "settings"
+                : "settings-outline"
+              : focused
+                ? "analytics"
+                : "analytics-outline"
 
       return { route, index, focused, label, iconName }
     })

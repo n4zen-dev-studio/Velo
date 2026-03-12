@@ -79,7 +79,7 @@ export function AuthScreen() {
 
   // UI: pick a subtle accent based on your theme if it exists
   const accent = useMemo(() => {
-    return theme.colors.tint ?? theme.colors.primary ?? "#7C5CFF"
+    return theme.colors.tint ?? "#7C5CFF"
   }, [theme])
 
   useEffect(() => {

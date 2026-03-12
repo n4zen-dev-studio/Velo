@@ -1,642 +1,588 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react"
-import {
-  LayoutAnimation,
-  Modal,
-  Platform,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  UIManager,
-  View,
-  ViewStyle,
-  TextStyle,
-} from "react-native"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { Pressable, RefreshControl, TextStyle, View, ViewStyle } from "react-native"
 import { useNavigation } from "@react-navigation/native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
 import { Button } from "@/components/Button"
 import { GlassCard } from "@/components/GlassCard"
+import { HeaderAvatar } from "@/components/HeaderAvatar"
 import { PriorityDot } from "@/components/PriorityDot"
 import { Screen } from "@/components/Screen"
 import { SyncBadge } from "@/components/SyncBadge"
 import { Text } from "@/components/Text"
-import { HeaderAvatar } from "@/components/HeaderAvatar"
-import { useAppTheme } from "@/theme/context"
-import type { ThemedStyle } from "@/theme/types"
+import { WorkspaceSwitcher } from "@/components/WorkspaceSwitcher"
+import { goToInvites, goToProfile, goToProjectsTab } from "@/navigation/navigationActions"
 import type { HomeStackScreenProps } from "@/navigators/navigationTypes"
-import { goToInvites, goToProfile, goToSettingsTab } from "@/navigation/navigationActions"
 import { createHttpClient } from "@/services/api/httpClient"
 import { listMyInvites } from "@/services/api/invitesApi"
+import { listProjects } from "@/services/db/repositories/projectsRepository"
+import type { Project, Task } from "@/services/db/types"
 import { BASE_URL } from "@/config/api"
+import { useAppTheme } from "@/theme/context"
+import type { ThemedStyle } from "@/theme/types"
+import { formatDateTime } from "@/utils/dateFormat"
 
 import { useHomeViewModel } from "./useHomeViewModel"
+
+type FocusSection = {
+  title: string
+  helper: string
+  tasks: Task[]
+}
 
 export function HomeScreen() {
   const { themed, theme } = useAppTheme()
   const insets = useSafeAreaInsets()
   const navigation = useNavigation<HomeStackScreenProps<"Home">["navigation"]>()
-
   const {
     workspaces,
     activeWorkspaceId,
     setActiveWorkspaceId,
     uiTasksByStatus,
     activeWorkspace,
-    assigneeFilter,
-    setAssigneeFilter,
     assigneeLabels,
     refreshAll,
     isRefreshing,
-    bumpTaskStatus,
   } = useHomeViewModel()
 
-  const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false)
   const [pendingInvitesCount, setPendingInvitesCount] = useState(0)
-  const totalTasks = useMemo(
-    () => uiTasksByStatus.reduce((sum, lane) => sum + lane.tasks.length, 0),
-    [uiTasksByStatus],
-  )
+  const [projectStreams, setProjectStreams] = useState<Project[]>([])
 
-  const fabBottom = Math.max(insets.bottom, 0) + 50
+  useEffect(() => {
+    let mounted = true
+    void (async () => {
+      if (!activeWorkspaceId) return
+      const rows = await listProjects(activeWorkspaceId)
+      if (mounted) setProjectStreams(rows)
+    })()
+    return () => {
+      mounted = false
+    }
+  }, [activeWorkspaceId, isRefreshing])
 
-  const loadInvitesCount = useCallback(async () => {
-    try {
-      const client = createHttpClient(BASE_URL)
-      const invites = await listMyInvites(client)
-      setPendingInvitesCount(invites.length)
-    } catch {
-      setPendingInvitesCount(0)
+  useEffect(() => {
+    let mounted = true
+    void (async () => {
+      try {
+        const client = createHttpClient(BASE_URL)
+        const invites = await listMyInvites(client)
+        if (mounted) setPendingInvitesCount(invites.length)
+      } catch {
+        if (mounted) setPendingInvitesCount(0)
+      }
+    })()
+    return () => {
+      mounted = false
     }
   }, [])
 
-  useEffect(() => {
-    if (!workspaceMenuOpen) return
-    void loadInvitesCount()
-  }, [loadInvitesCount, workspaceMenuOpen])
+  const allTasks = useMemo(() => uiTasksByStatus.flatMap((lane) => lane.tasks), [uiTasksByStatus])
+  const doneStatusIds = useMemo(
+    () =>
+      new Set(
+        uiTasksByStatus
+          .filter((lane) => lane.status.category === "done")
+          .map((lane) => lane.status.id),
+      ),
+    [uiTasksByStatus],
+  )
+  const inProgressCount = useMemo(
+    () =>
+      uiTasksByStatus
+        .filter((lane) => lane.status.category === "in_progress")
+        .reduce((sum, lane) => sum + lane.tasks.length, 0),
+    [uiTasksByStatus],
+  )
+  const doneCount = useMemo(
+    () =>
+      uiTasksByStatus
+        .filter((lane) => lane.status.category === "done")
+        .reduce((sum, lane) => sum + lane.tasks.length, 0),
+    [uiTasksByStatus],
+  )
+  const openCount = allTasks.length - doneCount
+  const highPriorityOpen = useMemo(
+    () => allTasks.filter((task) => task.priority === "high" && !doneStatusIds.has(task.statusId)),
+    [allTasks, doneStatusIds],
+  )
+  const recentTasks = useMemo(
+    () =>
+      [...allTasks]
+        .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+        .slice(0, 4),
+    [allTasks],
+  )
+  const completedTasks = useMemo(
+    () =>
+      [...allTasks]
+        .filter((task) => doneStatusIds.has(task.statusId))
+        .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+        .slice(0, 3),
+    [allTasks, doneStatusIds],
+  )
 
-  useEffect(() => {
-    if (Platform.OS !== "android") return
-    if (!UIManager.setLayoutAnimationEnabledExperimental) return
-    UIManager.setLayoutAnimationEnabledExperimental(true)
-  }, [])
+  const focusSections = useMemo<FocusSection[]>(
+    () => [
+      {
+        title: "Needs attention",
+        helper: "High-priority items still outside done lanes.",
+        tasks: highPriorityOpen.slice(0, 3),
+      },
+      {
+        title: "In motion",
+        helper: "Current work moving through in-progress lanes.",
+        tasks: uiTasksByStatus
+          .filter((lane) => lane.status.category === "in_progress")
+          .flatMap((lane) => lane.tasks)
+          .slice(0, 3),
+      },
+      {
+        title: "Recently updated",
+        helper: "Latest activity across this project.",
+        tasks: recentTasks.slice(0, 3),
+      },
+    ],
+    [highPriorityOpen, recentTasks, uiTasksByStatus],
+  )
+
+  const statusBreakdown = useMemo(() => {
+    return [
+      {
+        label: "To do",
+        value: uiTasksByStatus
+          .filter((lane) => lane.status.category === "todo")
+          .reduce((sum, lane) => sum + lane.tasks.length, 0),
+        tone: theme.colors.warning,
+      },
+      { label: "In progress", value: inProgressCount, tone: theme.colors.primary },
+      { label: "Done", value: doneCount, tone: theme.colors.success },
+    ]
+  }, [
+    doneCount,
+    inProgressCount,
+    theme.colors.primary,
+    theme.colors.success,
+    theme.colors.warning,
+    uiTasksByStatus,
+  ])
+
+  const maxBreakdown = Math.max(...statusBreakdown.map((item) => item.value), 1)
 
   return (
     <Screen
-      preset="fixed"
+      preset="scroll"
       safeAreaEdges={["top", "bottom"]}
       contentContainerStyle={themed($screen)}
+      ScrollViewProps={{
+        refreshControl: (
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={() => refreshAll({ mode: "hard" })}
+            tintColor={theme.colors.primary}
+          />
+        ),
+      }}
     >
       <View style={themed($header)}>
-        <View style={themed($headerActions)}>
-          <HeaderAvatar onPress={goToProfile} size={50} />
-        </View>
-        <View style={themed($titleBlock)}>
-          <Text preset="display" text="Velo" style={themed($homeTitle)} />
-          <Text
-            preset="formHelper"
-            text="Momentum for the work that matters."
-            style={themed($homeSubtitle)}
-          />
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => setWorkspaceMenuOpen(true)}
-            style={themed($workspacePill)}
-            hitSlop={10}
-          >
+        <View style={themed($headerLead)}>
+          <HeaderAvatar onPress={goToProfile} size={52} />
+          <View style={themed($headerCopy)}>
+            <Text preset="overline" text="Dashboard" />
+            <Text preset="display" text="Execution pulse" style={themed($title)} />
             <Text
               preset="formHelper"
-              text={activeWorkspace?.label ?? "Workspace"}
-              style={themed($workspacePillText)}
-              numberOfLines={1}
+              text={`Focused on ${activeWorkspace?.label ?? "your project"} right now.`}
+              style={themed($subtitle)}
             />
-            <Text preset="subheading" text="▾" style={themed($chev)} />
-          </Pressable>
+          </View>
         </View>
-
         <View style={themed($headerActions)}>
           <SyncBadge />
         </View>
       </View>
 
+      <WorkspaceSwitcher
+        options={workspaces.map((workspace) => ({
+          id: workspace.id,
+          label: workspace.label,
+          subtitle:
+            workspace.kind === "personal"
+              ? "Personal"
+              : `${workspace.membersCount ?? 0} member${(workspace.membersCount ?? 0) === 1 ? "" : "s"}`,
+        }))}
+        activeId={activeWorkspaceId}
+        onSelect={(id) => void setActiveWorkspaceId(id)}
+      />
+
       <GlassCard style={themed($heroCard)}>
         <View style={themed($heroGlow)} />
-        <Text preset="overline" text="Workspace pulse" />
-        <View style={themed($heroStats)}>
-          <View style={themed($statCard)}>
-            <Text preset="caption" text="Open lanes" />
-            <Text preset="heading" text={`${uiTasksByStatus.length}`} />
+        <View style={themed($heroHeader)}>
+          <View>
+            <Text preset="overline" text="Execution snapshot" />
+            <Text preset="sectionTitle" text={activeWorkspace?.label ?? "Current project"} />
           </View>
-          <View style={themed($statCard)}>
-            <Text preset="caption" text="Tasks in motion" />
-            <Text preset="heading" text={`${totalTasks}`} />
-          </View>
+          <Pressable onPress={goToProjectsTab} style={themed($chipAction)}>
+            <Text preset="caption" text="Open projects" />
+          </Pressable>
+        </View>
+
+        <View style={themed($summaryGrid)}>
+          <MetricCard
+            label="Active projects"
+            value={`${workspaces.length}`}
+            tone={theme.colors.primaryAlt}
+          />
+          <MetricCard label="Open tasks" value={`${openCount}`} tone={theme.colors.primary} />
+          <MetricCard label="In motion" value={`${inProgressCount}`} tone={theme.colors.accent} />
+          <MetricCard
+            label="At risk"
+            value={`${highPriorityOpen.length}`}
+            tone={theme.colors.danger}
+          />
+        </View>
+
+        <View style={themed($quickActions)}>
+          <Button text="Create task" onPress={() => navigation.navigate("TaskEditor")} />
+          <Button text="Projects hub" preset="glass" onPress={goToProjectsTab} />
+          {pendingInvitesCount > 0 ? (
+            <Button
+              text={`Invites · ${pendingInvitesCount}`}
+              preset="filled"
+              onPress={goToInvites}
+            />
+          ) : null}
         </View>
       </GlassCard>
 
-      <ScrollView
-        contentContainerStyle={themed($scrollContent)}
-        refreshControl={
-          <RefreshControl
-            tintColor={theme.colors.primary}
-            refreshing={isRefreshing}
-            onRefresh={() => refreshAll({ mode: "hard" })}
-          />
-        }
-        showsVerticalScrollIndicator={false}
-      >
-        {activeWorkspace?.kind !== "personal" ? (
-          <View style={themed($filterRow)}>
-            <Pressable
-              onPress={() => setAssigneeFilter("all")}
-              style={[themed($filterPill), assigneeFilter === "all" && themed($filterPillActive)]}
-            >
-              <Text preset="caption" text="All tasks" />
-            </Pressable>
-            <Pressable
-              onPress={() => setAssigneeFilter("mine")}
-              style={[themed($filterPill), assigneeFilter === "mine" && themed($filterPillActive)]}
-            >
-              <Text preset="caption" text="Assigned to me" />
-            </Pressable>
+      <GlassCard>
+        <View style={themed($sectionHeader)}>
+          <View>
+            <Text preset="sectionTitle" text="Progress and load" />
+            <Text
+              preset="formHelper"
+              text={`${projectStreams.length} track${projectStreams.length === 1 ? "" : "s"} inside this project`}
+            />
           </View>
-        ) : null}
+          <Text preset="caption" text={`${doneCount}/${Math.max(allTasks.length, 1)} complete`} />
+        </View>
 
-        {uiTasksByStatus.map(({ status, tasks }, laneIndex) => (
-          <View
-            key={`${status.workspaceId}:${status.projectId ?? "personal"}:${status.id}`}
-            style={themed($section)}
-          >
-            <View style={themed($sectionHeader)}>
-              <Text preset="sectionTitle" text={status.name} />
-              <Text preset="caption" text={`${tasks.length} tasks`} />
-            </View>
-
-            {tasks.length === 0 ? (
-              <GlassCard>
-                <Text preset="formHelper" text="No tasks in this lane yet." />
-              </GlassCard>
-            ) : (
-              <View style={themed($cardsCol)}>
-                {tasks.map((task) => (
-                  <Pressable
-                    key={`${task.workspaceId}:${task.projectId ?? "personal"}:${task.id}`}
-                    onPress={() => navigation.navigate("TaskDetail", { taskId: task.id })}
-                    style={themed($pressableCard)}
-                  >
-                    <GlassCard>
-                      <View style={themed($taskHeaderRow)}>
-                        <View style={themed($taskRow)}>
-                          <PriorityDot priority={task.priority} />
-                          <Text preset="subheading" text={task.title} style={themed($taskTitle)} />
-                        </View>
-                        <View style={themed($statusControls)}>
-                          {laneIndex > 0 ? (
-                            <Pressable
-                              onPress={(e) => {
-                                e.stopPropagation?.()
-                                console.log("[ArrowPress]", {
-                                  taskId: task.id,
-                                  laneIndex,
-                                  dir: "up",
-                                  task,
-                                })
-                                LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut)
-                                void bumpTaskStatus(task.id, laneIndex, "up")
-                              }}
-                              style={({ pressed }) => [
-                                themed($statusButton),
-                                pressed ? themed($statusButtonPressed) : null,
-                              ]}
-                              hitSlop={6}
-                            >
-                              <Text preset="caption" text="↑" style={themed($statusArrow)} />
-                            </Pressable>
-                          ) : null}
-                          {laneIndex < uiTasksByStatus.length - 1 ? (
-                            <Pressable
-                              onPress={(e) => {
-                                e.stopPropagation?.()
-                                console.log("[ArrowPress]", {
-                                  taskId: task.id,
-                                  laneIndex,
-                                  dir: "down",
-                                  task,
-                                })
-                                LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut)
-                                void bumpTaskStatus(task.id, laneIndex, "down")
-                              }}
-                              style={({ pressed }) => [
-                                themed($statusButton),
-                                pressed ? themed($statusButtonPressed) : null,
-                              ]}
-                              hitSlop={6}
-                            >
-                              <Text preset="caption" text="↓" style={themed($statusArrow)} />
-                            </Pressable>
-                          ) : null}
-                        </View>
-                      </View>
-                      {!!task.description && (
-                        <Text
-                          preset="formHelper"
-                          text={task.description}
-                          style={themed($taskDesc)}
-                        />
-                      )}
-                      <Text
-                        preset="caption"
-                        text={`Assignee: ${
-                          task.assigneeUserId
-                            ? (assigneeLabels[task.assigneeUserId] ?? "Member")
-                            : "Unassigned"
-                        }`}
-                        style={themed($taskMeta)}
-                      />
-                    </GlassCard>
-                  </Pressable>
-                ))}
+        <View style={themed($breakdownStack)}>
+          {statusBreakdown.map((item) => (
+            <View key={item.label} style={themed($breakdownRow)}>
+              <Text preset="caption" text={item.label} style={themed($breakdownLabel)} />
+              <View style={themed($barTrack)}>
+                <View
+                  style={[
+                    themed($barFill(item.tone)),
+                    {
+                      width: `${Math.max((item.value / maxBreakdown) * 100, item.value > 0 ? 16 : 0)}%`,
+                    },
+                  ]}
+                />
               </View>
-            )}
+              <Text preset="caption" text={`${item.value}`} />
+            </View>
+          ))}
+        </View>
+      </GlassCard>
+
+      {focusSections.map((section) => (
+        <GlassCard key={section.title}>
+          <View style={themed($sectionHeader)}>
+            <View>
+              <Text preset="sectionTitle" text={section.title} />
+              <Text preset="formHelper" text={section.helper} />
+            </View>
+            <Text preset="caption" text={`${section.tasks.length}`} />
           </View>
-        ))}
 
-        {/* spacer so last content doesn’t hide behind FAB */}
-        <View style={{ height: 90 + fabBottom }} />
-      </ScrollView>
-
-      {/* Sticky FAB (outside ScrollView so it does NOT scroll) */}
-      <Pressable
-        accessibilityRole="button"
-        style={[themed($fab), { bottom: fabBottom }]}
-        onPress={() => navigation.navigate("TaskEditor")}
-      >
-        <Text preset="heading" text="+" style={themed($fabText)} />
-      </Pressable>
-
-      {/* Workspace dropdown */}
-      <Modal
-        visible={workspaceMenuOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setWorkspaceMenuOpen(false)}
-      >
-        <Pressable style={themed($modalBackdrop)} onPress={() => setWorkspaceMenuOpen(false)}>
-          <Pressable style={themed($menuCard)} onPress={() => {}}>
-            <View style={themed($menuHeader)}>
-              <Text preset="subheading" text="Workspaces" />
-              <Pressable onPress={() => setWorkspaceMenuOpen(false)} hitSlop={10}>
-                <Text preset="formHelper" text="Close" />
-              </Pressable>
+          {section.tasks.length === 0 ? (
+            <Text
+              preset="formHelper"
+              text="Nothing urgent in this view."
+              style={themed($emptyText)}
+            />
+          ) : (
+            <View style={themed($taskStack)}>
+              {section.tasks.map((task) => (
+                <TaskRow
+                  key={task.id}
+                  task={task}
+                  assigneeLabel={
+                    task.assigneeUserId
+                      ? (assigneeLabels[task.assigneeUserId] ?? "Assigned")
+                      : "Unassigned"
+                  }
+                  onPress={() => navigation.navigate("TaskDetail", { taskId: task.id })}
+                />
+              ))}
             </View>
+          )}
+        </GlassCard>
+      ))}
 
-            <View style={themed($menuList)}>
-              {workspaces.map((w) => {
-                const isActive = w.id === activeWorkspaceId
-                return (
-                  <Pressable
-                    key={w.id}
-                    onPress={() => {
-                      setWorkspaceMenuOpen(false)
-                      void (async () => {
-                        try {
-                          await setActiveWorkspaceId(w.id)
-                        } catch (error) {
-                          console.warn("[Workspace] Failed to switch workspace", error)
-                        }
-                      })()
-                    }}
-                    style={themed(isActive ? $menuItemActive : $menuItem)}
-                  >
-                    <View style={themed($menuItemLeft)}>
-                      <Text preset="subheading" text={w.label} />
-                      {/* <Text preset="formHelper" text={w.projectId ? "Project" : "Personal"} /> */}
-                    </View>
-                    {isActive ? <Text preset="formHelper" text="✓" /> : null}
-                  </Pressable>
-                )
-              })}
-            </View>
-
-            <View style={themed($menuFooter)}>
-              {/* “Create workspace” entry near the dropdown, as requested.
-                  Re-using settings tab as the safest existing flow without breaking the app. */}
-              <Button
-                text="Create workspace"
-                preset="reversed"
-                onPress={() => {
-                  setWorkspaceMenuOpen(false)
-                  goToSettingsTab()
-                }}
+      <GlassCard>
+        <View style={themed($sectionHeader)}>
+          <View>
+            <Text preset="sectionTitle" text="Recently finished" />
+            <Text preset="formHelper" text="Momentum worth keeping visible." />
+          </View>
+        </View>
+        {completedTasks.length === 0 ? (
+          <Text preset="formHelper" text="No completed tasks yet." style={themed($emptyText)} />
+        ) : (
+          <View style={themed($taskStack)}>
+            {completedTasks.map((task) => (
+              <TaskRow
+                key={task.id}
+                task={task}
+                assigneeLabel={
+                  task.assigneeUserId
+                    ? (assigneeLabels[task.assigneeUserId] ?? "Assigned")
+                    : "Unassigned"
+                }
+                onPress={() => navigation.navigate("TaskDetail", { taskId: task.id })}
               />
-              {pendingInvitesCount > 0 ? (
-                <View style={themed($menuFooterRow)}>
-                  <Button
-                    text="Workspace Invites"
-                    preset="reversed"
-                    onPress={() => {
-                      setWorkspaceMenuOpen(false)
-                      goToInvites()
-                    }}
-                    style={{ marginTop: 10, flex: 1 }}
-                  />
-                  <View style={themed($inviteBadge)}>
-                    <Text
-                      preset="formHelper"
-                      text={`${pendingInvitesCount}`}
-                      style={themed($inviteBadgeText)}
-                    />
-                  </View>
-                </View>
-              ) : null}
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
+            ))}
+          </View>
+        )}
+      </GlassCard>
+
+      <View style={{ height: Math.max(insets.bottom, 16) + 90 }} />
     </Screen>
   )
 }
 
-const $screen: ThemedStyle<ViewStyle> = () => ({
-  flex: 1,
-  backgroundColor: "transparent",
+function MetricCard({ label, value, tone }: { label: string; value: string; tone: string }) {
+  const { themed } = useAppTheme()
+
+  return (
+    <View style={themed($metricCard)}>
+      <View style={[themed($metricDot), { backgroundColor: tone }]} />
+      <Text preset="caption" text={label} style={themed($metricLabel)} />
+      <Text preset="heading" text={value} />
+    </View>
+  )
+}
+
+function TaskRow({
+  task,
+  assigneeLabel,
+  onPress,
+}: {
+  task: Task
+  assigneeLabel: string
+  onPress: () => void
+}) {
+  const { themed } = useAppTheme()
+  const updatedLabel = useMemo(() => formatDateTime(task.updatedAt), [task.updatedAt])
+
+  return (
+    <Pressable onPress={onPress} style={themed($taskCard)}>
+      <View style={themed($taskHeader)}>
+        <View style={themed($taskTitleRow)}>
+          <PriorityDot priority={task.priority} />
+          <Text preset="formLabel" text={task.title} style={themed($taskTitle)} />
+        </View>
+        <Text preset="caption" text={task.priority.toUpperCase()} />
+      </View>
+      {!!task.description ? (
+        <Text
+          preset="formHelper"
+          text={task.description}
+          numberOfLines={2}
+          style={themed($taskDescription)}
+        />
+      ) : null}
+      <View style={themed($taskMetaRow)}>
+        <Text preset="caption" text={assigneeLabel} />
+        <Text preset="caption" text={updatedLabel} />
+      </View>
+    </Pressable>
+  )
+}
+
+const $screen: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  paddingTop: spacing.screenVertical,
+  paddingBottom: spacing.xxxl,
+  gap: spacing.sectionGap,
 })
 
 const $header: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   paddingHorizontal: spacing.screenHorizontal,
-  paddingTop: spacing.md,
   flexDirection: "row",
-  alignItems: "flex-start",
   justifyContent: "space-between",
+  gap: spacing.md,
+  alignItems: "flex-start",
+})
+
+const $headerLead: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flex: 1,
+  flexDirection: "row",
   gap: spacing.md,
 })
 
-const $titleBlock: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+const $headerCopy: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flex: 1,
-  gap: spacing.xs,
+  gap: spacing.xxs,
 })
 
-const $homeTitle: ThemedStyle<TextStyle> = () => ({
+const $headerActions: ThemedStyle<ViewStyle> = () => ({
+  alignItems: "flex-end",
+})
+
+const $title: ThemedStyle<TextStyle> = () => ({
   lineHeight: 40,
 })
 
-const $homeSubtitle: ThemedStyle<TextStyle> = ({ colors }) => ({
+const $subtitle: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.textMuted,
-})
-
-const $headerActions: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  flexDirection: "row",
-  alignItems: "center",
-  gap: spacing.sm,
 })
 
 const $heroCard: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   marginHorizontal: spacing.screenHorizontal,
-  marginTop: spacing.md,
+  overflow: "hidden",
 })
 
 const $heroGlow: ThemedStyle<ViewStyle> = ({ colors }) => ({
   position: "absolute",
-  right: -30,
-  top: -50,
   width: 180,
   height: 180,
   borderRadius: 999,
   backgroundColor: colors.glowStrong,
+  top: -52,
+  right: -32,
 })
 
-const $heroStats: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+const $heroHeader: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexDirection: "row",
+  justifyContent: "space-between",
   gap: spacing.md,
-  marginTop: spacing.sm,
+  alignItems: "flex-start",
+  marginBottom: spacing.md,
 })
 
-const $statCard: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
-  flex: 1,
-  borderRadius: radius.medium,
-  padding: spacing.md,
-  backgroundColor: colors.surfaceGlass,
-  borderWidth: 1,
-  borderColor: colors.borderSubtle,
-  gap: spacing.xxs,
-})
-
-const $scrollContent: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  paddingTop: spacing.sectionGap,
-  paddingBottom: spacing.xxl,
-  gap: spacing.sectionGap,
-})
-
-const $workspacePill: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
-  alignSelf: "flex-start",
-  flexDirection: "row",
-  alignItems: "center",
-  gap: spacing.xs,
-  paddingHorizontal: spacing.sm,
-  paddingVertical: spacing.xs,
+const $chipAction: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
   borderRadius: radius.pill,
   borderWidth: 1,
   borderColor: colors.borderStrong,
   backgroundColor: colors.surfaceGlass,
+  paddingHorizontal: spacing.sm,
+  paddingVertical: spacing.xxs,
 })
 
-const $workspacePillText: ThemedStyle<TextStyle> = () => ({
-  maxWidth: 220,
+const $summaryGrid: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  flexWrap: "wrap",
+  gap: spacing.sm,
 })
 
-const $chev: ThemedStyle<TextStyle> = () => ({
-  opacity: 0.8,
+const $metricCard: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
+  width: "47%",
+  minWidth: 140,
+  borderRadius: radius.medium,
+  borderWidth: 1,
+  borderColor: colors.borderSubtle,
+  backgroundColor: colors.surface,
+  padding: spacing.md,
+  gap: spacing.xxs,
 })
 
-const $section: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  paddingHorizontal: spacing.screenHorizontal,
+const $metricDot: ThemedStyle<ViewStyle> = ({ radius }) => ({
+  width: 8,
+  height: 8,
+  borderRadius: radius.pill,
+})
+
+const $metricLabel: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.textMuted,
+})
+
+const $quickActions: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  marginTop: spacing.lg,
   gap: spacing.sm,
 })
 
 const $sectionHeader: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexDirection: "row",
   justifyContent: "space-between",
-  alignItems: "baseline",
-  marginBottom: spacing.xs,
+  alignItems: "flex-start",
+  gap: spacing.sm,
+  marginBottom: spacing.md,
 })
 
-const $cardsCol: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+const $breakdownStack: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.sm,
 })
 
-const $pressableCard: ThemedStyle<ViewStyle> = () => ({
-  // keeps press area clean without changing your GlassCard component
-})
-
-const $taskRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+const $breakdownRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexDirection: "row",
   alignItems: "center",
   gap: spacing.sm,
-  marginBottom: spacing.xs,
 })
 
-const $taskHeaderRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  flexDirection: "row",
-  alignItems: "flex-start",
-  justifyContent: "space-between",
+const $breakdownLabel: ThemedStyle<TextStyle> = ({ colors }) => ({
+  width: 76,
+  color: colors.textMuted,
+})
+
+const $barTrack: ThemedStyle<ViewStyle> = ({ colors, radius }) => ({
+  flex: 1,
+  height: 10,
+  borderRadius: radius.pill,
+  backgroundColor: colors.backgroundSecondary,
+  overflow: "hidden",
+})
+
+const $barFill =
+  (backgroundColor: string): ThemedStyle<ViewStyle> =>
+  ({ radius }) => ({
+    height: "100%",
+    borderRadius: radius.pill,
+    backgroundColor,
+  })
+
+const $taskStack: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.sm,
+})
+
+const $taskCard: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
+  borderRadius: radius.medium,
+  borderWidth: 1,
+  borderColor: colors.borderSubtle,
+  backgroundColor: colors.surface,
+  padding: spacing.md,
+  gap: spacing.xs,
+})
+
+const $taskHeader: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: spacing.sm,
+})
+
+const $taskTitleRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  alignItems: "center",
+  gap: spacing.sm,
+  flex: 1,
 })
 
 const $taskTitle: ThemedStyle<TextStyle> = () => ({
   flex: 1,
 })
 
-const $taskDesc: ThemedStyle<TextStyle> = ({ colors }) => ({
+const $taskDescription: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.textMuted,
 })
 
-const $statusControls: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  alignItems: "center",
-  gap: spacing.xs,
-})
-
-const $statusButton: ThemedStyle<ViewStyle> = ({ colors, radius }) => ({
-  width: 28,
-  height: 28,
-  borderRadius: radius.small,
-  alignItems: "center",
-  justifyContent: "center",
-  borderWidth: 1,
-  borderColor: colors.borderSubtle,
-  backgroundColor: colors.surfaceGlass,
-})
-
-const $statusButtonPressed: ThemedStyle<ViewStyle> = ({ colors }) => ({
-  borderColor: colors.primary,
-  backgroundColor: colors.glowSoft,
-})
-
-const $statusArrow: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.text,
-  lineHeight: 18,
-})
-
-const $filterRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+const $taskMetaRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexDirection: "row",
-  gap: spacing.sm,
-  paddingHorizontal: spacing.screenHorizontal,
-})
-
-const $filterPill: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
-  paddingHorizontal: spacing.sm,
-  paddingVertical: spacing.xs,
-  borderRadius: radius.pill,
-  backgroundColor: colors.surface,
-  borderWidth: 1,
-  borderColor: colors.borderSubtle,
-})
-
-const $filterPillActive: ThemedStyle<ViewStyle> = ({ colors }) => ({
-  backgroundColor: colors.glowSoft,
-  borderColor: colors.primary,
-})
-
-const $taskMeta: ThemedStyle<TextStyle> = ({ colors, spacing }) => ({
-  color: colors.textDim,
-  marginTop: spacing.xs,
-})
-
-const $fab: ThemedStyle<ViewStyle> = ({ colors, spacing, elevation }) => ({
-  position: "absolute",
-  right: spacing.screenHorizontal,
-  width: 62,
-  height: 62,
-  borderRadius: 31,
-  alignItems: "center",
-  justifyContent: "center",
-  backgroundColor: colors.primary,
-  borderWidth: 1,
-  borderColor: "rgba(255,255,255,0.2)",
-  ...elevation.glow,
-})
-
-const $fabText: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.textInverse,
-})
-
-const $modalBackdrop: ThemedStyle<ViewStyle> = () => ({
-  flex: 1,
-  backgroundColor: "rgba(0,0,0,0.35)",
-  justifyContent: "center",
-  padding: 16,
-})
-
-const $menuCard: ThemedStyle<ViewStyle> = ({ colors, spacing, radius, elevation }) => ({
-  borderRadius: radius.large,
-  borderWidth: 1,
-  borderColor: colors.borderSubtle,
-  backgroundColor: colors.surfaceElevated,
-  padding: spacing.md,
-  gap: spacing.md,
-  ...elevation.floating,
-})
-
-const $menuHeader: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  flexDirection: "row",
-  alignItems: "center",
   justifyContent: "space-between",
   gap: spacing.sm,
 })
 
-const $menuList: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  gap: spacing.sm,
-})
-
-const $menuItem: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
-  flexDirection: "row",
-  alignItems: "center",
-  justifyContent: "space-between",
-  paddingVertical: spacing.sm,
-  paddingHorizontal: spacing.sm,
-  borderRadius: radius.medium,
-  borderWidth: 1,
-  borderColor: colors.borderSubtle,
-  backgroundColor: colors.surface,
-})
-
-const $menuItemActive: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
-  flexDirection: "row",
-  alignItems: "center",
-  justifyContent: "space-between",
-  paddingVertical: spacing.sm,
-  paddingHorizontal: spacing.sm,
-  borderRadius: radius.medium,
-  borderWidth: 1,
-  borderColor: colors.primary,
-  backgroundColor: colors.glowSoft,
-})
-
-const $menuItemLeft: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  flex: 1,
-  gap: spacing.xxs,
-})
-
-const $menuFooter: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  paddingTop: spacing.xs,
-})
-
-const $menuFooterRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  flexDirection: "row",
-  alignItems: "center",
-  gap: spacing.sm,
-})
-
-const $inviteBadge: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
-  minWidth: 22,
-  paddingHorizontal: spacing.xs,
-  paddingVertical: 2,
-  borderRadius: 999,
-  backgroundColor: colors.primary,
-  alignItems: "center",
-  justifyContent: "center",
-  marginTop: 10,
-})
-
-const $inviteBadgeText: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.textInverse,
-  padding: 3,
+const $emptyText: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.textMuted,
 })

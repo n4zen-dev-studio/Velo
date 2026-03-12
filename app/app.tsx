@@ -61,7 +61,7 @@ const config = {
         },
         MainTabs: {
           screens: {
-            HomeTab: {
+            DashboardTab: {
               screens: {
                 Home: "home",
                 TaskEditor: "task-editor/:taskId?",
@@ -71,6 +71,14 @@ const config = {
                 InviteAccept: "invite/:token?",
                 Invites: "invites",
                 Profile: "profile",
+              },
+            },
+            ProjectsTab: {
+              screens: {
+                ProjectsHome: "projects",
+                ProjectDetail: "projects/:workspaceId",
+                TaskEditor: "projects/task-editor/:taskId?",
+                TaskDetail: "projects/task/:taskId",
               },
             },
             SettingsTab: "settings",
@@ -118,7 +126,9 @@ export function App() {
 
   useEffect(() => {
     syncController.initialize()
-    registerBackgroundSync().catch((error) => console.warn("Background sync registration failed", error))
+    registerBackgroundSync().catch((error) =>
+      console.warn("Background sync registration failed", error),
+    )
     return () => syncController.dispose()
   }, [])
 

@@ -45,22 +45,23 @@ export function WorkspaceSwitcher({ options, activeId, onSelect }: WorkspaceSwit
 }
 
 const $list: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  paddingHorizontal: spacing.lg,
+  paddingHorizontal: spacing.screenHorizontal,
   gap: spacing.sm,
 })
 
-const $chip: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+const $chip: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
   paddingHorizontal: spacing.md,
   paddingVertical: spacing.sm,
-  borderRadius: 16,
+  borderRadius: radius.large,
   borderWidth: 1,
-  borderColor: colors.palette.neutral300,
-  backgroundColor: colors.palette.neutral100,
+  borderColor: colors.borderSubtle,
+  backgroundColor: colors.surface,
+  minWidth: 120,
 })
 
 const $chipActive: ThemedStyle<ViewStyle> = ({ colors }) => ({
-  borderColor: colors.palette.primary400,
-  backgroundColor: colors.palette.primary100,
+  borderColor: colors.primary,
+  backgroundColor: colors.glowSoft,
 })
 
 const $chipSubtitle: ThemedStyle<TextStyle> = ({ colors }) => ({
