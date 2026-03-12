@@ -1,7 +1,7 @@
 import { ComponentProps } from "react"
+import { BottomTabScreenProps } from "@react-navigation/bottom-tabs"
 import { NavigationContainer } from "@react-navigation/native"
 import { NativeStackScreenProps } from "@react-navigation/native-stack"
-import { BottomTabScreenProps } from "@react-navigation/bottom-tabs"
 
 export type RootStackParamList = {
   Onboarding: undefined
@@ -36,6 +36,7 @@ export type HomeStackParamList = {
 }
 
 export type ProjectsStackParamList = {
+  ProjectsEntry: undefined
   ProjectsHome: undefined
   ProjectDetail: { workspaceId: string }
   TaskEditor: { taskId?: string; projectId?: string } | undefined

@@ -1,11 +1,12 @@
 import { createNativeStackNavigator } from "@react-navigation/native-stack"
 
-import { ProjectDetailScreen } from "@/screens/ProjectDetailScreen"
-import { ProjectsScreen } from "@/screens/ProjectsScreen"
-import { TaskEditorScreen } from "@/screens/TaskEditorScreen"
-import { TaskDetailScreen } from "@/screens/TaskDetailScreen"
-import { useAppTheme } from "@/theme/context"
 import type { ProjectsStackParamList } from "@/navigators/navigationTypes"
+import { ProjectDetailScreen } from "@/screens/ProjectDetailScreen"
+import { ProjectsEntryScreen } from "@/screens/ProjectsEntryScreen"
+import { ProjectsScreen } from "@/screens/ProjectsScreen"
+import { TaskDetailScreen } from "@/screens/TaskDetailScreen"
+import { TaskEditorScreen } from "@/screens/TaskEditorScreen"
+import { useAppTheme } from "@/theme/context"
 
 const Stack = createNativeStackNavigator<ProjectsStackParamList>()
 
@@ -16,13 +17,14 @@ export function ProjectsStack() {
 
   return (
     <Stack.Navigator
-      initialRouteName="ProjectsHome"
+      initialRouteName="ProjectsEntry"
       screenOptions={{
         headerShown: false,
         navigationBarColor: colors.background,
         contentStyle: { backgroundColor: colors.background },
       }}
     >
+      <Stack.Screen name="ProjectsEntry" component={ProjectsEntryScreen} />
       <Stack.Screen name="ProjectsHome" component={ProjectsScreen} />
       <Stack.Screen name="ProjectDetail" component={ProjectDetailScreen} />
       <Stack.Screen name="TaskEditor" component={TaskEditorScreen} />

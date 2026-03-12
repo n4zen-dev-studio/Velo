@@ -270,11 +270,7 @@ export function ProjectDetailScreen() {
             style={themed($subtitle)}
           />
         </View>
-        <Button
-          text="Dashboard"
-          preset="glass"
-          onPress={() => navigation.getParent()?.navigate("DashboardTab" as never)}
-        />
+        <Button text="Manage" preset="glass" onPress={() => navigation.navigate("ProjectsHome")} />
       </View>
 
       <View style={themed($statPillsRow)}>
@@ -571,8 +567,8 @@ export function ProjectDetailScreen() {
         </>
       ) : null}
 
-      <ProjectFab bottom={fabBottom} onPress={() => navigation.navigate("TaskEditor")} />
       <View style={{ height: fabBottom + 18 }} />
+      <ProjectFab bottom={fabBottom} onPress={() => navigation.navigate("TaskEditor")} />
     </Screen>
   )
 }
@@ -719,6 +715,7 @@ const $screen: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   paddingTop: spacing.md,
   paddingBottom: spacing.xxxl,
   gap: spacing.md,
+  flex:1,
 })
 
 const $header: ThemedStyle<ViewStyle> = ({ spacing }) => ({
@@ -778,6 +775,7 @@ const $segmentChipActive: ThemedStyle<ViewStyle> = ({ colors }) => ({
 const $boardScroll: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.sm,
   paddingRight: spacing.screenHorizontal,
+  paddingBottom: spacing.lg,
 })
 
 const $laneCard: ThemedStyle<ViewStyle> = () => ({
@@ -960,6 +958,7 @@ const $streamCard: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
 
 const $fab: ThemedStyle<ViewStyle> = ({ colors, elevation }) => ({
   position: "absolute",
+  bottom: 20,
   right: 20,
   width: 58,
   height: 58,

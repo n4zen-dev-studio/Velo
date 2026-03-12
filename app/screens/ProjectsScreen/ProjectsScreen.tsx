@@ -161,14 +161,14 @@ export function ProjectsScreen() {
       <View style={themed($header)}>
         <View style={themed($headerCopy)}>
           <Text preset="overline" text="Projects" />
-          <Text preset="heading" text="Project Hub" />
+          <Text preset="heading" text="Manage projects" />
           <Text
             preset="caption"
-            text="Jump back into active work, or manage projects without leaving mobile flow."
+            text="Switch projects, create new ones, and manage invites without leaving the workspace flow."
             style={themed($subtitle)}
           />
         </View>
-        
+
         <Pressable onPress={() => setCreateOpen(true)} style={themed($iconAction)}>
           <Text preset="subheading" text="+" />
         </Pressable>
@@ -224,7 +224,7 @@ export function ProjectsScreen() {
                 style={themed($subtitle)}
               />
             </View>
-            <Button text="Open board" onPress={() => void openProject(activeCard.workspace.id)} />
+            <Text preset="caption" text="Open from list below" style={themed($metricLabel)} />
           </View>
           <View style={themed($miniStatsRow)}>
             <ProjectStatPill label="Open" value={`${activeCard.openTasks}`} />
@@ -371,7 +371,11 @@ function CompactProjectCard({
             </View>
           </View>
           <View style={themed($projectAside)}>
-            <Button text="Open" preset="filled" onPress={onOpen} />
+            <Text
+              preset="caption"
+              text={isActive ? "Current" : "Tap to open"}
+              style={themed(isActive ? $currentBadge : $subtitle)}
+            />
             {onRename ? <Button text="Edit" preset="glass" onPress={onRename} /> : null}
             {onDelete ? <Button text="Delete" preset="reversed" onPress={onDelete} /> : null}
           </View>

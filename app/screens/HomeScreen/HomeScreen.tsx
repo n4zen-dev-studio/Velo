@@ -703,7 +703,7 @@ const $statsGrid: ThemedStyle<ViewStyle> = ({ spacing }) => ({
 })
 
 const $statCard: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
-  width: "47.5%",
+  width: "22%",
   minHeight: 78,
   borderRadius: radius.medium,
   borderWidth: 1,
@@ -717,7 +717,7 @@ const $statCard: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
 const $statTopRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexDirection: "row",
   alignItems: "center",
-  gap: spacing.xs,
+  gap: spacing.xxs,
 })
 
 const $statDot: ThemedStyle<ViewStyle> = ({ radius }) => ({
@@ -829,23 +829,24 @@ const $miniBarLabel: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.textDim,
 })
 
-const $actionsCard: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+const $actionsCard: ThemedStyle<ViewStyle> = ({ spacing ,colors}) => ({
   gap: spacing.sm,
+  
 })
 
 const $quickActionsRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexDirection: "row",
   flexWrap: "wrap",
-  gap: spacing.xs,
+  gap: spacing.xxs,
 })
 
 const $actionPill: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
   borderRadius: radius.pill,
   borderWidth: 1,
   borderColor: colors.borderSubtle,
-  backgroundColor: colors.surface,
   paddingHorizontal: spacing.sm,
   paddingVertical: spacing.xs,
+  backgroundColor: colors.glowSoft,
 })
 
 const $actionText: ThemedStyle<TextStyle> = ({ colors }) => ({
