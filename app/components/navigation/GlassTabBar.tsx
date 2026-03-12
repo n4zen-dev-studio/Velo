@@ -1,14 +1,20 @@
-import React, { useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { LayoutChangeEvent, Pressable, View, ViewStyle } from "react-native"
-import type { BottomTabBarProps } from "@react-navigation/bottom-tabs"
-import { useSafeAreaInsets } from "react-native-safe-area-context"
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated"
 import { Ionicons } from "@expo/vector-icons"
+import type { BottomTabBarProps } from "@react-navigation/bottom-tabs"
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from "react-native-reanimated"
+import { useSafeAreaInsets } from "react-native-safe-area-context"
 
 import { Text } from "@/components/Text"
 import { useAppTheme } from "@/theme/context"
-import { RadialGlow } from "../RadialGlow"
 import { ThemedStyle } from "@/theme/types"
+
+import { RadialGlow } from "../RadialGlow"
 
 let BlurView: any = null
 try {
@@ -20,12 +26,18 @@ try {
 const PILL_HEIGHT = 72
 const INDICATOR_PADDING = 6
 
-export function GlassTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
+export function GlassTabBar({
+  state,
+  descriptors,
+  navigation,
+  hidden = false,
+}: BottomTabBarProps & { hidden?: boolean }) {
   const { theme, themed } = useAppTheme()
   const insets = useSafeAreaInsets()
   const [pillWidth, setPillWidth] = useState(0)
   const hasInitialized = useRef(false)
   const translateX = useSharedValue(0)
+  const visibilityProgress = useSharedValue(hidden ? 0 : 1)
 
   const tabs = useMemo(() => {
     return state.routes.map((route, index) => {
@@ -53,10 +65,13 @@ export function GlassTabBar({ state, descriptors, navigation }: BottomTabBarProp
     })
   }, [descriptors, state.index, state.routes])
 
-  const calcTargetX = (width: number, index: number) => {
-    const tabWidth = width / state.routes.length
-    return tabWidth * index + INDICATOR_PADDING
-  }
+  const calcTargetX = useCallback(
+    (width: number, index: number) => {
+      const tabWidth = width / state.routes.length
+      return tabWidth * index + INDICATOR_PADDING
+    },
+    [state.routes.length],
+  )
 
   const onPillLayout = (e: LayoutChangeEvent) => {
     const width = e.nativeEvent.layout.width
@@ -65,25 +80,38 @@ export function GlassTabBar({ state, descriptors, navigation }: BottomTabBarProp
     hasInitialized.current = true
   }
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (!pillWidth || !hasInitialized.current) return
     translateX.value = withSpring(calcTargetX(pillWidth, state.index), {
       damping: 20,
       stiffness: 240,
       overshootClamping: true,
     })
-  }, [pillWidth, state.index])
+  }, [calcTargetX, pillWidth, state.index, translateX])
+
+  useEffect(() => {
+    visibilityProgress.value = withTiming(hidden ? 0 : 1, {
+      duration: hidden ? 170 : 220,
+    })
+  }, [hidden, visibilityProgress])
 
   const indicatorStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: translateX.value }],
   }))
 
+  const rootAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: visibilityProgress.value,
+    transform: [{ translateY: (1 - visibilityProgress.value) * 32 }],
+  }))
+  const indicatorWidth = pillWidth ? pillWidth / state.routes.length - INDICATOR_PADDING * 2 : 0
+  const indicatorFrameStyle = useMemo(() => ({ width: indicatorWidth }), [indicatorWidth])
+
   const BlurContainer = BlurView ? BlurView : View
 
   return (
-    <View
-      pointerEvents="box-none"
-      style={[themed($root), { paddingBottom: Math.max(insets.bottom, 10) }]}
+    <Animated.View
+      pointerEvents={hidden ? "none" : "box-none"}
+      style={[themed($root), { paddingBottom: Math.max(insets.bottom, 10) }, rootAnimatedStyle]}
     >
       <BlurContainer
         {...(BlurView
@@ -94,13 +122,7 @@ export function GlassTabBar({ state, descriptors, navigation }: BottomTabBarProp
       >
         <Animated.View
           pointerEvents="none"
-          style={[
-            themed($indicator),
-            {
-              width: pillWidth ? pillWidth / state.routes.length - INDICATOR_PADDING * 2 : 0,
-            },
-            indicatorStyle,
-          ]}
+          style={[themed($indicator), indicatorFrameStyle, indicatorStyle]}
         >
           {/* <View style={themed($indicatorGlowLeft)} />
           <View style={themed($indicatorGlowRight)} /> */}
@@ -156,7 +178,7 @@ export function GlassTabBar({ state, descriptors, navigation }: BottomTabBarProp
           ))}
         </View>
       </BlurContainer>
-    </View>
+    </Animated.View>
   )
 }
 

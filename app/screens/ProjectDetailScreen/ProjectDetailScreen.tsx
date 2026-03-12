@@ -15,15 +15,9 @@ import { GlassCard } from "@/components/GlassCard"
 import { PriorityDot } from "@/components/PriorityDot"
 import { Screen } from "@/components/Screen"
 import { Text } from "@/components/Text"
-import { TextField } from "@/components/TextField"
 import { BASE_URL } from "@/config/api"
 import type { ProjectsStackScreenProps } from "@/navigators/navigationTypes"
 import { createHttpClient } from "@/services/api/httpClient"
-import {
-  inviteToWorkspace,
-  listWorkspaceInvites,
-  type WorkspaceInvite,
-} from "@/services/api/invitesApi"
 import { listWorkspaceMembers as listWorkspaceMembersApi } from "@/services/api/workspacesApi"
 import { useAuthSession } from "@/services/auth/session"
 import { listProjects } from "@/services/db/repositories/projectsRepository"
@@ -62,9 +56,6 @@ export function ProjectDetailScreen() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [streams, setStreams] = useState<Project[]>([])
   const [members, setMembers] = useState<MemberSummary[]>([])
-  const [invites, setInvites] = useState<WorkspaceInvite[]>([])
-  const [inviteEmail, setInviteEmail] = useState("")
-  const [inviteFeedback, setInviteFeedback] = useState<string | null>(null)
   const [movingTaskId, setMovingTaskId] = useState<string | null>(null)
 
   const workspace = useMemo(
@@ -101,10 +92,7 @@ export function ProjectDetailScreen() {
     if (authSession.isAuthenticated) {
       try {
         const client = createHttpClient(BASE_URL)
-        const [remoteMembers, remoteInvites] = await Promise.all([
-          listWorkspaceMembersApi(client, workspaceId),
-          listWorkspaceInvites(client, workspaceId),
-        ])
+        const remoteMembers = await listWorkspaceMembersApi(client, workspaceId)
 
         const nextMembers = await Promise.all(
           remoteMembers.map(async (member) => ({
@@ -119,10 +107,7 @@ export function ProjectDetailScreen() {
           })),
         )
         setMembers(nextMembers)
-        setInvites(remoteInvites)
-      } catch {
-        setInvites([])
-      }
+      } catch {}
     }
   }, [authSession.isAuthenticated, workspaceId])
 
@@ -205,23 +190,6 @@ export function ProjectDetailScreen() {
     return groups
   }, [boardTasks])
 
-  const handleInvite = async () => {
-    const trimmed = inviteEmail.trim().toLowerCase()
-    if (!trimmed) {
-      setInviteFeedback("Enter an email to invite.")
-      return
-    }
-    try {
-      const client = createHttpClient(BASE_URL)
-      await inviteToWorkspace(client, workspaceId, trimmed, workspace?.label)
-      setInviteEmail("")
-      setInviteFeedback("Invite sent.")
-      await loadProjectData()
-    } catch (error) {
-      setInviteFeedback(error instanceof Error ? error.message : "Invite failed.")
-    }
-  }
-
   const moveTask = useCallback(
     async (task: Task, direction: "back" | "forward") => {
       const laneIndex = lanes.findIndex((lane) => lane.status.id === task.statusId)
@@ -279,7 +247,11 @@ export function ProjectDetailScreen() {
             style={themed($subtitle)}
           />
         </View>
-        <Button text="Manage" preset="glass" onPress={() => navigation.navigate("ProjectsHome")} />
+        <Button
+          text="Projects"
+          preset="glass"
+          onPress={() => navigation.navigate("ProjectsHome")}
+        />
       </View>
 
       <View style={themed($statPillsRow)}>
@@ -485,47 +457,6 @@ export function ProjectDetailScreen() {
                   )}
                 </View>
               </GlassCard>
-
-              {authSession.isAuthenticated ? (
-                <GlassCard>
-                  <View style={themed($sectionHeader)}>
-                    <View>
-                      <Text preset="formLabel" text="Invite collaborators" />
-                      <Text
-                        preset="caption"
-                        text="Owner and admin roles can grow the team from here."
-                        style={themed($subtitle)}
-                      />
-                    </View>
-                  </View>
-                  <TextField
-                    value={inviteEmail}
-                    onChangeText={(value) => {
-                      setInviteEmail(value)
-                      if (inviteFeedback) setInviteFeedback(null)
-                    }}
-                    placeholder="teammate@company.com"
-                    autoCapitalize="none"
-                    keyboardType="email-address"
-                  />
-                  {inviteFeedback ? (
-                    <Text preset="caption" text={inviteFeedback} style={themed($feedback)} />
-                  ) : null}
-                  <View style={themed($stack)}>
-                    <Button text="Send invite" onPress={handleInvite} />
-                    {invites.map((invite) => (
-                      <View key={invite.id} style={themed($inviteCard)}>
-                        <Text preset="caption" text={invite.email} style={themed($memberName)} />
-                        <Text
-                          preset="caption"
-                          text={`${invite.role} · ${invite.status}`}
-                          style={themed($subtitle)}
-                        />
-                      </View>
-                    ))}
-                  </View>
-                </GlassCard>
-              ) : null}
             </>
           ) : null}
 
@@ -966,20 +897,6 @@ const $memberName: ThemedStyle<TextStyle> = ({ colors }) => ({
 
 const $memberLoad: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.primary,
-})
-
-const $feedback: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.primary,
-})
-
-const $inviteCard: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
-  borderRadius: radius.medium,
-  borderWidth: 1,
-  borderColor: colors.borderSubtle,
-  backgroundColor: colors.surface,
-  paddingHorizontal: spacing.sm,
-  paddingVertical: spacing.sm,
-  gap: spacing.xxxs,
 })
 
 const $compactTaskCard: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { Pressable, View, ViewStyle } from "react-native"
+import { Pressable, TouchableOpacity, View, ViewStyle } from "react-native"
 import { useNavigation, useRoute } from "@react-navigation/native"
 
 import { GlassCard } from "@/components/GlassCard"
@@ -18,9 +18,10 @@ import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
 import { formatDateTime } from "@/utils/dateFormat"
 import { resolveUserLabel } from "@/utils/userLabel"
+import { Ionicons } from "@expo/vector-icons"
 
 export function ConflictResolutionScreen() {
-  const { themed } = useAppTheme()
+  const { themed, theme } = useAppTheme()
   const navigation = useNavigation<HomeStackScreenProps<"ConflictResolution">["navigation"]>()
   const route = useRoute<HomeStackScreenProps<"ConflictResolution">["route"]>()
   const { conflictId } = route.params ?? {}
@@ -103,7 +104,9 @@ export function ConflictResolutionScreen() {
         <Text
           preset="formHelper"
           text={`Assignee: ${
-            payload === localPayload ? assigneeLabels.local ?? "Unassigned" : assigneeLabels.remote ?? "Unassigned"
+            payload === localPayload
+              ? (assigneeLabels.local ?? "Unassigned")
+              : (assigneeLabels.remote ?? "Unassigned")
           }`}
         />
         <Text preset="formHelper" text={`Updated: ${formatDateTime(task.updatedAt)}`} />
@@ -116,7 +119,18 @@ export function ConflictResolutionScreen() {
   return (
     <Screen preset="scroll" contentContainerStyle={themed($screen)}>
       <View style={themed($header)}>
-        <Text preset="heading" text="Resolve Conflict" />
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          <TouchableOpacity onPress={() => navigation.goBack()}>
+            <Ionicons
+              name={"arrow-back"}
+              size={25}
+              color={theme.colors.text}
+              style={{ padding: 5 }}
+            />
+          </TouchableOpacity>
+
+          <Text preset="heading" text="Resolve Conflict" />
+        </View>
         <Text preset="formHelper" text={`${entityType} conflict`} />
       </View>
 
@@ -181,8 +195,7 @@ export function ConflictResolutionScreen() {
             />
           </>
         )}
-        <Pressable style={themed($button)} onPress={() => handleResolve("merge")}
-        >
+        <Pressable style={themed($button)} onPress={() => handleResolve("merge")}>
           <Text preset="formLabel" text="Save merged" />
         </Pressable>
       </GlassCard>

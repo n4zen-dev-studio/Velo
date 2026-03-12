@@ -4,6 +4,7 @@ import { Pressable, ScrollView, View, ViewStyle, TextStyle } from "react-native"
 import { GlassCard } from "@/components/GlassCard"
 import { Screen } from "@/components/Screen"
 import { Text } from "@/components/Text"
+import { useAuthSession } from "@/services/auth/session"
 import { getDb } from "@/services/db/db"
 import { queryAll } from "@/services/db/queries"
 import {
@@ -44,6 +45,7 @@ export function SyncDebugScreen() {
   const syncState = useSyncStatus()
   const syncPreferences = useSyncPreferences()
   const { workspaces } = useWorkspaceStore()
+  const authSession = useAuthSession()
 
   const [pendingOps, setPendingOps] = useState([] as Awaited<ReturnType<typeof listPendingOps>>)
   const [failedOps, setFailedOps] = useState([] as Awaited<ReturnType<typeof listFailedOps>>)
@@ -88,6 +90,7 @@ export function SyncDebugScreen() {
   const phaseLabel = String(syncState.phase ?? "—")
   const lastSyncedLabel = formatSyncTimestamp(syncState.lastSyncedAt)
   const hasError = !!syncState.lastError
+  const isGuestMode = !authSession.isAuthenticated
   const behaviorLabel = describeSyncBehavior({
     preferences: syncPreferences,
     isOnline: syncState.isOnline,
@@ -173,6 +176,73 @@ export function SyncDebugScreen() {
           <CompactStatTile key={stat.label} label={stat.label} value={stat.value} />
         ))}
       </View>
+
+      {isGuestMode ? (
+        <GlassCard>
+          <View style={themed($guestNotice)}>
+            <View style={themed($guestNoticeHeader)}>
+              <OperationBadge label="Guest mode" tone="primary" />
+            </View>
+            <Text preset="formLabel" text="Sync unavailable in guest mode" />
+            <Text
+              preset="caption"
+              text="You’re currently using Velo in guest mode. Changes are still saved locally and can be synced the next time you log in."
+              style={themed($muted)}
+            />
+          </View>
+        </GlassCard>
+      ) : null}
+
+      <GlassCard>
+        <View style={themed($cardHeaderRow)}>
+          <Text preset="formLabel" text="Actions" />
+          <Text
+            preset="caption"
+            text={isGuestMode ? "Sign in to enable sync tools" : "Recovery and diagnostics"}
+            style={themed($muted)}
+          />
+        </View>
+
+        <View style={themed($actionGrid)}>
+          <CompactActionTile
+            label="Trigger sync"
+            helper="Run a manual sync"
+            onPress={() => syncController.triggerSync("manual").then(load)}
+            emphasis="primary"
+            disabled={isGuestMode}
+          />
+          <CompactActionTile
+            label="Retry failed"
+            helper="Move failed ops back to pending"
+            onPress={() => resetFailedToPending().then(load)}
+            disabled={isGuestMode}
+          />
+          {__DEV__ ? (
+            <>
+              <CompactActionTile
+                label="Clear sent"
+                helper="Remove SENT ops"
+                onPress={() => clearSentOps().then(load)}
+                disabled={isGuestMode}
+              />
+              <CompactActionTile
+                label="Prune sent"
+                helper="Trim old SENT ops"
+                onPress={() => pruneSentOps(2000, 7).then(load)}
+                disabled={isGuestMode}
+              />
+            </>
+          ) : null}
+          <CompactActionTile
+            label="Export snapshot"
+            helper="Log a compact snapshot to console"
+            onPress={async () => {
+              const snapshot = await buildDebugSnapshot()
+              console.log("[SYNC] Debug snapshot", snapshot)
+            }}
+          />
+        </View>
+      </GlassCard>
 
       <GlassCard>
         <View style={themed($cardHeaderRow)}>
@@ -261,49 +331,6 @@ export function SyncDebugScreen() {
             ))
           )}
         </ScrollView>
-      </GlassCard>
-
-      <GlassCard>
-        <View style={themed($cardHeaderRow)}>
-          <Text preset="formLabel" text="Actions" />
-          <Text preset="caption" text="Recovery and diagnostics" style={themed($muted)} />
-        </View>
-
-        <View style={themed($actionGrid)}>
-          <CompactActionTile
-            label="Trigger sync"
-            helper="Run a manual sync"
-            onPress={() => syncController.triggerSync("manual").then(load)}
-            emphasis="primary"
-          />
-          <CompactActionTile
-            label="Retry failed"
-            helper="Move failed ops back to pending"
-            onPress={() => resetFailedToPending().then(load)}
-          />
-          {__DEV__ ? (
-            <>
-              <CompactActionTile
-                label="Clear sent"
-                helper="Remove SENT ops"
-                onPress={() => clearSentOps().then(load)}
-              />
-              <CompactActionTile
-                label="Prune sent"
-                helper="Trim old SENT ops"
-                onPress={() => pruneSentOps(2000, 7).then(load)}
-              />
-            </>
-          ) : null}
-          <CompactActionTile
-            label="Export snapshot"
-            helper="Log a compact snapshot to console"
-            onPress={async () => {
-              const snapshot = await buildDebugSnapshot()
-              console.log("[SYNC] Debug snapshot", snapshot)
-            }}
-          />
-        </View>
       </GlassCard>
     </Screen>
   )
@@ -404,6 +431,7 @@ function CompactActionTile(props: {
   helper: string
   onPress: () => void | Promise<void>
   emphasis?: "primary" | "default"
+  disabled?: boolean
 }) {
   const { themed } = useAppTheme()
   return (
@@ -411,17 +439,27 @@ function CompactActionTile(props: {
       style={[
         themed($actionTile),
         props.emphasis === "primary" ? themed($actionTilePrimary) : null,
+        props.disabled ? themed($actionTileDisabled) : null,
       ]}
+      disabled={props.disabled}
       onPress={props.onPress}
     >
       <Text
         preset="caption"
         text={props.label}
         style={
-          props.emphasis === "primary" ? themed($actionTileTextPrimary) : themed($actionTileText)
+          props.disabled
+            ? themed($muted)
+            : props.emphasis === "primary"
+              ? themed($actionTileTextPrimary)
+              : themed($actionTileText)
         }
       />
-      <Text preset="caption" text={props.helper} style={themed($muted)} />
+      <Text
+        preset="caption"
+        text={props.disabled ? "Unavailable while signed out" : props.helper}
+        style={themed($muted)}
+      />
     </Pressable>
   )
 }
@@ -646,12 +684,28 @@ const $actionTilePrimary: ThemedStyle<ViewStyle> = ({ colors }) => ({
   backgroundColor: colors.glowSoft,
 })
 
+const $actionTileDisabled: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  opacity: 0.55,
+  borderColor: colors.borderSubtle,
+  backgroundColor: colors.surface,
+})
+
 const $actionTileText: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.text,
 })
 
 const $actionTileTextPrimary: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.text,
+})
+
+const $guestNotice: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: spacing.xs,
+})
+
+const $guestNoticeHeader: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  justifyContent: "flex-start",
+  gap: spacing.xs,
 })
 
 async function getSyncStateRow() {

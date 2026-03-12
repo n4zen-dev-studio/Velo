@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { Pressable, ScrollView, View, ViewStyle, TextStyle } from "react-native"
+import { Pressable, ScrollView, View, ViewStyle, TextStyle, TouchableOpacity } from "react-native"
 import { useNavigation, useRoute } from "@react-navigation/native"
 import { Controller, useForm } from "react-hook-form"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
@@ -16,11 +16,12 @@ import { useSyncStatus } from "@/services/sync/syncStore"
 import { useWorkspaceStore } from "@/stores/workspaceStore"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
+import { Ionicons } from "@expo/vector-icons"
 
 import { useTaskEditorViewModel } from "./useTaskEditorViewModel"
 
 export function TaskEditorScreen() {
-  const { themed } = useAppTheme()
+  const { themed, theme } = useAppTheme()
   const insets = useSafeAreaInsets()
   const navigation = useNavigation<HomeStackScreenProps<"TaskEditor">["navigation"]>()
   const route = useRoute<HomeStackScreenProps<"TaskEditor">["route"]>()
@@ -108,7 +109,18 @@ export function TaskEditorScreen() {
       <View style={themed($header)}>
         <View style={themed($headerCopy)}>
           <Text preset="overline" text={task ? "Edit task" : "Create task"} />
-          <Text preset="heading" text={task ? "Update task" : "New task"} />
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <TouchableOpacity onPress={() => navigation.goBack()}>
+              <Ionicons
+                name={"arrow-back"}
+                size={25}
+                color={theme.colors.text}
+                style={{ padding: 5 }}
+              />
+            </TouchableOpacity>
+
+            <Text preset="heading" text={task ? "Update task" : "New task"} />
+          </View>
           <Text preset="caption" text={`Project: ${workspaceLabel}`} style={themed($subtitle)} />
         </View>
       </View>
