@@ -12,7 +12,7 @@ import {
 import { useAppTheme } from "@/theme/context"
 import { $styles } from "@/theme/styles"
 import type { ThemedStyle, ThemedStyleArray } from "@/theme/types"
-
+import { LinearGradient } from "expo-linear-gradient"
 import { Text, TextProps } from "./Text"
 
 type Presets = "default" | "filled" | "reversed" | "glass"
@@ -59,7 +59,7 @@ export function Button(props: ButtonProps) {
     ...rest
   } = props
 
-  const { themed } = useAppTheme()
+  const { themed, theme } = useAppTheme()
 
   function $viewStyle({ pressed }: PressableStateCallbackType): StyleProp<ViewStyle> {
     return [
@@ -92,8 +92,21 @@ export function Button(props: ButtonProps) {
           {preset === "default" ? (
             <>
               <View pointerEvents="none" style={themed($gradientWash)} />
-              <View pointerEvents="none" style={themed($gradientBlobLeft)} />
-              <View pointerEvents="none" style={themed($gradientBlobRight)} />
+              <LinearGradient
+                pointerEvents="none"
+                colors={[theme.colors.gradientStart, "transparent", "transparent"]}
+                start={{ x: 0.3, y: 0.8 }}
+                end={{ x: 1, y: 1 }}
+                style={themed($gradientBlobLeft)}
+              />
+
+              <LinearGradient
+                pointerEvents="none"
+                colors={[theme.colors.gradientEnd, "transparent", "transparent"]}
+                start={{ x: 0.6, y: 0.9 }}
+                end={{ x: 0, y: 1 }}
+                style={themed($gradientBlobRight)}
+              />
             </>
           ) : null}
           {preset === "glass" ? <View pointerEvents="none" style={themed($glassSheen)} /> : null}
@@ -153,26 +166,24 @@ const $gradientWash: ThemedStyle<ViewStyle> = ({ colors }) => ({
   opacity: 0.26,
 })
 
-const $gradientBlobLeft: ThemedStyle<ViewStyle> = ({ colors }) => ({
+const $gradientBlobLeft: ThemedStyle<ViewStyle> = () => ({
   position: "absolute",
   left: -10,
   top: -16,
-  width: 110,
+  width: 220,
   height: 110,
   borderRadius: 999,
-  backgroundColor: colors.gradientStart,
-  opacity: 0.92,
+  opacity: 0.95,
 })
 
-const $gradientBlobRight: ThemedStyle<ViewStyle> = ({ colors }) => ({
+const $gradientBlobRight: ThemedStyle<ViewStyle> = () => ({
   position: "absolute",
   right: -18,
   top: -14,
-  width: 130,
+  width: 220,
   height: 110,
   borderRadius: 999,
-  backgroundColor: colors.gradientEnd,
-  opacity: 0.88,
+  opacity: 0.9,
 })
 
 const $glassSheen: ThemedStyle<ViewStyle> = ({ colors }) => ({

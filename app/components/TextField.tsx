@@ -17,6 +17,7 @@ import { $styles } from "@/theme/styles"
 import type { ThemedStyle, ThemedStyleArray } from "@/theme/types"
 
 import { Text, TextProps } from "./Text"
+import { RadialGlow } from "./RadialGlow"
 
 export interface TextFieldAccessoryProps {
   style: StyleProp<ViewStyle | TextStyle | ImageStyle>
@@ -130,7 +131,13 @@ export const TextField = forwardRef(function TextField(props: TextFieldProps, re
       ) : null}
 
       <View style={$inputWrapperStyles}>
-        <View pointerEvents="none" style={themed($fieldWash)} />
+        <RadialGlow
+          width={120}
+          height={120}
+          color={theme.colors.glowSoft}
+          opacity={0.6}
+          style={themed($fieldWash)}
+        />
 
         {!!LeftAccessory && (
           <LeftAccessory
@@ -223,15 +230,12 @@ const $wrapperDisabled: ThemedStyle<ViewStyle> = () => ({
   opacity: 0.55,
 })
 
-const $fieldWash: ThemedStyle<ViewStyle> = ({ colors }) => ({
+const $fieldWash: ThemedStyle<ViewStyle> = () => ({
   position: "absolute",
   top: -40,
-  right: -10,
+  right: -15,
   width: 120,
   height: 120,
-  borderRadius: 999,
-  backgroundColor: colors.glowSoft,
-  opacity: 0.8,
 })
 
 const $inputStyle: ThemedStyle<TextStyle> = ({ colors, typography }) => ({

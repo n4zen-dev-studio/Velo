@@ -8,6 +8,7 @@ import {
   NativeScrollEvent,
   NativeSyntheticEvent,
   useWindowDimensions,
+  Image,
 } from "react-native"
 import type { NativeStackScreenProps } from "@react-navigation/native-stack"
 import LottieView from "lottie-react-native"
@@ -20,10 +21,16 @@ import type { RootStackParamList } from "@/navigators/navigationTypes"
 import { setSeenOnboarding } from "@/services/storage/firstLaunch"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
+import { LinearGradient } from "expo-linear-gradient"
+import { RadialGlow } from "@/components/RadialGlow"
 
 type ScreenProps = NativeStackScreenProps<RootStackParamList, "Onboarding">
 
 const ROBOT_ANIM = require("@assets/animations/robot.json")
+const SYNC_ANIM = require("@assets/animations/Computer-sharing.json")
+const MOTION_ANIM = require("@assets/animations/launch-quickly.json")
+const logo = require("@assets/images/logo.png")
+
 
 type Slide = {
   id: string
@@ -62,7 +69,7 @@ const SLIDES: Slide[] = [
 ]
 
 export function OnboardingScreen({ navigation }: ScreenProps) {
-  const { themed } = useAppTheme()
+  const { themed, theme } = useAppTheme()
   const { width } = useWindowDimensions()
   const listRef = useRef<FlatList<Slide>>(null)
   const [index, setIndex] = useState(0)
@@ -98,12 +105,30 @@ export function OnboardingScreen({ navigation }: ScreenProps) {
       contentContainerStyle={themed($screen)}
       style={themed($root)}
     >
-      <View style={themed($backgroundGlowTop)} pointerEvents="none" />
-      <View style={themed($backgroundGlowBottom)} pointerEvents="none" />
+      {/* <View style={themed($backgroundGlowTop)} pointerEvents="none" />
+      <View style={themed($backgroundGlowBottom)} pointerEvents="none" /> */}
+      <RadialGlow
+        width={280}
+        height={280}
+        color={theme.colors.gradientStart}
+        opacity={0.3}
+        style={themed($backgroundGlowTop)}
+      />
+
+      <RadialGlow
+        width={240}
+        height={240}
+        color={theme.colors.gradientEnd}
+        opacity={0.24}
+        style={themed($backgroundGlowBottom)}
+      />
 
       <View style={themed($topBar)}>
-        <View style={themed($brandPill)}>
-          <Text preset="overline" text="VELO" style={themed($brandText)} />
+        <View style={{flexDirection: 'row', alignItems: 'center'}}>
+          <View style={themed($brandPill)}>
+            <Image source={logo} style={{width: 55, height: 55}} resizeMode='contain' />
+          </View>
+          <Text preset='heading' text="VELO" style={themed($brandText)} />
         </View>
         <Pressable onPress={() => void completeOnboarding()} hitSlop={12}>
           <Text preset="caption" text="Skip" style={themed($skipText)} />
@@ -165,7 +190,7 @@ function IllustrationHero({ kind }: { kind: Slide["kind"] }) {
 
   if (kind === "robot") {
     return (
-      <GlassCard style={themed($robotCard)}>
+      <View style={themed($robotCard)}>
         <View style={themed($robotFrame)}>
           <LottieView source={ROBOT_ANIM} autoPlay loop style={themed($robot)} />
         </View>
@@ -173,22 +198,20 @@ function IllustrationHero({ kind }: { kind: Slide["kind"] }) {
           <MiniBadge label="Offline-first" />
           <MiniBadge label="Focused flow" />
         </View>
-      </GlassCard>
+      </View>
     )
   }
 
   return (
-    <GlassCard style={themed($placeholderCard)}>
-      <View style={themed($placeholderOrb(kind))} />
-      <View style={themed($placeholderPanel)}>
-        <View style={themed($placeholderLineWide)} />
-        <View style={themed($placeholderLineShort)} />
-      </View>
-      <View style={themed($placeholderBadgeRow)}>
+    <View style={themed($robotCard)}>
+        <View style={themed($robotFrame)}>
+          <LottieView source={kind !== "offline"?SYNC_ANIM: MOTION_ANIM} autoPlay loop style={themed($robot)} />
+        </View>
+        <View style={themed($heroBadgeRow)}>
         <MiniBadge label={kind === "offline" ? "Saved locally" : "Boards"} />
         <MiniBadge label={kind === "offline" ? "Sync later" : "Projects"} />
+        </View>
       </View>
-    </GlassCard>
   )
 }
 
@@ -224,26 +247,20 @@ const $screen: ThemedStyle<ViewStyle> = () => ({
   flex: 1,
 })
 
-const $backgroundGlowTop: ThemedStyle<ViewStyle> = ({ colors }) => ({
+const $backgroundGlowTop: ThemedStyle<ViewStyle> = () => ({
   position: "absolute",
   top: -120,
   right: -40,
   width: 280,
   height: 280,
-  borderRadius: 999,
-  backgroundColor: colors.gradientStart,
-  opacity: 0.22,
 })
 
-const $backgroundGlowBottom: ThemedStyle<ViewStyle> = ({ colors }) => ({
+const $backgroundGlowBottom: ThemedStyle<ViewStyle> = () => ({
   position: "absolute",
   left: -60,
   bottom: 120,
   width: 240,
   height: 240,
-  borderRadius: 999,
-  backgroundColor: colors.gradientEnd,
-  opacity: 0.16,
 })
 
 const $topBar: ThemedStyle<ViewStyle> = ({ spacing }) => ({
@@ -256,16 +273,17 @@ const $topBar: ThemedStyle<ViewStyle> = ({ spacing }) => ({
 })
 
 const $brandPill: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
-  paddingHorizontal: spacing.sm,
-  paddingVertical: spacing.xs,
-  borderRadius: radius.pill,
+  // paddingHorizontal: spacing.sm,
+  // paddingVertical: spacing.xs,
+  borderRadius: 99,
   borderWidth: 1,
-  borderColor: colors.borderStrong,
+  borderColor: colors.borderSubtle,
   backgroundColor: colors.surfaceGlass,
 })
 
 const $brandText: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.text,
+  padding: 10,
 })
 
 const $skipText: ThemedStyle<TextStyle> = ({ colors }) => ({
@@ -275,7 +293,7 @@ const $skipText: ThemedStyle<TextStyle> = ({ colors }) => ({
 const $page: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flex: 1,
   paddingHorizontal: spacing.screenHorizontal,
-  paddingTop: spacing.sm,
+  paddingTop: spacing.xxxl+30,
   paddingBottom: spacing.lg,
   justifyContent: "space-between",
 })
@@ -283,7 +301,7 @@ const $page: ThemedStyle<ViewStyle> = ({ spacing }) => ({
 const $heroBlock =
   (isFirst: boolean): ThemedStyle<ViewStyle> =>
   ({ spacing, radius }) => ({
-    minHeight: isFirst ? 360 : 332,
+    minHeight: 360,
     borderRadius: radius.xl,
     justifyContent: "center",
     alignItems: "center",
@@ -295,21 +313,21 @@ const $heroOrbPrimary =
   (kind: Slide["kind"]): ThemedStyle<ViewStyle> =>
   ({ colors }) => ({
     position: "absolute",
-    width: kind === "robot" ? 280 : 240,
-    height: kind === "robot" ? 280 : 240,
+    width: 320,
+    height: 320,
     borderRadius: 999,
     backgroundColor:
       kind === "robot"
         ? colors.gradientStart
-        : kind === "offline"
+        : kind !== "offline"
           ? colors.gradientMid
           : colors.gradientEnd,
     opacity: 0.24,
   })
 
-const $heroOrbSecondary: ThemedStyle<ViewStyle> = ({ colors }) => ({
+const $heroOrbSecondary: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
   position: "absolute",
-  top: 34,
+  top: spacing.xxxl+60,
   width: 120,
   height: 120,
   borderRadius: 999,
@@ -330,7 +348,7 @@ const $robotFrame: ThemedStyle<ViewStyle> = ({ colors, radius }) => ({
   overflow: "hidden",
   alignItems: "center",
   justifyContent: "center",
-  backgroundColor: colors.surfaceGlass,
+  // backgroundColor: colors.surfaceGlass,
 })
 
 const $robot: ThemedStyle<ViewStyle> = () => ({

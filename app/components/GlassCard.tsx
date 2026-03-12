@@ -3,17 +3,24 @@ import { StyleProp, View, ViewStyle } from "react-native"
 
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
+import { RadialGlow } from "./RadialGlow"
 
 interface GlassCardProps {
   style?: StyleProp<ViewStyle>
 }
 
 export function GlassCard({ children, style }: PropsWithChildren<GlassCardProps>) {
-  const { themed } = useAppTheme()
+  const { themed, theme } = useAppTheme()
 
   return (
     <View style={[themed($card), style]}>
-      <View pointerEvents="none" style={themed($wash)} />
+      <RadialGlow
+        width={160}
+        height={190}
+        color={theme.colors.glowSoft}
+        opacity={0.5}
+        style={themed($wash)}
+      />
       {children}
     </View>
   )
@@ -30,12 +37,10 @@ const $card: ThemedStyle<ViewStyle> = ({ colors, spacing, radius, elevation }) =
   ...elevation.card,
 })
 
-const $wash: ThemedStyle<ViewStyle> = ({ colors }) => ({
+const $wash: ThemedStyle<ViewStyle> = () => ({
   position: "absolute",
   top: -70,
   right: -40,
   width: 160,
   height: 160,
-  borderRadius: 999,
-  backgroundColor: colors.glowSoft,
 })

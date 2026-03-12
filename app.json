@@ -1,7 +1,7 @@
 {
-  "name": "TaskTrak",
-  "slug": "TaskTrakV1",
-  "scheme": "tasktrakv1",
+  "name": "Velo",
+  "slug": "velo",
+  "scheme": "velo",
   "version": "1.0.0",
   "orientation": "portrait",
   "userInterfaceStyle": "automatic",
@@ -16,7 +16,7 @@
   ],
   "android": {
     "icon": "./assets/images/app-icon-android-legacy.png",
-    "package": "com.n4zen.tasktrak",
+    "package": "com.n4zen.velo",
     "adaptiveIcon": {
       "foregroundImage": "./assets/images/app-icon-android-adaptive-foreground.png",
       "backgroundImage": "./assets/images/app-icon-android-adaptive-background.png"
@@ -25,7 +25,7 @@
       "RECEIVE_BOOT_COMPLETED"
     ],
     "splash": {
-      "backgroundColor": "#000000"
+      "backgroundColor": "#090C18"
     },
     "allowBackup": false,
     "edgeToEdgeEnabled": true
@@ -33,10 +33,10 @@
   "ios": {
     "icon": "./assets/images/app-icon-ios.png",
     "supportsTablet": true,
-    "bundleIdentifier": "com.n4zen.tasktrak",
+    "bundleIdentifier": "com.n4zen.velo",
     "usesAppleSignIn": true,
     "splash": {
-      "backgroundColor": "#000000"
+      "backgroundColor": "#090C18"
     },
     "infoPlist": {
       "UIBackgroundModes": [
@@ -57,7 +57,7 @@
         "image": "./assets/images/app-icon-android-adaptive-foreground.png",
         "imageWidth": 300,
         "resizeMode": "contain",
-        "backgroundColor": "#000000"
+        "backgroundColor": "#090C18"
       }
     ],
     [
@@ -81,6 +81,6 @@
     }
   },
   "splash": {
-    "backgroundColor": "#000000"
+    "backgroundColor": "#090C18"
   }
 }

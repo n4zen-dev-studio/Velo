@@ -286,19 +286,19 @@ export function HomeScreen() {
         </View>
 
         <View style={themed($headerMetaRow)}>
-          <Pressable onPress={goToProjectsTab} style={themed($workspacePill)}>
+          {/* <Pressable onPress={goToProjectsTab} style={themed($workspacePill)}>
             <Text
               preset="caption"
               text={activeWorkspace?.label ?? "Personal"}
               numberOfLines={1}
               style={themed($workspacePillText)}
             />
-          </Pressable>
+          </Pressable> */}
 
-          <View style={themed($statusPill)}>
+          {/* <View style={themed($statusPill)}>
             <View style={themed($statusDot)} />
             <Text preset="caption" text={isRefreshing ? "Refreshing" : "Idle"} />
-          </View>
+          </View> */}
         </View>
 
         <View style={themed($switcherRow)}>

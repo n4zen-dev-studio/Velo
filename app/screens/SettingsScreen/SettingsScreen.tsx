@@ -1218,7 +1218,7 @@ const $screen: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   paddingHorizontal: spacing.screenHorizontal,
   paddingTop: spacing.md,
   gap: spacing.md,
-  paddingBottom: spacing.xxxl,
+  paddingBottom: spacing.xxxl+ 30,
 })
 
 const $header: ThemedStyle<ViewStyle> = ({ spacing }) => ({
