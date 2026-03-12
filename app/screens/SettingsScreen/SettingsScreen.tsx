@@ -1,23 +1,18 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
 import { Modal, Pressable, View, ViewStyle, TextStyle } from "react-native"
 import { useFocusEffect } from "@react-navigation/native"
 
 import { Button } from "@/components/Button"
 import { GlassCard } from "@/components/GlassCard"
+import { HeaderAvatar } from "@/components/HeaderAvatar"
 import { Screen } from "@/components/Screen"
 import { Text } from "@/components/Text"
 import { TextField } from "@/components/TextField"
 import { Switch } from "@/components/Toggle/Switch"
-import { HeaderAvatar } from "@/components/HeaderAvatar"
-import { clearCurrentUserId, getCurrentUserId, setSessionMode } from "@/services/sync/identity"
-import { clearOfflineMode } from "@/services/storage/session"
+import { BASE_URL } from "@/config/api"
 import { goToAuth, goToProfile } from "@/navigation/navigationActions"
 import { goToInvites } from "@/navigation/navigationActions"
-import { clearTokens } from "@/services/api/tokenStore"
-import { useAppTheme } from "@/theme/context"
-import type { ThemedStyle } from "@/theme/types"
 import { useAuthViewModel } from "@/screens/AuthScreen/useAuthViewModel"
-import { useWorkspaceStore } from "@/stores/workspaceStore"
 import { createHttpClient } from "@/services/api/httpClient"
 import {
   deleteWorkspace as deleteWorkspaceApi,
@@ -27,18 +22,23 @@ import {
   revokeWorkspaceInvite,
   type WorkspaceInvite,
 } from "@/services/api/invitesApi"
-import { BASE_URL } from "@/config/api"
-import { listByWorkspaceId as listMembers } from "@/services/db/repositories/workspaceMembersRepository"
-import { syncController } from "@/services/sync/SyncController"
-import { useSyncStatus } from "@/services/sync/syncStore"
+import { clearTokens } from "@/services/api/tokenStore"
 import { clearAuthSession, refreshAuthSession, useAuthSession } from "@/services/auth/session"
-import { formatDateTime } from "@/utils/dateFormat"
-import { resolveUserLabel } from "@/utils/userLabel"
-import { GUEST_SCOPE_KEY } from "@/services/session/scope"
-import { logScopeAction, withScopeTransitionLock } from "@/services/session/scopeTransition"
+import { listByWorkspaceId as listMembers } from "@/services/db/repositories/workspaceMembersRepository"
 import { logoutCleanup } from "@/services/session/logoutCleanup"
 import { setLoggingOut } from "@/services/session/logoutState"
+import { GUEST_SCOPE_KEY } from "@/services/session/scope"
+import { logScopeAction, withScopeTransitionLock } from "@/services/session/scopeTransition"
+import { clearOfflineMode } from "@/services/storage/session"
+import { clearCurrentUserId, getCurrentUserId, setSessionMode } from "@/services/sync/identity"
 import { resetOfflineClaimHandled } from "@/services/sync/offlineClaim"
+import { syncController } from "@/services/sync/SyncController"
+import { useSyncStatus } from "@/services/sync/syncStore"
+import { useWorkspaceStore } from "@/stores/workspaceStore"
+import { useAppTheme } from "@/theme/context"
+import type { ThemedStyle } from "@/theme/types"
+import { formatDateTime } from "@/utils/dateFormat"
+import { resolveUserLabel } from "@/utils/userLabel"
 
 import { useSettingsViewModel } from "./useSettingsViewModel"
 
@@ -52,7 +52,8 @@ export function SettingsScreen() {
   // so this screen can remain dumb UI.
 
   const { logoutUser } = useAuthViewModel()
-  const { workspaces, createWorkspace, renameWorkspace, deleteWorkspace } = useWorkspaceStore()
+  const { workspaces, activeWorkspace, createWorkspace, renameWorkspace, deleteWorkspace } =
+    useWorkspaceStore()
   const syncStatus = useSyncStatus()
   const authSession = useAuthSession()
 
@@ -529,73 +530,100 @@ export function SettingsScreen() {
       <View style={themed($header)}>
         <View style={themed($headerRow)}>
           <View style={themed($headerText)}>
-            <Text preset="heading" text="Settings" />
-            <Text preset="formHelper" text="Control sync and offline preferences" />
+            <Text preset="overline" text="Settings" />
+            <Text preset="heading" text="Preferences" />
+            <Text
+              preset="caption"
+              text="Sync, theme, projects, and account controls in a tighter mobile layout."
+              style={themed($muted)}
+            />
           </View>
           <HeaderAvatar onPress={goToProfile} />
         </View>
+        <View style={themed($headerMetaRow)}>
+          <CompactMetaPill
+            label={syncStatus.isOnline ? "Online" : "Offline"}
+            value={syncStatus.pendingCount > 0 ? `${syncStatus.pendingCount} queued` : "Ready"}
+          />
+          <CompactMetaPill label="Projects" value={`${workspaces.length}`} />
+          <CompactMetaPill label="Current" value={activeWorkspace?.label ?? "Personal"} />
+        </View>
       </View>
 
-      {/* Preferences */}
       <GlassCard>
-        <View style={themed($cardHeaderRow)}>
-          <Text preset="subheading" text="Preferences" />
-          {/* <Text preset="formHelper" text={`${options.length} options`} style={themed($muted)} /> */}
-        </View>
-
-        <View style={themed($stack)}>
-          {options.map((option: any) => (
-            <View key={option.id} style={themed($toggleRow)}>
-              <View style={themed($toggleLeft)}>
-                <Text preset="formLabel" text={option.label} />
-                {option.helperText ? (
-                  <Text preset="formHelper" text={option.helperText} style={themed($muted)} />
-                ) : null}
-              </View>
-
-              <Switch
-                value={!!option.value}
-                onValueChange={(value) => setOption(option.id, value)}
-              />
-            </View>
+        <CompactSectionHeader title="Preferences" subtitle={`${options.length} controls`} />
+        <View style={themed($groupedList)}>
+          {options.map((option: any, index: number) => (
+            <CompactSettingRow
+              key={option.id}
+              label={option.label}
+              helperText={option.helperText}
+              withDivider={index < options.length - 1}
+              control={
+                <Switch
+                  value={!!option.value}
+                  onValueChange={(value) => setOption(option.id, value)}
+                />
+              }
+            />
           ))}
         </View>
       </GlassCard>
 
-      <View>
-        <Button text="Switch theme" onPress={toggleTheme} preset="glass" />
-      </View>
+      <GlassCard>
+        <CompactSectionHeader title="Theme" subtitle="Appearance" />
+        <View style={themed($compactActionRow)}>
+          <View style={themed($compactActionCopy)}>
+            <Text preset="caption" text="Current mode" style={themed($muted)} />
+            <Text preset="formLabel" text="Switch light or dark theme" />
+          </View>
+          <View style={themed($inlineActions)}>
+            <Button text="Switch theme" onPress={toggleTheme} preset="glass" />
+          </View>
+        </View>
+      </GlassCard>
 
-      {/* Projects */}
       <GlassCard>
         <View style={themed($cardHeaderRow)}>
           <View style={themed($titleBlock)}>
             <Text preset="subheading" text="Projects" />
-            <Text preset="formHelper" text={workspaceSubtitle} style={themed($muted)} />
+            <Text preset="caption" text={workspaceSubtitle} style={themed($muted)} />
           </View>
           <View style={themed($headerActionsRow)}>
-            <Button text="Invites" preset="glass" onPress={goToInvites} />
             <Pressable
               accessibilityRole="button"
-              style={themed($pillButton)}
+              style={themed($compactActionChip)}
+              onPress={goToInvites}
+              hitSlop={10}
+            >
+              <Text preset="caption" text="Invites" />
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              style={themed($compactActionChipPrimary)}
               onPress={() => setCreateExpanded((v) => !v)}
               hitSlop={10}
             >
-              <Text
-                preset="formHelper"
-                text={createExpanded ? "Close" : "Create"}
-                style={themed($pillText)}
-              />
-              <Text
-                preset="formHelper"
-                text={createExpanded ? "▴" : "▾"}
-                style={themed($pillText)}
-              />
+              <Text preset="caption" text={createExpanded ? "Close" : "Create"} />
             </Pressable>
           </View>
         </View>
 
-        <View style={themed($stack)}>
+        {activeWorkspace ? (
+          <View style={themed($currentProjectRow)}>
+            <View style={themed($rowLeft)}>
+              <Text preset="caption" text="Current project" style={themed($muted)} />
+              <Text preset="formLabel" text={activeWorkspace.label} />
+            </View>
+            <Text
+              preset="caption"
+              text={activeWorkspace.kind === "personal" ? "Personal" : "Shared"}
+              style={themed($muted)}
+            />
+          </View>
+        ) : null}
+
+        <View style={themed($projectList)}>
           {workspaces.map((workspace) => {
             const isExpanded = expandedWorkspaceIds.has(workspace.id)
             const members = membersByWorkspaceId[workspace.id] ?? []
@@ -615,23 +643,29 @@ export function SettingsScreen() {
                   style={themed($accordionHeader)}
                 >
                   <View style={themed($rowLeft)}>
-                    <Text preset="formLabel" text={workspace.label} />
-                    <Text
-                      preset="formHelper"
-                      text={workspace.kind === "personal" ? "Personal" : "Project"}
-                      style={themed($muted)}
-                    />
+                    <View style={themed($accordionTitleRow)}>
+                      <Text preset="formLabel" text={workspace.label} />
+                      {activeWorkspace?.id === workspace.id ? (
+                        <Text preset="caption" text="Current" style={themed($accentText)} />
+                      ) : null}
+                    </View>
+                    <View style={themed($projectMetaLine)}>
+                      <Text
+                        preset="caption"
+                        text={workspace.kind === "personal" ? "Personal" : "Project"}
+                        style={themed($muted)}
+                      />
+                      <Text
+                        preset="caption"
+                        text={`${members.length} members`}
+                        style={themed($muted)}
+                      />
+                    </View>
                   </View>
-
                   <View style={themed($accordionMeta)}>
                     <Text
-                      preset="formHelper"
-                      text={`${members.length} members`}
-                      style={themed($muted)}
-                    />
-                    <Text
-                      preset="formHelper"
-                      text={isExpanded ? "▴" : "▾"}
+                      preset="caption"
+                      text={isExpanded ? "Hide" : "Manage"}
                       style={themed($muted)}
                     />
                   </View>
@@ -639,22 +673,19 @@ export function SettingsScreen() {
 
                 {isExpanded ? (
                   <View style={themed($accordionBody)}>
-                    <View style={themed($accordionRow)}>
-                      <Text preset="formLabel" text="Members" />
-                    </View>
-
+                    <CompactSubsectionLabel text="Members" />
                     {members.length === 0 ? (
-                      <Text
-                        preset="formHelper"
-                        text="No members synced yet."
-                        style={themed($muted)}
-                      />
+                      <Text preset="caption" text="No members synced yet." style={themed($muted)} />
                     ) : (
                       members.map((member) => (
                         <View key={member.id} style={themed($memberRow)}>
                           <View style={themed($rowLeft)}>
-                            <Text preset="formLabel" text={member.label} />
-                            <Text preset="formHelper" text={member.role} style={themed($muted)} />
+                            <Text
+                              preset="caption"
+                              text={member.label}
+                              style={themed($strongText)}
+                            />
+                            <Text preset="caption" text={member.role} style={themed($muted)} />
                           </View>
                           {isOwner &&
                           member.userId !== currentUserId &&
@@ -662,7 +693,7 @@ export function SettingsScreen() {
                             <Button
                               text="Remove"
                               preset="glass"
-                              style={themed($dangerButton)}
+                              style={themed($compactDangerButton)}
                               onPress={() =>
                                 setConfirmRemove({
                                   workspaceId: workspace.id,
@@ -679,24 +710,28 @@ export function SettingsScreen() {
                     <View style={themed($divider)} />
                     {workspace.kind === "personal" || !isOwner ? null : (
                       <View style={themed($stack)}>
-                        <Text preset="formLabel" text="Sent invites" />
+                        <CompactSubsectionLabel text="Sent invites" />
                         {inviteListStatus?.isLoading ? (
-                          <Text preset="formHelper" text="Loading invites..." />
+                          <Text preset="caption" text="Loading invites..." style={themed($muted)} />
                         ) : inviteListStatus?.error ? (
                           <Text
-                            preset="formHelper"
+                            preset="caption"
                             text={inviteListStatus.error}
                             style={themed($errorText)}
                           />
                         ) : sentInvites.length === 0 ? (
-                          <Text preset="formHelper" text="No invites yet." style={themed($muted)} />
+                          <Text preset="caption" text="No invites yet." style={themed($muted)} />
                         ) : (
                           sentInvites.map((invite) => (
                             <View key={invite.id} style={themed($inviteRow)}>
                               <View style={themed($rowLeft)}>
-                                <Text preset="formLabel" text={invite.email} />
                                 <Text
-                                  preset="formHelper"
+                                  preset="caption"
+                                  text={invite.email}
+                                  style={themed($strongText)}
+                                />
+                                <Text
+                                  preset="caption"
                                   text={`${invite.status} · Expires ${formatDateTime(invite.expiresAt)}`}
                                   style={themed($muted)}
                                 />
@@ -705,7 +740,7 @@ export function SettingsScreen() {
                                 <Button
                                   text="Revoke"
                                   preset="glass"
-                                  style={themed($dangerButton)}
+                                  style={themed($compactDangerButton)}
                                   onPress={() =>
                                     setConfirmRevoke({
                                       workspaceId: workspace.id,
@@ -722,16 +757,16 @@ export function SettingsScreen() {
                       </View>
                     )}
 
-                    <Text preset="formLabel" text="Invite member" />
+                    <CompactSubsectionLabel text="Invite member" />
                     {workspace.kind === "personal" ? (
                       <Text
-                        preset="formHelper"
+                        preset="caption"
                         text="Personal projects cannot be shared."
                         style={themed($muted)}
                       />
                     ) : !isOwner ? (
                       <Text
-                        preset="formHelper"
+                        preset="caption"
                         text="Owner permission required to invite members."
                         style={themed($muted)}
                       />
@@ -746,13 +781,13 @@ export function SettingsScreen() {
                         />
                         {inviteStatus?.error ? (
                           <Text
-                            preset="formHelper"
+                            preset="caption"
                             text={inviteStatus.error}
                             style={themed($errorText)}
                           />
                         ) : inviteStatus?.success ? (
                           <Text
-                            preset="formHelper"
+                            preset="caption"
                             text={inviteStatus.success}
                             style={themed($successText)}
                           />
@@ -769,23 +804,21 @@ export function SettingsScreen() {
                     )}
 
                     <View style={themed($divider)} />
-                    <View style={themed($accordionRow)}>
-                      <Text preset="formLabel" text="Project actions" />
-                    </View>
+                    <CompactSubsectionLabel text="Project actions" />
                     <View style={themed($actionsRow)}>
                       {workspace.kind === "personal" ? null : (
                         <Button
                           text="Rename"
                           preset="glass"
                           onPress={() => openRenameModal(workspace.id, workspace.label)}
-                          style={themed($smallButton)}
+                          style={themed($compactActionButton)}
                         />
                       )}
                       {workspace.kind !== "personal" && isOwner ? (
                         <Button
                           text="Delete"
                           preset="glass"
-                          style={themed($dangerButton)}
+                          style={themed($compactDangerButton)}
                           onPress={() =>
                             setConfirmDelete({ workspaceId: workspace.id, label: workspace.label })
                           }
@@ -802,7 +835,7 @@ export function SettingsScreen() {
           {createExpanded ? (
             <View style={themed($expandArea)}>
               <View style={themed($divider)} />
-              <Text preset="formLabel" text="New project" />
+              <CompactSubsectionLabel text="New project" />
               <TextField
                 value={newWorkspaceLabel}
                 onChangeText={(value) => {
@@ -819,26 +852,36 @@ export function SettingsScreen() {
                 <Button
                   text="Cancel"
                   preset="glass"
+                  style={themed($compactActionButton)}
                   onPress={() => {
                     setCreateExpanded(false)
                     setCreateError(null)
                     setNewWorkspaceLabel("")
                   }}
                 />
-                <Button text="Create" preset="glass" onPress={handleCreateWorkspace} />
+                <Button
+                  text="Create"
+                  preset="glass"
+                  style={themed($compactActionButton)}
+                  onPress={handleCreateWorkspace}
+                />
               </View>
             </View>
           ) : null}
         </View>
       </GlassCard>
 
-      {/* Account */}
       <GlassCard>
-        <View style={themed($cardHeaderRow)}>
-          <Text preset="subheading" text="Account" />
-          <Text preset="formHelper" text="Sign out options" style={themed($muted)} />
+        <CompactSectionHeader title="Account" subtitle="Session actions" />
+        <View style={themed($compactActionRow)}>
+          <View style={themed($compactActionCopy)}>
+            <Text preset="caption" text="Session" style={themed($muted)} />
+            <Text preset="formLabel" text="Sign out or clear local session state" />
+          </View>
+          <View style={themed($inlineActions)}>
+            <Button text="Logout" preset="glass" onPress={handleLogout} />
+          </View>
         </View>
-        <Button text="Logout" preset="glass" onPress={handleLogout} />
       </GlassCard>
 
       {/* Logout modal */}
@@ -958,7 +1001,7 @@ export function SettingsScreen() {
               <Button
                 text="Remove"
                 preset="glass"
-                style={themed($dangerButton)}
+                style={themed($compactDangerButton)}
                 onPress={handleRemoveMember}
               />
             </View>
@@ -980,7 +1023,7 @@ export function SettingsScreen() {
               <Button
                 text="Revoke"
                 preset="glass"
-                style={themed($dangerButton)}
+                style={themed($compactDangerButton)}
                 onPress={handleRevokeInvite}
               />
             </View>
@@ -1002,7 +1045,7 @@ export function SettingsScreen() {
               <Button
                 text="Delete"
                 preset="glass"
-                style={themed($dangerButton)}
+                style={themed($compactDangerButton)}
                 onPress={handleDeleteWorkspace}
               />
             </View>
@@ -1013,14 +1056,63 @@ export function SettingsScreen() {
   )
 }
 
+function CompactSectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {
+  const { themed } = useAppTheme()
+  return (
+    <View style={themed($cardHeaderRow)}>
+      <Text preset="subheading" text={title} />
+      {subtitle ? <Text preset="caption" text={subtitle} style={themed($muted)} /> : null}
+    </View>
+  )
+}
+
+function CompactSettingRow(props: {
+  label: string
+  helperText?: string
+  control: ReactNode
+  withDivider?: boolean
+}) {
+  const { themed } = useAppTheme()
+  return (
+    <View>
+      <View style={themed($toggleRow)}>
+        <View style={themed($toggleLeft)}>
+          <Text preset="formLabel" text={props.label} />
+          {props.helperText ? (
+            <Text preset="caption" text={props.helperText} style={themed($muted)} />
+          ) : null}
+        </View>
+        {props.control}
+      </View>
+      {props.withDivider ? <View style={themed($inlineDivider)} /> : null}
+    </View>
+  )
+}
+
+function CompactMetaPill({ label, value }: { label: string; value: string }) {
+  const { themed } = useAppTheme()
+  return (
+    <View style={themed($metaPill)}>
+      <Text preset="caption" text={label} style={themed($muted)} />
+      <Text preset="caption" text={value} style={themed($strongText)} numberOfLines={1} />
+    </View>
+  )
+}
+
+function CompactSubsectionLabel({ text }: { text: string }) {
+  const { themed } = useAppTheme()
+  return <Text preset="caption" text={text} style={themed($subsectionLabel)} />
+}
+
 const $screen: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  padding: spacing.lg,
-  gap: spacing.lg,
+  paddingHorizontal: spacing.screenHorizontal,
+  paddingTop: spacing.md,
+  gap: spacing.md,
   paddingBottom: spacing.xxxl,
 })
 
 const $header: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  gap: spacing.xs,
+  gap: spacing.sm,
 })
 
 const $headerRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
@@ -1032,6 +1124,24 @@ const $headerRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
 
 const $headerText: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flex: 1,
+  gap: spacing.xxxs,
+})
+
+const $headerMetaRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  flexWrap: "wrap",
+  gap: spacing.xs,
+})
+
+const $metaPill: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
+  borderRadius: radius.pill,
+  borderWidth: 1,
+  borderColor: colors.borderSubtle,
+  backgroundColor: colors.surfaceGlass,
+  paddingHorizontal: spacing.sm,
+  paddingVertical: spacing.xs,
+  flexDirection: "row",
+  alignItems: "center",
   gap: spacing.xs,
 })
 
@@ -1040,46 +1150,78 @@ const $cardHeaderRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   alignItems: "baseline",
   justifyContent: "space-between",
   gap: spacing.sm,
-  marginBottom: spacing.sm,
+  marginBottom: spacing.xs,
 })
 
 const $titleBlock: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flex: 1,
-  gap: spacing.xxs,
+  gap: spacing.xxxs,
 })
 
 const $headerActionsRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexDirection: "row",
   alignItems: "center",
-  gap: spacing.sm,
+  gap: spacing.xs,
 })
 
 const $stack: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  gap: spacing.md,
+  gap: spacing.sm,
 })
 
 const $toggleRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexDirection: "row",
   justifyContent: "space-between",
   alignItems: "center",
-  gap: spacing.md,
+  gap: spacing.sm,
+  minHeight: 52,
 })
 
 const $toggleLeft: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flex: 1,
-  gap: spacing.xxs,
+  gap: spacing.xxxs,
+})
+
+const $groupedList: ThemedStyle<ViewStyle> = ({ colors, radius }) => ({
+  borderWidth: 1,
+  borderColor: colors.borderSubtle,
+  borderRadius: radius.large,
+  overflow: "hidden",
+})
+
+const $inlineDivider: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  height: 1,
+  backgroundColor: colors.borderSubtle,
 })
 
 const $rowLeft: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flex: 1,
-  gap: spacing.xxs,
+  gap: spacing.xxxs,
 })
 
-const $accordionCard: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+const $projectList: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: spacing.xs,
+})
+
+const $currentProjectRow: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
   borderWidth: 1,
-  borderColor: colors.border,
-  borderRadius: 16,
-  padding: spacing.sm,
+  borderColor: colors.borderSubtle,
+  borderRadius: radius.medium,
+  backgroundColor: colors.surface,
+  paddingHorizontal: spacing.sm,
+  paddingVertical: spacing.sm,
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: spacing.sm,
+})
+
+const $accordionCard: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
+  borderWidth: 1,
+  borderColor: colors.borderSubtle,
+  borderRadius: radius.large,
+  backgroundColor: colors.surface,
+  paddingHorizontal: spacing.sm,
+  paddingVertical: spacing.sm,
   gap: spacing.sm,
 })
 
@@ -1088,6 +1230,18 @@ const $accordionHeader: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   justifyContent: "space-between",
   alignItems: "center",
   gap: spacing.sm,
+})
+
+const $accordionTitleRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  alignItems: "center",
+  gap: spacing.xs,
+})
+
+const $projectMetaLine: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  flexWrap: "wrap",
+  gap: spacing.xs,
 })
 
 const $accordionMeta: ThemedStyle<ViewStyle> = ({ spacing }) => ({
@@ -1100,18 +1254,12 @@ const $accordionBody: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.sm,
 })
 
-const $accordionRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  flexDirection: "row",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: spacing.sm,
-})
-
 const $memberRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexDirection: "row",
   alignItems: "center",
   justifyContent: "space-between",
   gap: spacing.sm,
+  minHeight: 42,
 })
 
 const $inviteRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
@@ -1119,12 +1267,13 @@ const $inviteRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   alignItems: "center",
   justifyContent: "space-between",
   gap: spacing.sm,
+  minHeight: 42,
 })
 
 const $divider: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
   height: 1,
-  backgroundColor: colors.border,
-  marginVertical: spacing.sm,
+  backgroundColor: colors.borderSubtle,
+  marginVertical: spacing.xs,
 })
 
 const $expandArea: ThemedStyle<ViewStyle> = ({ spacing }) => ({
@@ -1133,31 +1282,63 @@ const $expandArea: ThemedStyle<ViewStyle> = ({ spacing }) => ({
 
 const $actionsRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexDirection: "row",
+  flexWrap: "wrap",
+  gap: spacing.xs,
+})
+
+const $compactActionButton: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  paddingHorizontal: spacing.sm,
+})
+
+const $compactActionChip: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
+  borderRadius: radius.pill,
+  borderWidth: 1,
+  borderColor: colors.borderSubtle,
+  backgroundColor: colors.surfaceGlass,
+  paddingHorizontal: spacing.sm,
+  paddingVertical: spacing.xs,
+})
+
+const $compactActionChipPrimary: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
+  borderRadius: radius.pill,
+  borderWidth: 1,
+  borderColor: colors.primary,
+  backgroundColor: colors.glowSoft,
+  paddingHorizontal: spacing.sm,
+  paddingVertical: spacing.xs,
+})
+
+const $compactActionRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "space-between",
   gap: spacing.sm,
 })
 
-const $smallButton: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  paddingHorizontal: spacing.sm,
+const $compactActionCopy: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flex: 1,
+  gap: spacing.xxxs,
 })
 
-const $pillButton: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
-  flexDirection: "row",
-  alignItems: "center",
+const $inlineActions: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.xs,
-  paddingHorizontal: spacing.sm,
-  paddingVertical: spacing.xs,
-  borderRadius: 999,
-  borderWidth: 1,
-  borderColor: colors.border,
-  backgroundColor: colors.background,
 })
 
-const $pillText: ThemedStyle<TextStyle> = () => ({
-  opacity: 0.9,
+const $muted: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.textDim,
 })
 
-const $muted: ThemedStyle<TextStyle> = () => ({
-  opacity: 0.85,
+const $strongText: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.text,
+})
+
+const $accentText: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.primary,
+})
+
+const $subsectionLabel: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.textMuted,
+  textTransform: "uppercase",
 })
 
 const $backdrop: ThemedStyle<ViewStyle> = ({ colors }) => ({
@@ -1170,7 +1351,7 @@ const $backdrop: ThemedStyle<ViewStyle> = ({ colors }) => ({
 
 const $modalCard: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   width: "100%",
-  gap: spacing.md,
+  gap: spacing.sm,
 })
 
 const $modalButtons: ThemedStyle<ViewStyle> = ({ spacing }) => ({
@@ -1178,13 +1359,14 @@ const $modalButtons: ThemedStyle<ViewStyle> = ({ spacing }) => ({
 })
 
 const $errorText: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.error,
+  color: colors.danger,
 })
 
-const $dangerButton: ThemedStyle<ViewStyle> = ({ colors }) => ({
-  borderColor: colors.error,
+const $compactDangerButton: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+  borderColor: colors.danger,
+  paddingHorizontal: spacing.sm,
 })
 
 const $successText: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.tint,
+  color: colors.success,
 })
