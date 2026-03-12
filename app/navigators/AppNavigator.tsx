@@ -19,7 +19,7 @@ import { navigationRef, useBackButtonHandler } from "./navigationUtilities"
  * is pressed while in that screen. Only affects Android.
  */
 const exitRoutes = Config.exitRoutes
-const defaultExitRoutes = ["Home", "HomeTab", "MainTabs"]
+const defaultExitRoutes = ["Home", "DashboardTab", "ProjectsHome", "MainTabs"]
 
 export const AppNavigator = (props: NavigationProps) => {
   const { navigationTheme } = useAppTheme()

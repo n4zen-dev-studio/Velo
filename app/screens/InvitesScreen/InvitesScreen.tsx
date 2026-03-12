@@ -60,19 +60,17 @@ export function InvitesScreen() {
           scopeKey,
         )
         if (response.membership) {
-          await upsertWorkspaceMemberFromSync(
-            {
-              id: response.membership.id,
-              workspaceId: response.membership.workspaceId,
-              userId: response.membership.userId,
-              role: response.membership.role,
-              createdAt: response.membership.createdAt,
-              updatedAt: response.membership.updatedAt,
-              revision: response.membership.revision,
-              deletedAt: response.membership.deletedAt,
-              scopeKey,
-            },
-          )
+          await upsertWorkspaceMemberFromSync({
+            id: response.membership.id,
+            workspaceId: response.membership.workspaceId,
+            userId: response.membership.userId,
+            role: response.membership.role,
+            createdAt: response.membership.createdAt,
+            updatedAt: response.membership.updatedAt,
+            revision: response.membership.revision,
+            deletedAt: response.membership.deletedAt,
+            scopeKey,
+          })
         }
         await refreshWorkspaces()
         await syncController.triggerSync("manual")
@@ -89,8 +87,8 @@ export function InvitesScreen() {
   return (
     <Screen preset="scroll" contentContainerStyle={themed($screen)}>
       <View style={themed($header)}>
-        <Text preset="heading" text="Invites" />
-        <Text preset="formHelper" text="Pending workspace invitations" />
+        <Text preset="heading" text="Project invites" />
+        <Text preset="formHelper" text="Pending invitations to join shared projects" />
       </View>
 
       {error ? (

@@ -66,19 +66,17 @@ export function InviteAcceptScreen() {
       const response = await acceptInvite(client, token)
       const scopeKey = await getActiveScopeKey()
       if (response.membership) {
-        await upsertWorkspaceMemberFromSync(
-          {
-            id: response.membership.id,
-            workspaceId: response.membership.workspaceId,
-            userId: response.membership.userId,
-            role: response.membership.role,
-            createdAt: response.membership.createdAt,
-            updatedAt: response.membership.updatedAt,
-            revision: response.membership.revision,
-            deletedAt: response.membership.deletedAt,
-            scopeKey,
-          },
-        )
+        await upsertWorkspaceMemberFromSync({
+          id: response.membership.id,
+          workspaceId: response.membership.workspaceId,
+          userId: response.membership.userId,
+          role: response.membership.role,
+          createdAt: response.membership.createdAt,
+          updatedAt: response.membership.updatedAt,
+          revision: response.membership.revision,
+          deletedAt: response.membership.deletedAt,
+          scopeKey,
+        })
       }
       await upsertWorkspaceFromSync(
         {
@@ -103,7 +101,7 @@ export function InviteAcceptScreen() {
   return (
     <Screen preset="scroll" contentContainerStyle={themed($screen)}>
       <View style={themed($header)}>
-        <Text preset="heading" text="Workspace Invite" />
+        <Text preset="heading" text="Project invite" />
         <Text preset="formHelper" text="Accept your invitation to collaborate" />
       </View>
 

@@ -14,7 +14,7 @@ function resetToMainTabs() {
               state: {
                 routes: [
                   {
-                    name: "HomeTab" as never,
+                    name: "DashboardTab" as never,
                     state: { routes: [{ name: "Home" as never }] },
                   },
                 ],
@@ -31,105 +31,146 @@ export function goToHome() {
   resetToMainTabs()
 }
 
-export function goToHomeTab() {
+export function goToDashboardTab() {
   if (!navigationRef.isReady()) return
-  navigationRef.navigate("AuthGate" as never, {
-    screen: "MainTabs",
-    params: { screen: "HomeTab" },
-  } as never)
+  navigationRef.navigate(
+    "AuthGate" as never,
+    {
+      screen: "MainTabs",
+      params: { screen: "DashboardTab" },
+    } as never,
+  )
+}
+
+export function goToProjectsTab() {
+  if (!navigationRef.isReady()) return
+  navigationRef.navigate(
+    "AuthGate" as never,
+    {
+      screen: "MainTabs",
+      params: { screen: "ProjectsTab" },
+    } as never,
+  )
 }
 
 export function goToSettingsTab() {
   if (!navigationRef.isReady()) return
-  navigationRef.navigate("AuthGate" as never, {
-    screen: "MainTabs",
-    params: { screen: "SettingsTab" },
-  } as never)
+  navigationRef.navigate(
+    "AuthGate" as never,
+    {
+      screen: "MainTabs",
+      params: { screen: "SettingsTab" },
+    } as never,
+  )
 }
 
 export function goToDebugTab() {
   if (!navigationRef.isReady()) return
-  navigationRef.navigate("AuthGate" as never, {
-    screen: "MainTabs",
-    params: { screen: "DebugTab" },
-  } as never)
+  navigationRef.navigate(
+    "AuthGate" as never,
+    {
+      screen: "MainTabs",
+      params: { screen: "DebugTab" },
+    } as never,
+  )
 }
 
 export function goToTaskDetail(taskId: string) {
   if (!navigationRef.isReady()) return
-  navigationRef.navigate("AuthGate" as never, {
-    screen: "MainTabs",
-    params: {
-      screen: "HomeTab",
-      params: { screen: "TaskDetail", params: { taskId } },
-    },
-  } as never)
+  navigationRef.navigate(
+    "AuthGate" as never,
+    {
+      screen: "MainTabs",
+      params: {
+        screen: "DashboardTab",
+        params: { screen: "TaskDetail", params: { taskId } },
+      },
+    } as never,
+  )
 }
 
 export function goToTaskEditor(params?: { taskId?: string; projectId?: string }) {
   if (!navigationRef.isReady()) return
-  navigationRef.navigate("AuthGate" as never, {
-    screen: "MainTabs",
-    params: {
-      screen: "HomeTab",
-      params: { screen: "TaskEditor", params },
-    },
-  } as never)
+  navigationRef.navigate(
+    "AuthGate" as never,
+    {
+      screen: "MainTabs",
+      params: {
+        screen: "DashboardTab",
+        params: { screen: "TaskEditor", params },
+      },
+    } as never,
+  )
 }
 
 export function goToConflictList() {
   if (!navigationRef.isReady()) return
-  navigationRef.navigate("AuthGate" as never, {
-    screen: "MainTabs",
-    params: {
-      screen: "HomeTab",
-      params: { screen: "ConflictList" },
-    },
-  } as never)
+  navigationRef.navigate(
+    "AuthGate" as never,
+    {
+      screen: "MainTabs",
+      params: {
+        screen: "DashboardTab",
+        params: { screen: "ConflictList" },
+      },
+    } as never,
+  )
 }
 
 export function goToConflictResolution(params?: { conflictId?: string }) {
   if (!navigationRef.isReady()) return
-  navigationRef.navigate("AuthGate" as never, {
-    screen: "MainTabs",
-    params: {
-      screen: "HomeTab",
-      params: { screen: "ConflictResolution", params },
-    },
-  } as never)
+  navigationRef.navigate(
+    "AuthGate" as never,
+    {
+      screen: "MainTabs",
+      params: {
+        screen: "DashboardTab",
+        params: { screen: "ConflictResolution", params },
+      },
+    } as never,
+  )
 }
 
 export function goToInvites() {
   if (!navigationRef.isReady()) return
-  navigationRef.navigate("AuthGate" as never, {
-    screen: "MainTabs",
-    params: {
-      screen: "HomeTab",
-      params: { screen: "Invites" },
-    },
-  } as never)
+  navigationRef.navigate(
+    "AuthGate" as never,
+    {
+      screen: "MainTabs",
+      params: {
+        screen: "DashboardTab",
+        params: { screen: "Invites" },
+      },
+    } as never,
+  )
 }
 
 export function goToInviteAccept(token?: string) {
   if (!navigationRef.isReady()) return
-  navigationRef.navigate("AuthGate" as never, {
-    screen: "MainTabs",
-    params: {
-      screen: "HomeTab",
-      params: { screen: "InviteAccept", params: { token } },
-    },
-  } as never)
+  navigationRef.navigate(
+    "AuthGate" as never,
+    {
+      screen: "MainTabs",
+      params: {
+        screen: "DashboardTab",
+        params: { screen: "InviteAccept", params: { token } },
+      },
+    } as never,
+  )
 }
 
 export function goToProfile() {
   if (!navigationRef.isReady()) return
-  navigationRef.navigate("AuthGate" as never, {
-    screen: "MainTabs",
-    params: {
-      screen: "HomeTab",
-      params: { screen: "Profile" },
-    },
-  } as never)
+  navigationRef.navigate(
+    "AuthGate" as never,
+    {
+      screen: "MainTabs",
+      params: {
+        screen: "DashboardTab",
+        params: { screen: "Profile" },
+      },
+    } as never,
+  )
 }
 
 export function goToAuth() {
@@ -139,7 +180,9 @@ export function goToAuth() {
     routes: [
       {
         name: "AuthGate" as never,
-        state: { routes: [{ name: "AuthStack" as never, state: { routes: [{ name: "Auth" as never }] } }] },
+        state: {
+          routes: [{ name: "AuthStack" as never, state: { routes: [{ name: "Auth" as never }] } }],
+        },
       },
     ],
   })
@@ -147,24 +190,33 @@ export function goToAuth() {
 
 export function goToVerifyEmail() {
   if (!navigationRef.isReady()) return
-  navigationRef.navigate("AuthGate" as never, {
-    screen: "AuthStack",
-    params: { screen: "VerifyEmail" },
-  } as never)
+  navigationRef.navigate(
+    "AuthGate" as never,
+    {
+      screen: "AuthStack",
+      params: { screen: "VerifyEmail" },
+    } as never,
+  )
 }
 
 export function goToPasswordResetRequest() {
   if (!navigationRef.isReady()) return
-  navigationRef.navigate("AuthGate" as never, {
-    screen: "AuthStack",
-    params: { screen: "PasswordResetRequest" },
-  } as never)
+  navigationRef.navigate(
+    "AuthGate" as never,
+    {
+      screen: "AuthStack",
+      params: { screen: "PasswordResetRequest" },
+    } as never,
+  )
 }
 
 export function goToPasswordResetConfirm() {
   if (!navigationRef.isReady()) return
-  navigationRef.navigate("AuthGate" as never, {
-    screen: "AuthStack",
-    params: { screen: "PasswordResetConfirm" },
-  } as never)
+  navigationRef.navigate(
+    "AuthGate" as never,
+    {
+      screen: "AuthStack",
+      params: { screen: "PasswordResetConfirm" },
+    } as never,
+  )
 }

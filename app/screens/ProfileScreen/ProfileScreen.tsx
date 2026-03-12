@@ -125,7 +125,7 @@ export function ProfileScreen() {
         <Text preset="display" text="Profile" />
         <Text
           preset="formHelper"
-          text="Update your Velo identity across workspaces."
+          text="Update your Velo identity across projects."
           style={themed($muted)}
         />
       </View>

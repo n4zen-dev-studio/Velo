@@ -101,7 +101,7 @@ export function TaskEditorScreen() {
     >
       <View style={themed($header)}>
         <Text preset="display" text={task ? "Edit task" : "Create task"} />
-        <Text preset="formHelper" text={`Workspace: ${workspaceLabel}`} style={themed($subtitle)} />
+        <Text preset="formHelper" text={`Project: ${workspaceLabel}`} style={themed($subtitle)} />
       </View>
 
       {hasConflict ? (

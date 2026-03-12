@@ -69,7 +69,9 @@ export function SettingsScreen() {
   const [renameError, setRenameError] = useState<string | null>(null)
   const [showRenameModal, setShowRenameModal] = useState(false)
   const [expandedWorkspaceIds, setExpandedWorkspaceIds] = useState<Set<string>>(new Set())
-  const [inviteEmailByWorkspaceId, setInviteEmailByWorkspaceId] = useState<Record<string, string>>({})
+  const [inviteEmailByWorkspaceId, setInviteEmailByWorkspaceId] = useState<Record<string, string>>(
+    {},
+  )
   const [inviteStatusByWorkspaceId, setInviteStatusByWorkspaceId] = useState<
     Record<string, { error?: string; success?: string; isInviting?: boolean }>
   >({})
@@ -100,10 +102,12 @@ export function SettingsScreen() {
 
   const validateWorkspaceLabel = (label: string, excludeId?: string | null) => {
     const trimmed = label.trim()
-    if (trimmed.length < 2 || trimmed.length > 40) return "Workspace name must be 2-40 characters."
+    if (trimmed.length < 2 || trimmed.length > 40) return "Project name must be 2-40 characters."
     const normalized = trimmed.toLowerCase()
-    const conflicts = workspaces.some((w) => w.id !== excludeId && w.label.trim().toLowerCase() === normalized)
-    if (conflicts) return "A workspace with that name already exists."
+    const conflicts = workspaces.some(
+      (w) => w.id !== excludeId && w.label.trim().toLowerCase() === normalized,
+    )
+    if (conflicts) return "A project with that name already exists."
     return null
   }
 
@@ -232,7 +236,6 @@ export function SettingsScreen() {
     }
   }
 
-
   const handleOfflineKeepLocal = async () => {
     setLogoutError(null)
     setIsLoggingOut(true)
@@ -303,7 +306,7 @@ export function SettingsScreen() {
       setCreateError(null)
       setCreateExpanded(false)
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to create workspace"
+      const message = err instanceof Error ? err.message : "Failed to create project"
       setCreateError(message)
     }
   }
@@ -427,7 +430,12 @@ export function SettingsScreen() {
       }
       setInviteStatusByWorkspaceId((prev) => ({
         ...prev,
-        [workspaceId]: { ...prev[workspaceId], error: undefined, success: undefined, isInviting: true },
+        [workspaceId]: {
+          ...prev[workspaceId],
+          error: undefined,
+          success: undefined,
+          isInviting: true,
+        },
       }))
       try {
         const client = createHttpClient(BASE_URL)
@@ -453,7 +461,7 @@ export function SettingsScreen() {
 
   const workspaceSubtitle = useMemo(() => {
     const customCount = workspaces.filter((w) => w.kind !== "personal").length
-    return customCount === 0 ? "Personal only" : `${customCount} custom`
+    return customCount === 0 ? "Personal only" : `${customCount} shared projects`
   }, [workspaces])
 
   const handleRemoveMember = useCallback(async () => {
@@ -513,7 +521,11 @@ export function SettingsScreen() {
   }, [confirmDelete, deleteWorkspace])
 
   return (
-    <Screen preset="scroll" safeAreaEdges={["top", "bottom"]} contentContainerStyle={themed($screen)}>
+    <Screen
+      preset="scroll"
+      safeAreaEdges={["top", "bottom"]}
+      contentContainerStyle={themed($screen)}
+    >
       <View style={themed($header)}>
         <View style={themed($headerRow)}>
           <View style={themed($headerText)}>
@@ -536,24 +548,29 @@ export function SettingsScreen() {
             <View key={option.id} style={themed($toggleRow)}>
               <View style={themed($toggleLeft)}>
                 <Text preset="formLabel" text={option.label} />
-                {option.helperText ? <Text preset="formHelper" text={option.helperText} style={themed($muted)} /> : null}
+                {option.helperText ? (
+                  <Text preset="formHelper" text={option.helperText} style={themed($muted)} />
+                ) : null}
               </View>
 
-              <Switch value={!!option.value} onValueChange={(value) => setOption(option.id, value)} />
+              <Switch
+                value={!!option.value}
+                onValueChange={(value) => setOption(option.id, value)}
+              />
             </View>
           ))}
         </View>
       </GlassCard>
 
       <View>
-        <Button tx="welcomeScreen:SwitchTheme" onPress={toggleTheme} preset="glass" />
+        <Button text="Switch theme" onPress={toggleTheme} preset="glass" />
       </View>
 
-      {/* Workspaces */}
+      {/* Projects */}
       <GlassCard>
         <View style={themed($cardHeaderRow)}>
           <View style={themed($titleBlock)}>
-            <Text preset="subheading" text="Workspaces" />
+            <Text preset="subheading" text="Projects" />
             <Text preset="formHelper" text={workspaceSubtitle} style={themed($muted)} />
           </View>
           <View style={themed($headerActionsRow)}>
@@ -564,8 +581,16 @@ export function SettingsScreen() {
               onPress={() => setCreateExpanded((v) => !v)}
               hitSlop={10}
             >
-              <Text preset="formHelper" text={createExpanded ? "Close" : "Create"} style={themed($pillText)} />
-              <Text preset="formHelper" text={createExpanded ? "▴" : "▾"} style={themed($pillText)} />
+              <Text
+                preset="formHelper"
+                text={createExpanded ? "Close" : "Create"}
+                style={themed($pillText)}
+              />
+              <Text
+                preset="formHelper"
+                text={createExpanded ? "▴" : "▾"}
+                style={themed($pillText)}
+              />
             </Pressable>
           </View>
         </View>
@@ -575,7 +600,9 @@ export function SettingsScreen() {
             const isExpanded = expandedWorkspaceIds.has(workspace.id)
             const members = membersByWorkspaceId[workspace.id] ?? []
             const ownerCount = members.filter((member) => member.role === "OWNER").length
-            const isOwner = !!currentUserId && members.some((member) => member.userId === currentUserId && member.role === "OWNER")
+            const isOwner =
+              !!currentUserId &&
+              members.some((member) => member.userId === currentUserId && member.role === "OWNER")
             const inviteStatus = inviteStatusByWorkspaceId[workspace.id]
             const inviteEmail = inviteEmailByWorkspaceId[workspace.id] ?? ""
             const sentInvites = sentInvitesByWorkspaceId[workspace.id] ?? []
@@ -591,14 +618,22 @@ export function SettingsScreen() {
                     <Text preset="formLabel" text={workspace.label} />
                     <Text
                       preset="formHelper"
-                      text={workspace.kind === "personal" ? "Personal" : "Workspace"}
+                      text={workspace.kind === "personal" ? "Personal" : "Project"}
                       style={themed($muted)}
                     />
                   </View>
 
                   <View style={themed($accordionMeta)}>
-                    <Text preset="formHelper" text={`${members.length} members`} style={themed($muted)} />
-                    <Text preset="formHelper" text={isExpanded ? "▴" : "▾"} style={themed($muted)} />
+                    <Text
+                      preset="formHelper"
+                      text={`${members.length} members`}
+                      style={themed($muted)}
+                    />
+                    <Text
+                      preset="formHelper"
+                      text={isExpanded ? "▴" : "▾"}
+                      style={themed($muted)}
+                    />
                   </View>
                 </Pressable>
 
@@ -609,7 +644,11 @@ export function SettingsScreen() {
                     </View>
 
                     {members.length === 0 ? (
-                      <Text preset="formHelper" text="No members synced yet." style={themed($muted)} />
+                      <Text
+                        preset="formHelper"
+                        text="No members synced yet."
+                        style={themed($muted)}
+                      />
                     ) : (
                       members.map((member) => (
                         <View key={member.id} style={themed($memberRow)}>
@@ -644,7 +683,11 @@ export function SettingsScreen() {
                         {inviteListStatus?.isLoading ? (
                           <Text preset="formHelper" text="Loading invites..." />
                         ) : inviteListStatus?.error ? (
-                          <Text preset="formHelper" text={inviteListStatus.error} style={themed($errorText)} />
+                          <Text
+                            preset="formHelper"
+                            text={inviteListStatus.error}
+                            style={themed($errorText)}
+                          />
                         ) : sentInvites.length === 0 ? (
                           <Text preset="formHelper" text="No invites yet." style={themed($muted)} />
                         ) : (
@@ -681,9 +724,17 @@ export function SettingsScreen() {
 
                     <Text preset="formLabel" text="Invite member" />
                     {workspace.kind === "personal" ? (
-                      <Text preset="formHelper" text="Personal workspace cannot be shared." style={themed($muted)} />
+                      <Text
+                        preset="formHelper"
+                        text="Personal projects cannot be shared."
+                        style={themed($muted)}
+                      />
                     ) : !isOwner ? (
-                      <Text preset="formHelper" text="Owner permission required to invite members." style={themed($muted)} />
+                      <Text
+                        preset="formHelper"
+                        text="Owner permission required to invite members."
+                        style={themed($muted)}
+                      />
                     ) : (
                       <>
                         <TextField
@@ -694,9 +745,17 @@ export function SettingsScreen() {
                           autoCapitalize="none"
                         />
                         {inviteStatus?.error ? (
-                          <Text preset="formHelper" text={inviteStatus.error} style={themed($errorText)} />
+                          <Text
+                            preset="formHelper"
+                            text={inviteStatus.error}
+                            style={themed($errorText)}
+                          />
                         ) : inviteStatus?.success ? (
-                          <Text preset="formHelper" text={inviteStatus.success} style={themed($successText)} />
+                          <Text
+                            preset="formHelper"
+                            text={inviteStatus.success}
+                            style={themed($successText)}
+                          />
                         ) : null}
                         <View style={themed($actionsRow)}>
                           <Button
@@ -711,7 +770,7 @@ export function SettingsScreen() {
 
                     <View style={themed($divider)} />
                     <View style={themed($accordionRow)}>
-                      <Text preset="formLabel" text="Workspace actions" />
+                      <Text preset="formLabel" text="Project actions" />
                     </View>
                     <View style={themed($actionsRow)}>
                       {workspace.kind === "personal" ? null : (
@@ -727,7 +786,9 @@ export function SettingsScreen() {
                           text="Delete"
                           preset="glass"
                           style={themed($dangerButton)}
-                          onPress={() => setConfirmDelete({ workspaceId: workspace.id, label: workspace.label })}
+                          onPress={() =>
+                            setConfirmDelete({ workspaceId: workspace.id, label: workspace.label })
+                          }
                         />
                       ) : null}
                     </View>
@@ -737,20 +798,22 @@ export function SettingsScreen() {
             )
           })}
 
-          {/* Expandable create workspace */}
+          {/* Expandable create project */}
           {createExpanded ? (
             <View style={themed($expandArea)}>
               <View style={themed($divider)} />
-              <Text preset="formLabel" text="New workspace" />
+              <Text preset="formLabel" text="New project" />
               <TextField
                 value={newWorkspaceLabel}
                 onChangeText={(value) => {
                   setNewWorkspaceLabel(value)
                   if (createError) setCreateError(null)
                 }}
-                placeholder="Workspace name"
+                placeholder="Project name"
               />
-              {createError ? <Text preset="formHelper" text={createError} style={themed($errorText)} /> : null}
+              {createError ? (
+                <Text preset="formHelper" text={createError} style={themed($errorText)} />
+              ) : null}
 
               <View style={themed($actionsRow)}>
                 <Button
@@ -795,7 +858,9 @@ export function SettingsScreen() {
                   : "You’re not signed in. Keeping local data lets you continue offline."
               }
             />
-            {logoutError ? <Text preset="formHelper" text={logoutError} style={themed($errorText)} /> : null}
+            {logoutError ? (
+              <Text preset="formHelper" text={logoutError} style={themed($errorText)} />
+            ) : null}
 
             <View style={themed($modalButtons)}>
               {authSession.isAuthenticated ? (
@@ -849,16 +914,18 @@ export function SettingsScreen() {
       >
         <View style={themed($backdrop)}>
           <GlassCard style={themed($modalCard)}>
-            <Text preset="heading" text="Rename workspace" />
+            <Text preset="heading" text="Rename project" />
             <TextField
               value={renameLabel}
               onChangeText={(value) => {
                 setRenameLabel(value)
                 if (renameError) setRenameError(null)
               }}
-              placeholder="Workspace name"
+              placeholder="Project name"
             />
-            {renameError ? <Text preset="formHelper" text={renameError} style={themed($errorText)} /> : null}
+            {renameError ? (
+              <Text preset="formHelper" text={renameError} style={themed($errorText)} />
+            ) : null}
 
             <View style={themed($actionsRow)}>
               <Button
@@ -884,11 +951,16 @@ export function SettingsScreen() {
             <Text preset="heading" text="Remove member?" />
             <Text
               preset="formHelper"
-              text={confirmRemove ? `Remove ${confirmRemove.label} from this workspace?` : ""}
+              text={confirmRemove ? `Remove ${confirmRemove.label} from this project?` : ""}
             />
             <View style={themed($actionsRow)}>
               <Button text="Cancel" preset="glass" onPress={() => setConfirmRemove(null)} />
-              <Button text="Remove" preset="glass" style={themed($dangerButton)} onPress={handleRemoveMember} />
+              <Button
+                text="Remove"
+                preset="glass"
+                style={themed($dangerButton)}
+                onPress={handleRemoveMember}
+              />
             </View>
           </GlassCard>
         </View>
@@ -905,24 +977,34 @@ export function SettingsScreen() {
             />
             <View style={themed($actionsRow)}>
               <Button text="Cancel" preset="glass" onPress={() => setConfirmRevoke(null)} />
-              <Button text="Revoke" preset="glass" style={themed($dangerButton)} onPress={handleRevokeInvite} />
+              <Button
+                text="Revoke"
+                preset="glass"
+                style={themed($dangerButton)}
+                onPress={handleRevokeInvite}
+              />
             </View>
           </GlassCard>
         </View>
       </Modal>
 
-      {/* Delete workspace confirm */}
+      {/* Delete project confirm */}
       <Modal visible={!!confirmDelete} transparent animationType="fade">
         <View style={themed($backdrop)}>
           <GlassCard style={themed($modalCard)}>
-            <Text preset="heading" text="Delete workspace?" />
+            <Text preset="heading" text="Delete project?" />
             <Text
               preset="formHelper"
               text={confirmDelete ? `Delete ${confirmDelete.label}? This cannot be undone.` : ""}
             />
             <View style={themed($actionsRow)}>
               <Button text="Cancel" preset="glass" onPress={() => setConfirmDelete(null)} />
-              <Button text="Delete" preset="glass" style={themed($dangerButton)} onPress={handleDeleteWorkspace} />
+              <Button
+                text="Delete"
+                preset="glass"
+                style={themed($dangerButton)}
+                onPress={handleDeleteWorkspace}
+              />
             </View>
           </GlassCard>
         </View>
@@ -934,7 +1016,7 @@ export function SettingsScreen() {
 const $screen: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   padding: spacing.lg,
   gap: spacing.lg,
-  paddingBottom: spacing.xxxl
+  paddingBottom: spacing.xxxl,
 })
 
 const $header: ThemedStyle<ViewStyle> = ({ spacing }) => ({

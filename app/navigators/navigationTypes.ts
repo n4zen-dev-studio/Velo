@@ -35,8 +35,16 @@ export type HomeStackParamList = {
   Profile: undefined
 }
 
+export type ProjectsStackParamList = {
+  ProjectsHome: undefined
+  ProjectDetail: { workspaceId: string }
+  TaskEditor: { taskId?: string; projectId?: string } | undefined
+  TaskDetail: { taskId: string }
+}
+
 export type MainTabParamList = {
-  HomeTab: undefined
+  DashboardTab: undefined
+  ProjectsTab: undefined
   SettingsTab: undefined
   DebugTab: undefined
 }
@@ -55,6 +63,9 @@ export type HomeStackScreenProps<T extends keyof HomeStackParamList> = NativeSta
   HomeStackParamList,
   T
 >
+
+export type ProjectsStackScreenProps<T extends keyof ProjectsStackParamList> =
+  NativeStackScreenProps<ProjectsStackParamList, T>
 
 export type MainTabScreenProps<T extends keyof MainTabParamList> = BottomTabScreenProps<
   MainTabParamList,
