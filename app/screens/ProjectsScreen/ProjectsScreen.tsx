@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react"
-import { Modal, Pressable, ScrollView, TextStyle, View, ViewStyle } from "react-native"
+import { Modal, Pressable, TextStyle, View, ViewStyle } from "react-native"
 import { useFocusEffect, useNavigation } from "@react-navigation/native"
 
 import { Button } from "@/components/Button"
@@ -7,8 +7,8 @@ import { GlassCard } from "@/components/GlassCard"
 import { Screen } from "@/components/Screen"
 import { Text } from "@/components/Text"
 import { TextField } from "@/components/TextField"
-import type { ProjectsStackScreenProps } from "@/navigators/navigationTypes"
 import { goToInvites } from "@/navigation/navigationActions"
+import type { ProjectsStackScreenProps } from "@/navigators/navigationTypes"
 import { listProjects } from "@/services/db/repositories/projectsRepository"
 import { listStatuses } from "@/services/db/repositories/statusesRepository"
 import { listTasksByWorkspace } from "@/services/db/repositories/tasksRepository"
@@ -93,6 +93,11 @@ export function ProjectsScreen() {
     return cards
   }, [cards, filter])
 
+  const activeCard = useMemo(
+    () => cards.find((card) => card.workspace.id === activeWorkspaceId) ?? filteredCards[0] ?? null,
+    [activeWorkspaceId, cards, filteredCards],
+  )
+
   const totalOpen = filteredCards.reduce((sum, card) => sum + card.openTasks, 0)
   const totalActive = filteredCards.filter((card) => card.openTasks > 0).length
 
@@ -142,6 +147,11 @@ export function ProjectsScreen() {
     await loadCards()
   }
 
+  const openProject = async (workspaceId: string) => {
+    await setActiveWorkspaceId(workspaceId)
+    navigation.navigate("ProjectDetail", { workspaceId })
+  }
+
   return (
     <Screen
       preset="scroll"
@@ -151,129 +161,103 @@ export function ProjectsScreen() {
       <View style={themed($header)}>
         <View style={themed($headerCopy)}>
           <Text preset="overline" text="Projects" />
-          <Text preset="display" text="Project hub" style={themed($title)} />
+          <Text preset="heading" text="Command surface" />
           <Text
-            preset="formHelper"
-            text="Manage delivery, team load, and execution views in one mobile-first workspace."
+            preset="caption"
+            text="Jump back into active work, or manage projects without leaving mobile flow."
             style={themed($subtitle)}
           />
         </View>
-        <Button text="New project" onPress={() => setCreateOpen(true)} />
+        <Pressable onPress={() => setCreateOpen(true)} style={themed($iconAction)}>
+          <Text preset="subheading" text="+" />
+        </Pressable>
       </View>
 
-      <GlassCard>
-        <View style={themed($statsRow)}>
-          <ProjectStat label="Projects" value={`${filteredCards.length}`} />
-          <ProjectStat label="Active" value={`${totalActive}`} />
-          <ProjectStat label="Open tasks" value={`${totalOpen}`} />
+      <View style={themed($topRow)}>
+        <View style={themed($metricPill)}>
+          <Text preset="caption" text="Projects" style={themed($metricLabel)} />
+          <Text preset="subheading" text={`${filteredCards.length}`} />
         </View>
-        <View style={themed($filterRow)}>
-          {[
-            { id: "all", label: "All" },
-            { id: "shared", label: "Team" },
-            { id: "personal", label: "Personal" },
-          ].map((option) => (
-            <Pressable
-              key={option.id}
-              onPress={() => setFilter(option.id as typeof filter)}
-              style={[themed($filterChip), filter === option.id && themed($filterChipActive)]}
-            >
-              <Text preset="caption" text={option.label} />
-            </Pressable>
-          ))}
-          <Pressable onPress={goToInvites} style={themed($linkChip)}>
-            <Text preset="caption" text="Invites" />
+        <View style={themed($metricPill)}>
+          <Text preset="caption" text="Active" style={themed($metricLabel)} />
+          <Text preset="subheading" text={`${totalActive}`} />
+        </View>
+        <View style={themed($metricPillWide)}>
+          <Text preset="caption" text="Open tasks" style={themed($metricLabel)} />
+          <Text preset="subheading" text={`${totalOpen}`} />
+        </View>
+      </View>
+
+      <View style={themed($filterRow)}>
+        {[
+          { id: "all", label: "All" },
+          { id: "shared", label: "Team" },
+          { id: "personal", label: "Personal" },
+        ].map((option) => (
+          <Pressable
+            key={option.id}
+            onPress={() => setFilter(option.id as typeof filter)}
+            style={[themed($filterChip), filter === option.id && themed($filterChipActive)]}
+          >
+            <Text preset="caption" text={option.label} />
           </Pressable>
-        </View>
-      </GlassCard>
+        ))}
+        <Pressable onPress={goToInvites} style={themed($filterChip)}>
+          <Text preset="caption" text="Invites" />
+        </Pressable>
+      </View>
+
+      {activeCard ? (
+        <GlassCard style={themed($activeCard)}>
+          <View style={themed($activeCardHeader)}>
+            <View style={themed($activeCardCopy)}>
+              <Text preset="caption" text="Current project" style={themed($metricLabel)} />
+              <Text preset="sectionTitle" text={activeCard.workspace.label} />
+              <Text
+                preset="caption"
+                text={
+                  activeCard.updatedAt
+                    ? `Updated ${formatDateTime(activeCard.updatedAt)}`
+                    : "No recent activity"
+                }
+                style={themed($subtitle)}
+              />
+            </View>
+            <Button text="Open board" onPress={() => void openProject(activeCard.workspace.id)} />
+          </View>
+          <View style={themed($miniStatsRow)}>
+            <ProjectStatPill label="Open" value={`${activeCard.openTasks}`} />
+            <ProjectStatPill label="In motion" value={`${activeCard.inProgressTasks}`} />
+            <ProjectStatPill label="Tracks" value={`${activeCard.streamsCount}`} />
+          </View>
+        </GlassCard>
+      ) : null}
 
       <View style={themed($cardsStack)}>
         {filteredCards.map((card) => {
-          const progress =
-            card.openTasks + card.doneTasks === 0
-              ? 0
-              : card.doneTasks / (card.openTasks + card.doneTasks)
           const isActive = card.workspace.id === activeWorkspaceId
 
           return (
-            <Pressable
+            <CompactProjectCard
               key={card.workspace.id}
-              onPress={async () => {
-                await setActiveWorkspaceId(card.workspace.id)
-                navigation.navigate("ProjectDetail", { workspaceId: card.workspace.id })
-              }}
-            >
-              <GlassCard style={themed(isActive ? $projectCardActive : $projectCard)}>
-                <View style={themed($projectHeader)}>
-                  <View style={themed($projectHeaderCopy)}>
-                    <Text preset="sectionTitle" text={card.workspace.label} />
-                    <Text
-                      preset="formHelper"
-                      text={
-                        card.workspace.kind === "personal"
-                          ? "Personal project"
-                          : `${card.workspace.membersCount ?? 0} team members`
-                      }
-                    />
-                  </View>
-                  {isActive ? <Text preset="caption" text="Current" /> : null}
-                </View>
-
-                <View style={themed($microStatsRow)}>
-                  <MiniStat label="Open" value={`${card.openTasks}`} />
-                  <MiniStat label="In motion" value={`${card.inProgressTasks}`} />
-                  <MiniStat label="Tracks" value={`${card.streamsCount}`} />
-                </View>
-
-                <View style={themed($progressBlock)}>
-                  <View style={themed($progressTrack)}>
-                    <View
-                      style={[
-                        themed($progressFill),
-                        { width: `${Math.max(progress * 100, progress > 0 ? 12 : 0)}%` },
-                      ]}
-                    />
-                  </View>
-                  <Text
-                    preset="caption"
-                    text={
-                      card.updatedAt
-                        ? `Updated ${formatDateTime(card.updatedAt)}`
-                        : "No recent activity recorded"
+              card={card}
+              isActive={isActive}
+              onOpen={() => void openProject(card.workspace.id)}
+              onRename={
+                card.workspace.kind !== "personal"
+                  ? () => {
+                      setRenameTarget(card.workspace)
+                      setCreateLabel(card.workspace.label)
+                      setFormError(null)
                     }
-                  />
-                </View>
-
-                <View style={themed($projectActions)}>
-                  <Button
-                    text="Open"
-                    preset="filled"
-                    onPress={async () => {
-                      await setActiveWorkspaceId(card.workspace.id)
-                      navigation.navigate("ProjectDetail", { workspaceId: card.workspace.id })
-                    }}
-                  />
-                  {card.workspace.kind !== "personal" ? (
-                    <Button
-                      text="Rename"
-                      preset="glass"
-                      onPress={() => {
-                        setRenameTarget(card.workspace)
-                        setCreateLabel(card.workspace.label)
-                        setFormError(null)
-                      }}
-                    />
-                  ) : null}
-                  {card.workspace.kind !== "personal" ? (
-                    <Button
-                      text="Delete"
-                      preset="reversed"
-                      onPress={() => setDeleteTarget(card.workspace)}
-                    />
-                  ) : null}
-                </View>
-              </GlassCard>
-            </Pressable>
+                  : undefined
+              }
+              onDelete={
+                card.workspace.kind !== "personal"
+                  ? () => setDeleteTarget(card.workspace)
+                  : undefined
+              }
+            />
           )
         })}
       </View>
@@ -335,23 +319,64 @@ export function ProjectsScreen() {
   )
 }
 
-function ProjectStat({ label, value }: { label: string; value: string }) {
+function ProjectStatPill({ label, value }: { label: string; value: string }) {
   const { themed } = useAppTheme()
   return (
-    <View style={themed($statCard)}>
-      <Text preset="caption" text={label} />
-      <Text preset="heading" text={value} />
+    <View style={themed($projectStatPill)}>
+      <Text preset="caption" text={label} style={themed($metricLabel)} />
+      <Text preset="caption" text={value} />
     </View>
   )
 }
 
-function MiniStat({ label, value }: { label: string; value: string }) {
+function CompactProjectCard({
+  card,
+  isActive,
+  onOpen,
+  onRename,
+  onDelete,
+}: {
+  card: ProjectCard
+  isActive: boolean
+  onOpen: () => void
+  onRename?: () => void
+  onDelete?: () => void
+}) {
   const { themed } = useAppTheme()
   return (
-    <View style={themed($miniStat)}>
-      <Text preset="caption" text={label} />
-      <Text preset="subheading" text={value} />
-    </View>
+    <Pressable onPress={onOpen}>
+      <GlassCard style={themed(isActive ? $projectCardActive : $projectCard)}>
+        <View style={themed($projectRow)}>
+          <View style={themed($projectMain)}>
+            <View style={themed($projectTitleRow)}>
+              <Text preset="formLabel" text={card.workspace.label} />
+              {isActive ? (
+                <Text preset="caption" text="Current" style={themed($currentBadge)} />
+              ) : null}
+            </View>
+            <Text
+              preset="caption"
+              text={
+                card.workspace.kind === "personal"
+                  ? "Personal project"
+                  : `${card.workspace.membersCount ?? 0} members · ${card.streamsCount} tracks`
+              }
+              style={themed($subtitle)}
+            />
+            <View style={themed($projectMetaRow)}>
+              <ProjectStatPill label="Open" value={`${card.openTasks}`} />
+              <ProjectStatPill label="Flow" value={`${card.inProgressTasks}`} />
+              <ProjectStatPill label="Done" value={`${card.doneTasks}`} />
+            </View>
+          </View>
+          <View style={themed($projectAside)}>
+            <Button text="Open" preset="filled" onPress={onOpen} />
+            {onRename ? <Button text="Edit" preset="glass" onPress={onRename} /> : null}
+            {onDelete ? <Button text="Delete" preset="reversed" onPress={onDelete} /> : null}
+          </View>
+        </View>
+      </GlassCard>
+    </Pressable>
   )
 }
 
@@ -392,54 +417,82 @@ function ProjectModal(props: {
 
 const $screen: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   paddingHorizontal: spacing.screenHorizontal,
-  paddingTop: spacing.screenVertical,
+  paddingTop: spacing.md,
   paddingBottom: spacing.xxxl,
-  gap: spacing.sectionGap,
-})
-
-const $header: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.md,
 })
 
-const $headerCopy: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  gap: spacing.xxs,
-})
-
-const $title: ThemedStyle<TextStyle> = () => ({
-  lineHeight: 40,
-})
-
-const $subtitle: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.textMuted,
-})
-
-const $statsRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+const $header: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexDirection: "row",
+  alignItems: "flex-start",
+  justifyContent: "space-between",
   gap: spacing.sm,
 })
 
-const $statCard: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
+const $headerCopy: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flex: 1,
+  gap: spacing.xxxs,
+})
+
+const $subtitle: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.textDim,
+})
+
+const $iconAction: ThemedStyle<ViewStyle> = ({ colors, radius }) => ({
+  width: 38,
+  height: 38,
+  borderRadius: radius.pill,
+  borderWidth: 1,
+  borderColor: colors.borderSubtle,
+  backgroundColor: colors.surface,
+  alignItems: "center",
+  justifyContent: "center",
+})
+
+const $topRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  gap: spacing.xs,
+})
+
+const $metricPill: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
+  flex: 1,
+  minHeight: 56,
   borderRadius: radius.medium,
   borderWidth: 1,
   borderColor: colors.borderSubtle,
   backgroundColor: colors.surface,
-  padding: spacing.md,
-  gap: spacing.xxs,
+  paddingHorizontal: spacing.sm,
+  paddingVertical: spacing.xs,
+  justifyContent: "center",
+})
+
+const $metricPillWide: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
+  flex: 1.2,
+  minHeight: 56,
+  borderRadius: radius.medium,
+  borderWidth: 1,
+  borderColor: colors.borderSubtle,
+  backgroundColor: colors.surface,
+  paddingHorizontal: spacing.sm,
+  paddingVertical: spacing.xs,
+  justifyContent: "center",
+})
+
+const $metricLabel: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.textDim,
 })
 
 const $filterRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexDirection: "row",
   flexWrap: "wrap",
-  gap: spacing.sm,
-  marginTop: spacing.md,
+  gap: spacing.xs,
 })
 
 const $filterChip: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
   borderRadius: radius.pill,
   borderWidth: 1,
   borderColor: colors.borderSubtle,
-  backgroundColor: colors.surface,
+  backgroundColor: colors.surfaceGlass,
   paddingHorizontal: spacing.sm,
   paddingVertical: spacing.xs,
 })
@@ -449,72 +502,83 @@ const $filterChipActive: ThemedStyle<ViewStyle> = ({ colors }) => ({
   backgroundColor: colors.glowSoft,
 })
 
-const $linkChip: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
-  borderRadius: radius.pill,
-  backgroundColor: colors.surfaceGlass,
-  paddingHorizontal: spacing.sm,
-  paddingVertical: spacing.xs,
-})
-
-const $cardsStack: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  gap: spacing.md,
-})
-
-const $projectCard: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  gap: spacing.md,
-})
-
-const $projectCardActive: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
-  gap: spacing.md,
-  borderColor: colors.primary,
-})
-
-const $projectHeader: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  flexDirection: "row",
-  justifyContent: "space-between",
-  gap: spacing.md,
-  alignItems: "flex-start",
-})
-
-const $projectHeaderCopy: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  flex: 1,
-  gap: spacing.xxs,
-})
-
-const $microStatsRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  flexDirection: "row",
+const $activeCard: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.sm,
 })
 
-const $miniStat: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
+const $activeCardHeader: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: spacing.sm,
+})
+
+const $activeCardCopy: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flex: 1,
-  borderRadius: radius.medium,
-  borderWidth: 1,
-  borderColor: colors.borderSubtle,
-  backgroundColor: colors.surface,
-  padding: spacing.sm,
   gap: spacing.xxxs,
 })
 
-const $progressBlock: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+const $miniStatsRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  flexWrap: "wrap",
   gap: spacing.xs,
 })
 
-const $progressTrack: ThemedStyle<ViewStyle> = ({ colors, radius }) => ({
-  height: 10,
+const $projectStatPill: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
   borderRadius: radius.pill,
-  backgroundColor: colors.backgroundSecondary,
-  overflow: "hidden",
+  borderWidth: 1,
+  borderColor: colors.borderSubtle,
+  backgroundColor: colors.surface,
+  paddingHorizontal: spacing.sm,
+  paddingVertical: spacing.xs,
+  flexDirection: "row",
+  alignItems: "center",
+  gap: spacing.xs,
 })
 
-const $progressFill: ThemedStyle<ViewStyle> = ({ colors, radius }) => ({
-  height: "100%",
-  borderRadius: radius.pill,
-  backgroundColor: colors.primary,
-})
-
-const $projectActions: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+const $cardsStack: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.sm,
+})
+
+const $projectCard: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: spacing.sm,
+})
+
+const $projectCardActive: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+  gap: spacing.sm,
+  borderColor: colors.primary,
+})
+
+const $projectRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  gap: spacing.sm,
+  alignItems: "flex-start",
+})
+
+const $projectMain: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flex: 1,
+  gap: spacing.xs,
+})
+
+const $projectTitleRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  alignItems: "center",
+  gap: spacing.xs,
+})
+
+const $currentBadge: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.primary,
+})
+
+const $projectMetaRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  flexWrap: "wrap",
+  gap: spacing.xs,
+})
+
+const $projectAside: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  width: 88,
+  gap: spacing.xs,
 })
 
 const $modalBackdrop: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
