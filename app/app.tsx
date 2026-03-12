@@ -22,23 +22,26 @@ import { useEffect, useState } from "react"
 import { useFonts } from "expo-font"
 import * as Linking from "expo-linking"
 import * as WebBrowser from "expo-web-browser"
+import { GestureHandlerRootView } from "react-native-gesture-handler"
 import { KeyboardProvider } from "react-native-keyboard-controller"
 import { initialWindowMetrics, SafeAreaProvider } from "react-native-safe-area-context"
 
+import { BASE_URL } from "./config/api"
 import { initI18n } from "./i18n"
 import { AppNavigator } from "./navigators/AppNavigator"
 import { useNavigationPersistence } from "./navigators/navigationUtilities"
-import { ThemeProvider } from "./theme/context"
+import { refreshAuthSession } from "./services/auth/session"
+import { initializeDatabase } from "./services/db"
+import { registerBackgroundSync } from "./services/sync/backgroundSync"
+import { syncController } from "./services/sync/SyncController"
+import { loadSyncPreferences } from "./services/sync/syncPreferences"
 import { WorkspaceProvider } from "./stores/workspaceStore"
+import { ThemeProvider } from "./theme/context"
 import { customFontsToLoad } from "./theme/typography"
 import { loadDateFnsLocale } from "./utils/formatDate"
-import { initializeDatabase } from "./services/db"
 import * as storage from "./utils/storage"
-import { syncController } from "./services/sync/SyncController"
-import { registerBackgroundSync } from "./services/sync/backgroundSync"
-import { BASE_URL } from "./config/api"
-import { GestureHandlerRootView } from "react-native-gesture-handler"
-import { refreshAuthSession } from "./services/auth/session"
+
+const $root = { flex: 1 } as const
 
 WebBrowser.maybeCompleteAuthSession()
 
@@ -125,6 +128,7 @@ export function App() {
   }, [])
 
   useEffect(() => {
+    loadSyncPreferences().catch((error) => console.warn("Failed to load sync preferences", error))
     syncController.initialize()
     registerBackgroundSync().catch((error) =>
       console.warn("Background sync registration failed", error),
@@ -153,7 +157,7 @@ export function App() {
       <KeyboardProvider>
         <ThemeProvider>
           <WorkspaceProvider>
-            <GestureHandlerRootView style={{ flex: 1 }}>
+            <GestureHandlerRootView style={$root}>
               <AppNavigator
                 linking={linking}
                 initialState={initialNavigationState}

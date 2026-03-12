@@ -3,9 +3,9 @@ import { useSyncExternalStore } from "react"
 import { getDb } from "@/services/db/db"
 import { queryFirst } from "@/services/db/queries"
 import { countPendingOpsForScopes } from "@/services/db/repositories/changeLogRepository"
+import { listAllDataScopeKeys } from "@/services/db/scopeKey"
 import { getActiveScopeKey } from "@/services/session/scope"
 import type { SyncBadgeState, SyncPhase } from "@/services/sync/syncTypes"
-import { listAllDataScopeKeys } from "@/services/db/scopeKey"
 
 interface SyncStoreState {
   phase: SyncPhase
@@ -14,6 +14,7 @@ interface SyncStoreState {
   pendingCount: number
   conflictCount: number
   isOnline: boolean
+  networkType: "wifi" | "cellular" | "ethernet" | "none" | "other" | "unknown"
 }
 
 let state: SyncStoreState = {
@@ -23,6 +24,7 @@ let state: SyncStoreState = {
   pendingCount: 0,
   conflictCount: 0,
   isOnline: true,
+  networkType: "unknown",
 }
 
 const listeners = new Set<() => void>()
@@ -48,7 +50,8 @@ function setState(partial: Partial<SyncStoreState>) {
     next.lastSyncedAt === state.lastSyncedAt &&
     next.pendingCount === state.pendingCount &&
     next.conflictCount === state.conflictCount &&
-    next.isOnline === state.isOnline
+    next.isOnline === state.isOnline &&
+    next.networkType === state.networkType
   ) {
     return
   }
@@ -68,6 +71,10 @@ export async function refreshLocalCounts() {
 
 export function setOnlineStatus(isOnline: boolean) {
   setState({ isOnline })
+}
+
+export function setNetworkType(networkType: SyncStoreState["networkType"]) {
+  setState({ networkType })
 }
 
 export function setPhase(phase: SyncPhase) {

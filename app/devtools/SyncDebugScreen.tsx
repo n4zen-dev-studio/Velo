@@ -4,6 +4,8 @@ import { Pressable, ScrollView, View, ViewStyle, TextStyle } from "react-native"
 import { GlassCard } from "@/components/GlassCard"
 import { Screen } from "@/components/Screen"
 import { Text } from "@/components/Text"
+import { getDb } from "@/services/db/db"
+import { queryAll } from "@/services/db/queries"
 import {
   clearSentOps,
   countFailedOps,
@@ -12,32 +14,69 @@ import {
   pruneSentOps,
   resetFailedToPending,
 } from "@/services/db/repositories/changeLogRepository"
+import type { ChangeLogEntry } from "@/services/db/types"
 import { syncController } from "@/services/sync/SyncController"
+import { describeSyncBehavior, useSyncPreferences } from "@/services/sync/syncPreferences"
 import { refreshLocalCounts, useSyncStatus } from "@/services/sync/syncStore"
+import { useWorkspaceStore } from "@/stores/workspaceStore"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
-import { formatDateTime } from "@/utils/dateFormat"
+import { resolveUserLabel } from "@/utils/userLabel"
+
+type LookupRow = { id: string; name: string }
+
+type OperationViewModel = {
+  id: string
+  title: string
+  subject: string
+  detail: string | null
+  timestampLabel: string
+  exactTimestamp: string
+  entityBadge: string
+  actionBadge: string
+  rawEntityId: string
+  rawOpId: string
+  attempts?: number
+}
 
 export function SyncDebugScreen() {
   const { themed } = useAppTheme()
   const syncState = useSyncStatus()
+  const syncPreferences = useSyncPreferences()
+  const { workspaces } = useWorkspaceStore()
 
   const [pendingOps, setPendingOps] = useState([] as Awaited<ReturnType<typeof listPendingOps>>)
   const [failedOps, setFailedOps] = useState([] as Awaited<ReturnType<typeof listFailedOps>>)
   const [failedCount, setFailedCount] = useState(0)
   const [cursor, setCursor] = useState<string | null>(null)
+  const [statusNameById, setStatusNameById] = useState<Record<string, string>>({})
+  const [userLabelById, setUserLabelById] = useState<Record<string, string>>({})
+  const [expandedOps, setExpandedOps] = useState<Set<string>>(new Set())
 
   const load = async () => {
-    const [pending, failed, failedTotal, syncStateRow] = await Promise.all([
+    const [pending, failed, failedTotal, syncStateRow, statusRows] = await Promise.all([
       listPendingOps(50),
       listFailedOps(50),
       countFailedOps(),
       getSyncStateRow(),
+      loadStatusLookup(),
     ])
     setPendingOps(pending)
     setFailedOps(failed)
     setFailedCount(failedTotal)
     setCursor(syncStateRow?.lastCursor ?? null)
+    setStatusNameById(Object.fromEntries(statusRows.map((row) => [row.id, row.name])))
+
+    const userIds = extractQueuedUserIds([...pending, ...failed])
+    if (userIds.length > 0) {
+      const labels = await Promise.all(
+        userIds.map(async (userId) => [userId, await resolveUserLabel(userId)] as const),
+      )
+      setUserLabelById(Object.fromEntries(labels))
+    } else {
+      setUserLabelById({})
+    }
+
     await refreshLocalCounts()
   }
 
@@ -45,11 +84,20 @@ export function SyncDebugScreen() {
     void load()
   }, [])
 
-  // UX niceties: small derived labels; no functional changes
   const isOnlineLabel = syncState.isOnline ? "Online" : "Offline"
   const phaseLabel = String(syncState.phase ?? "—")
-  const lastSyncedLabel = formatDateTime(syncState.lastSyncedAt) ?? "—"
+  const lastSyncedLabel = formatSyncTimestamp(syncState.lastSyncedAt)
   const hasError = !!syncState.lastError
+  const behaviorLabel = describeSyncBehavior({
+    preferences: syncPreferences,
+    isOnline: syncState.isOnline,
+    connectionType: syncState.networkType,
+  })
+
+  const workspaceLabelById = useMemo(
+    () => Object.fromEntries(workspaces.map((workspace) => [workspace.id, workspace.label])),
+    [workspaces],
+  )
 
   const topStats = useMemo(
     () => [
@@ -58,6 +106,32 @@ export function SyncDebugScreen() {
       { label: "Conflicts", value: `${syncState.conflictCount} open` },
     ],
     [syncState.pendingCount, syncState.conflictCount, failedCount],
+  )
+
+  const pendingViewModels = useMemo(
+    () =>
+      pendingOps.map((op) =>
+        buildOperationViewModel(op, {
+          statusNameById,
+          workspaceLabelById,
+          userLabelById,
+          failed: false,
+        }),
+      ),
+    [pendingOps, statusNameById, userLabelById, workspaceLabelById],
+  )
+
+  const failedViewModels = useMemo(
+    () =>
+      failedOps.map((op) =>
+        buildOperationViewModel(op, {
+          statusNameById,
+          workspaceLabelById,
+          userLabelById,
+          failed: true,
+        }),
+      ),
+    [failedOps, statusNameById, userLabelById, workspaceLabelById],
   )
 
   return (
@@ -95,8 +169,8 @@ export function SyncDebugScreen() {
       </View>
 
       <View style={themed($statsGrid)}>
-        {topStats.map((s) => (
-          <CompactStatTile key={s.label} label={s.label} value={s.value} />
+        {topStats.map((stat) => (
+          <CompactStatTile key={stat.label} label={stat.label} value={stat.value} />
         ))}
       </View>
 
@@ -109,25 +183,51 @@ export function SyncDebugScreen() {
         <View style={themed($infoGrid)}>
           <CompactInfoRow label="Cursor" value={cursor ?? "—"} />
           <CompactInfoRow label="Last synced" value={lastSyncedLabel} />
+          <CompactInfoRow
+            label="Mode"
+            value={syncPreferences.syncMode === "manual" ? "Manual" : "Automatic"}
+          />
+          <CompactInfoRow
+            label="Connection"
+            value={
+              syncPreferences.syncMode === "manual"
+                ? "Manual trigger"
+                : syncPreferences.syncNetworkPolicy === "wifi_only"
+                  ? "Wi-Fi only"
+                  : "Any internet"
+            }
+          />
         </View>
+        <Text preset="caption" text={behaviorLabel} style={themed($muted)} />
       </GlassCard>
 
       <GlassCard>
         <View style={themed($cardHeaderRow)}>
           <Text preset="formLabel" text="Pending ops" />
-          <Text preset="caption" text={`${pendingOps.length} shown`} style={themed($muted)} />
+          <Text
+            preset="caption"
+            text={`${pendingViewModels.length} shown`}
+            style={themed($muted)}
+          />
         </View>
 
         <ScrollView style={themed($list)} nestedScrollEnabled showsVerticalScrollIndicator={false}>
-          {pendingOps.length === 0 ? (
+          {pendingViewModels.length === 0 ? (
             <Text preset="caption" text="No pending ops." style={themed($muted)} />
           ) : (
-            pendingOps.map((op) => (
-              <CompactOpRow
-                key={op.opId}
-                title={`${op.entityType} · ${op.opType}`}
-                meta={op.createdAt}
-                detail={`${op.entityId}`}
+            pendingViewModels.map((item) => (
+              <OperationRow
+                key={item.id}
+                item={item}
+                expanded={expandedOps.has(item.id)}
+                onToggle={() => {
+                  setExpandedOps((prev) => {
+                    const next = new Set(prev)
+                    if (next.has(item.id)) next.delete(item.id)
+                    else next.add(item.id)
+                    return next
+                  })
+                }}
               />
             ))
           )}
@@ -137,19 +237,26 @@ export function SyncDebugScreen() {
       <GlassCard>
         <View style={themed($cardHeaderRow)}>
           <Text preset="formLabel" text="Failed ops" />
-          <Text preset="caption" text={`${failedOps.length} shown`} style={themed($muted)} />
+          <Text preset="caption" text={`${failedViewModels.length} shown`} style={themed($muted)} />
         </View>
 
         <ScrollView style={themed($list)} nestedScrollEnabled showsVerticalScrollIndicator={false}>
-          {failedOps.length === 0 ? (
+          {failedViewModels.length === 0 ? (
             <Text preset="caption" text="No failed ops." style={themed($muted)} />
           ) : (
-            failedOps.map((op) => (
-              <CompactOpRow
-                key={op.opId}
-                title={`${op.entityType} · ${op.opType}`}
-                meta={`Attempts: ${op.attemptCount}`}
-                detail={`${op.entityId}`}
+            failedViewModels.map((item) => (
+              <OperationRow
+                key={item.id}
+                item={item}
+                expanded={expandedOps.has(item.id)}
+                onToggle={() => {
+                  setExpandedOps((prev) => {
+                    const next = new Set(prev)
+                    if (next.has(item.id)) next.delete(item.id)
+                    else next.add(item.id)
+                    return next
+                  })
+                }}
               />
             ))
           )}
@@ -224,15 +331,70 @@ function CompactInfoRow({ label, value }: { label: string; value: string }) {
   )
 }
 
-function CompactOpRow({ title, meta, detail }: { title: string; meta: string; detail: string }) {
+function OperationRow(props: {
+  item: OperationViewModel
+  expanded: boolean
+  onToggle: () => void
+}) {
   const { themed } = useAppTheme()
   return (
-    <View style={themed($row)}>
+    <Pressable onPress={props.onToggle} style={themed($row)}>
       <View style={themed($rowTop)}>
-        <Text preset="caption" text={title} style={themed($rowTitle)} />
-        <Text preset="caption" text={meta} style={themed($muted)} />
+        <Text preset="caption" text={props.item.title} style={themed($rowTitle)} />
+        <Text preset="caption" text={props.item.timestampLabel} style={themed($muted)} />
       </View>
-      <Text preset="caption" text={detail} style={themed($muted)} numberOfLines={2} />
+      <Text
+        preset="caption"
+        text={props.item.subject}
+        style={themed($strongText)}
+        numberOfLines={1}
+      />
+      {props.item.detail ? (
+        <Text preset="caption" text={props.item.detail} style={themed($muted)} numberOfLines={2} />
+      ) : null}
+      <View style={themed($opMetaRow)}>
+        <OperationBadge label={props.item.entityBadge} />
+        <OperationBadge label={props.item.actionBadge} tone="primary" />
+        {props.item.attempts && props.item.attempts > 0 ? (
+          <OperationBadge label={`${props.item.attempts} attempts`} tone="danger" />
+        ) : null}
+      </View>
+      {props.expanded ? (
+        <View style={themed($expandedMeta)}>
+          <Text
+            preset="caption"
+            text={`Entity ${shortId(props.item.rawEntityId)}`}
+            style={themed($muted)}
+          />
+          <Text
+            preset="caption"
+            text={`Op ${shortId(props.item.rawOpId)}`}
+            style={themed($muted)}
+          />
+          <Text preset="caption" text={props.item.exactTimestamp} style={themed($muted)} />
+        </View>
+      ) : null}
+    </Pressable>
+  )
+}
+
+function OperationBadge({
+  label,
+  tone = "default",
+}: {
+  label: string
+  tone?: "default" | "primary" | "danger"
+}) {
+  const { themed } = useAppTheme()
+  return (
+    <View
+      style={[
+        themed($badgePill),
+        tone === "primary" ? themed($badgePillPrimary) : null,
+        tone === "danger" ? themed($badgePillDanger) : null,
+      ]}
+    >
+      <Text preset="caption" text={label} style={themed($badgeText)} />
     </View>
   )
 }
@@ -319,6 +481,10 @@ const $muted: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.textDim,
 })
 
+const $strongText: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.text,
+})
+
 const $cardHeaderRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexDirection: "row",
   alignItems: "baseline",
@@ -329,6 +495,7 @@ const $cardHeaderRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
 
 const $infoGrid: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.xxxs,
+  marginBottom: spacing.xs,
 })
 
 const $kv: ThemedStyle<ViewStyle> = ({ spacing }) => ({
@@ -340,15 +507,19 @@ const $kv: ThemedStyle<ViewStyle> = ({ spacing }) => ({
 })
 
 const $list: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  maxHeight: 176,
+  maxHeight: 220,
   marginTop: spacing.xs,
 })
 
-const $row: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
-  paddingVertical: spacing.xs,
-  borderBottomWidth: 1,
-  borderBottomColor: colors.borderSubtle,
-  gap: spacing.xxxs,
+const $row: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
+  borderRadius: radius.medium,
+  borderWidth: 1,
+  borderColor: colors.borderSubtle,
+  backgroundColor: colors.surface,
+  paddingHorizontal: spacing.sm,
+  paddingVertical: spacing.sm,
+  marginBottom: spacing.xs,
+  gap: spacing.xs,
 })
 
 const $rowTop: ThemedStyle<ViewStyle> = ({ spacing }) => ({
@@ -360,6 +531,38 @@ const $rowTop: ThemedStyle<ViewStyle> = ({ spacing }) => ({
 
 const $rowTitle: ThemedStyle<TextStyle> = () => ({
   flex: 1,
+})
+
+const $opMetaRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  flexWrap: "wrap",
+  gap: spacing.xs,
+})
+
+const $expandedMeta: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: spacing.xxxs,
+})
+
+const $badgePill: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
+  borderRadius: radius.pill,
+  borderWidth: 1,
+  borderColor: colors.borderSubtle,
+  backgroundColor: colors.surfaceGlass,
+  paddingHorizontal: spacing.xs,
+  paddingVertical: spacing.xxxs,
+})
+
+const $badgePillPrimary: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  borderColor: colors.primary,
+  backgroundColor: colors.glowSoft,
+})
+
+const $badgePillDanger: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  borderColor: colors.danger,
+})
+
+const $badgeText: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.textMuted,
 })
 
 const $chipOnline: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
@@ -391,7 +594,6 @@ const $chipDotOnline: ThemedStyle<ViewStyle> = () => ({
   width: 8,
   height: 8,
   borderRadius: 4,
-  // no hard-coded colors; keeps theme-driven look via opacity only
   backgroundColor: "rgba(255,255,255,0.85)",
   opacity: 0.9,
 })
@@ -453,7 +655,6 @@ const $actionTileTextPrimary: ThemedStyle<TextStyle> = ({ colors }) => ({
 })
 
 async function getSyncStateRow() {
-  const { getDb } = await import("@/services/db/db")
   const { queryFirst } = await import("@/services/db/queries")
   const { getActiveScopeKey } = await import("@/services/session/scope")
   const db = await getDb()
@@ -465,9 +666,157 @@ async function getSyncStateRow() {
   )
 }
 
+async function loadStatusLookup() {
+  const db = await getDb()
+  return queryAll<LookupRow>(db, "SELECT id, name FROM statuses ORDER BY name ASC")
+}
+
+function extractQueuedUserIds(ops: ChangeLogEntry[]) {
+  const ids = new Set<string>()
+  ops.forEach((op) => {
+    const patch = parsePatch(op.patch)
+    const assigneeUserId =
+      typeof patch.assigneeUserId === "string" ? patch.assigneeUserId : undefined
+    if (assigneeUserId) ids.add(assigneeUserId)
+  })
+  return Array.from(ids)
+}
+
+function parsePatch(raw: string) {
+  try {
+    return JSON.parse(raw) as Record<string, unknown>
+  } catch {
+    return {}
+  }
+}
+
+function buildOperationViewModel(
+  op: ChangeLogEntry,
+  context: {
+    statusNameById: Record<string, string>
+    workspaceLabelById: Record<string, string>
+    userLabelById: Record<string, string>
+    failed: boolean
+  },
+): OperationViewModel {
+  const patch = parsePatch(op.patch)
+  const isDelete = op.opType === "DELETE"
+  const isCreate = op.opType === "UPSERT" && !op.baseRevision
+  const entityBadge = formatEntityLabel(op.entityType)
+  const actionBadge = isDelete ? "Deleted" : isCreate ? "Created" : "Updated"
+  const timestamp = context.failed ? (op.lastAttemptAt ?? op.createdAt) : op.createdAt
+  const workspaceId = typeof patch.workspaceId === "string" ? patch.workspaceId : op.workspaceId
+  const workspaceLabel = context.workspaceLabelById[workspaceId] ?? null
+  const statusId = typeof patch.statusId === "string" ? patch.statusId : null
+  const assigneeUserId = typeof patch.assigneeUserId === "string" ? patch.assigneeUserId : null
+  const assigneeLabel = assigneeUserId
+    ? (context.userLabelById[assigneeUserId] ?? "Assigned")
+    : null
+  const detailParts: string[] = []
+  if (workspaceLabel) detailParts.push(workspaceLabel)
+  if (statusId) detailParts.push(context.statusNameById[statusId] ?? shortId(statusId))
+  if (assigneeLabel) detailParts.push(assigneeLabel)
+
+  return {
+    id: op.opId,
+    title: `${entityBadge} ${actionBadge.toLowerCase()}`,
+    subject: getOperationSubject(op.entityType, patch),
+    detail: detailParts.length > 0 ? detailParts.join(" · ") : shortId(op.entityId),
+    timestampLabel: formatSyncTimestamp(timestamp),
+    exactTimestamp: formatExactTimestamp(timestamp),
+    entityBadge,
+    actionBadge,
+    rawEntityId: op.entityId,
+    rawOpId: op.opId,
+    attempts: context.failed ? op.attemptCount : undefined,
+  }
+}
+
+function getOperationSubject(entityType: string, patch: Record<string, unknown>) {
+  if (entityType === "task") {
+    return typeof patch.title === "string" && patch.title.trim().length > 0
+      ? patch.title
+      : "Untitled task"
+  }
+  if (entityType === "comment") {
+    const body = typeof patch.body === "string" ? patch.body.trim() : ""
+    return body.length > 0 ? trimPreview(body, 56) : "Comment change"
+  }
+  if (entityType === "workspace_member") {
+    const label =
+      typeof patch.workspaceLabel === "string" && patch.workspaceLabel.trim().length > 0
+        ? patch.workspaceLabel
+        : "Project member"
+    const role = typeof patch.role === "string" ? patch.role : null
+    return role ? `${label} · ${role}` : label
+  }
+  if (entityType === "user") {
+    return typeof patch.displayName === "string" && patch.displayName.trim().length > 0
+      ? patch.displayName
+      : typeof patch.email === "string" && patch.email.trim().length > 0
+        ? patch.email
+        : "Profile record"
+  }
+  return shortId(typeof patch.id === "string" ? patch.id : "")
+}
+
+function formatEntityLabel(entityType: string) {
+  if (entityType === "task") return "Task"
+  if (entityType === "comment") return "Comment"
+  if (entityType === "workspace_member") return "Member"
+  if (entityType === "user") return "User"
+  return entityType
+}
+
+function formatSyncTimestamp(input: string | null | undefined) {
+  if (!input) return "—"
+  const date = new Date(input)
+  if (Number.isNaN(date.getTime())) return "—"
+  const now = new Date()
+  const sameDay = date.toDateString() === now.toDateString()
+  const yesterday = new Date(now)
+  yesterday.setDate(now.getDate() - 1)
+  const time = new Intl.DateTimeFormat(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date)
+  if (sameDay) return `Today, ${time}`
+  if (date.toDateString() === yesterday.toDateString()) return `Yesterday, ${time}`
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date)
+}
+
+function formatExactTimestamp(input: string | null | undefined) {
+  if (!input) return "—"
+  const date = new Date(input)
+  if (Number.isNaN(date.getTime())) return "—"
+  return new Intl.DateTimeFormat(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(date)
+}
+
+function shortId(value: string) {
+  if (!value) return "—"
+  if (value.length <= 12) return value
+  return `${value.slice(0, 6)}…${value.slice(-4)}`
+}
+
+function trimPreview(value: string, maxLength: number) {
+  if (value.length <= maxLength) return value
+  return `${value.slice(0, maxLength - 1)}…`
+}
+
 async function buildDebugSnapshot() {
-  const { getDb } = await import("@/services/db/db")
-  const { queryAll, queryFirst } = await import("@/services/db/queries")
+  const { queryFirst } = await import("@/services/db/queries")
   const { getActiveScopeKey } = await import("@/services/session/scope")
   const db = await getDb()
   const scopeKey = await getActiveScopeKey()

@@ -3,10 +3,18 @@ import type { SQLiteDatabase } from "expo-sqlite"
 import { getDb } from "@/services/db/db"
 import { execute, executeTx, queryAll, queryFirst } from "@/services/db/queries"
 import type { ChangeLogEntry, ChangeLogOpType, ChangeLogStatus } from "@/services/db/types"
-import { getCurrentUserId, getDeviceId, generateUuidV4 } from "@/services/sync/identity"
 import { getActiveScopeKey } from "@/services/session/scope"
+import { getCurrentUserId, getDeviceId, generateUuidV4 } from "@/services/sync/identity"
+import { notifyQueuedSyncChange } from "@/services/sync/syncQueueNotifications"
 
-export type EntityType = "task" | "comment" | "project" | "status" | "member" | "user" | "workspace_member"
+export type EntityType =
+  | "task"
+  | "comment"
+  | "project"
+  | "status"
+  | "member"
+  | "user"
+  | "workspace_member"
 export type OpType = ChangeLogOpType
 export type ChangeStatus = ChangeLogStatus
 
@@ -68,6 +76,8 @@ export async function enqueueOp(params: EnqueueParams, db?: SQLiteDatabase) {
       scopeKey,
     ],
   )
+
+  notifyQueuedSyncChange()
 
   return opId
 }
@@ -171,6 +181,7 @@ export async function markOpFailed(opId: string, errorText?: string, db?: SQLite
 export async function resetFailedToPending() {
   const database = await getDb()
   await execute(database, "UPDATE change_log SET status = 'PENDING' WHERE status = 'FAILED'")
+  notifyQueuedSyncChange()
 }
 
 export async function pruneSentOps(keepLastN = 2000, olderThanDays = 7) {
