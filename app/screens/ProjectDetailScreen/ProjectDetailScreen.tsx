@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { Pressable, ScrollView, TextStyle, View, ViewStyle } from "react-native"
+import {
+  Pressable,
+  ScrollView,
+  TextStyle,
+  View,
+  ViewStyle,
+  useWindowDimensions,
+} from "react-native"
 import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
@@ -45,6 +52,7 @@ export function ProjectDetailScreen() {
   const navigation = useNavigation<ProjectsStackScreenProps<"ProjectDetail">["navigation"]>()
   const route = useRoute<ProjectsStackScreenProps<"ProjectDetail">["route"]>()
   const insets = useSafeAreaInsets()
+  const { height } = useWindowDimensions()
   const { workspaceId } = route.params
   const { workspaces, activeWorkspaceId, setActiveWorkspaceId } = useWorkspaceStore()
   const authSession = useAuthSession()
@@ -249,10 +257,11 @@ export function ProjectDetailScreen() {
   )
 
   const fabBottom = Math.max(insets.bottom, 14) + 78
+  const boardHeight = Math.max(height - fabBottom - 350, 320)
 
   return (
     <Screen
-      preset="scroll"
+      preset="fixed"
       safeAreaEdges={["top", "bottom"]}
       contentContainerStyle={themed($screen)}
     >
@@ -299,108 +308,249 @@ export function ProjectDetailScreen() {
       </View>
 
       {segment === "board" ? (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={themed($boardScroll)}
-        >
-          {lanes.map((lane, laneIndex) => (
-            <GlassCard key={lane.status.id} style={themed($laneCard)}>
-              <View style={themed($laneHeader)}>
-                <View>
-                  <Text preset="formLabel" text={lane.status.name} />
+        <View style={[themed($boardRegion), { minHeight: boardHeight }]}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={themed($boardScroll)}
+          >
+            {lanes.map((lane, laneIndex) => (
+              <GlassCard key={lane.status.id} style={[themed($laneCard), { height: boardHeight }]}>
+                <View style={themed($laneHeader)}>
+                  <View>
+                    <Text preset="formLabel" text={lane.status.name} />
+                    <Text
+                      preset="caption"
+                      text={`${lane.tasks.length} tasks`}
+                      style={themed($subtitle)}
+                    />
+                  </View>
                   <Text
                     preset="caption"
-                    text={`${lane.tasks.length} tasks`}
+                    text={`${laneIndex + 1}/${lanes.length}`}
                     style={themed($subtitle)}
                   />
                 </View>
-                <Text
-                  preset="caption"
-                  text={`${laneIndex + 1}/${lanes.length}`}
-                  style={themed($subtitle)}
-                />
-              </View>
 
-              <View style={themed($stack)}>
-                {lane.tasks.length === 0 ? (
-                  <Text preset="caption" text="No tasks in this lane." style={themed($subtitle)} />
-                ) : (
-                  lane.tasks.map((task) => (
-                    <BoardTaskCard
-                      key={task.id}
-                      task={task}
-                      statusLabel={lane.status.name}
-                      assigneeLabel={
-                        task.assigneeUserId
-                          ? (members.find((member) => member.id === task.assigneeUserId)?.label ??
-                            "Assigned")
-                          : "Unassigned"
-                      }
-                      disableBack={laneIndex === 0 || movingTaskId === task.id}
-                      disableForward={laneIndex === lanes.length - 1 || movingTaskId === task.id}
-                      onBack={() => void moveTask(task, "back")}
-                      onForward={() => void moveTask(task, "forward")}
-                      onOpen={() => navigation.navigate("TaskDetail", { taskId: task.id })}
+                <ScrollView
+                  nestedScrollEnabled
+                  showsVerticalScrollIndicator={false}
+                  style={themed($laneTasksScroll)}
+                  contentContainerStyle={themed($stack)}
+                >
+                  {lane.tasks.length === 0 ? (
+                    <Text
+                      preset="caption"
+                      text="No tasks in this lane."
+                      style={themed($subtitle)}
                     />
-                  ))
-                )}
-              </View>
-            </GlassCard>
-          ))}
-        </ScrollView>
+                  ) : (
+                    lane.tasks.map((task) => (
+                      <BoardTaskCard
+                        key={task.id}
+                        task={task}
+                        statusLabel={lane.status.name}
+                        assigneeLabel={
+                          task.assigneeUserId
+                            ? (members.find((member) => member.id === task.assigneeUserId)?.label ??
+                              "Assigned")
+                            : "Unassigned"
+                        }
+                        disableBack={laneIndex === 0 || movingTaskId === task.id}
+                        disableForward={laneIndex === lanes.length - 1 || movingTaskId === task.id}
+                        onBack={() => void moveTask(task, "back")}
+                        onForward={() => void moveTask(task, "forward")}
+                        onOpen={() => navigation.navigate("TaskDetail", { taskId: task.id })}
+                      />
+                    ))
+                  )}
+                  <View style={{ height: fabBottom }} />
+                </ScrollView>
+              </GlassCard>
+            ))}
+          </ScrollView>
+        </View>
       ) : null}
 
-      {segment === "timeline" ? (
-        <>
-          <GlassCard>
-            <View style={themed($sectionHeader)}>
-              <View>
-                <Text preset="formLabel" text="Weekly rhythm" />
-                <Text
-                  preset="caption"
-                  text="Activity-based timeline until due dates are introduced."
-                  style={themed($subtitle)}
-                />
-              </View>
-            </View>
-            <View style={themed($timelineBars)}>
-              {timelineDays.map((day) => (
-                <View key={day.key} style={themed($timelineDay)}>
-                  <View style={themed($timelineBarTrack)}>
-                    <View
-                      style={[
-                        themed($timelineBarFill),
-                        {
-                          height: `${Math.max((day.count / maxTimelineCount) * 100, day.count > 0 ? 12 : 0)}%`,
-                        },
-                      ]}
+      {segment !== "board" ? (
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={themed($secondaryContent)}
+        >
+          {segment === "timeline" ? (
+            <>
+              <GlassCard>
+                <View style={themed($sectionHeader)}>
+                  <View>
+                    <Text preset="formLabel" text="Weekly rhythm" />
+                    <Text
+                      preset="caption"
+                      text="Activity-based timeline until due dates are introduced."
+                      style={themed($subtitle)}
                     />
                   </View>
-                  <Text preset="caption" text={day.label} />
-                  <Text preset="caption" text={`${day.count}`} style={themed($subtitle)} />
                 </View>
-              ))}
-            </View>
-          </GlassCard>
+                <View style={themed($timelineBars)}>
+                  {timelineDays.map((day) => (
+                    <View key={day.key} style={themed($timelineDay)}>
+                      <View style={themed($timelineBarTrack)}>
+                        <View
+                          style={[
+                            themed($timelineBarFill),
+                            {
+                              height: `${Math.max((day.count / maxTimelineCount) * 100, day.count > 0 ? 12 : 0)}%`,
+                            },
+                          ]}
+                        />
+                      </View>
+                      <Text preset="caption" text={day.label} />
+                      <Text preset="caption" text={`${day.count}`} style={themed($subtitle)} />
+                    </View>
+                  ))}
+                </View>
+              </GlassCard>
 
-          <GlassCard>
-            <View style={themed($sectionHeader)}>
-              <View>
-                <Text preset="formLabel" text="Activity agenda" />
-                <Text
-                  preset="caption"
-                  text="Recent updates grouped into a planning-friendly stream."
-                  style={themed($subtitle)}
-                />
-              </View>
-            </View>
-            <View style={themed($stack)}>
-              {timelineAgenda.map((group) => (
-                <View key={group.label} style={themed($agendaGroup)}>
-                  <Text preset="overline" text={group.label} />
+              <GlassCard>
+                <View style={themed($sectionHeader)}>
+                  <View>
+                    <Text preset="formLabel" text="Activity agenda" />
+                    <Text
+                      preset="caption"
+                      text="Recent updates grouped into a planning-friendly stream."
+                      style={themed($subtitle)}
+                    />
+                  </View>
+                </View>
+                <View style={themed($stack)}>
+                  {timelineAgenda.map((group) => (
+                    <View key={group.label} style={themed($agendaGroup)}>
+                      <Text preset="overline" text={group.label} />
+                      <View style={themed($stack)}>
+                        {group.items.map((task) => (
+                          <CompactTaskItem
+                            key={task.id}
+                            task={task}
+                            statusLabel={statusById[task.statusId]?.name ?? "Task"}
+                            onPress={() => navigation.navigate("TaskDetail", { taskId: task.id })}
+                          />
+                        ))}
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              </GlassCard>
+            </>
+          ) : null}
+
+          {segment === "team" ? (
+            <>
+              <GlassCard>
+                <View style={themed($sectionHeader)}>
+                  <View>
+                    <Text preset="formLabel" text="Team overview" />
+                    <Text
+                      preset="caption"
+                      text="Assignment load and collaboration roles."
+                      style={themed($subtitle)}
+                    />
+                  </View>
+                </View>
+                <View style={themed($stack)}>
+                  {members.length === 0 ? (
+                    <Text
+                      preset="caption"
+                      text="No team members synced for this project yet."
+                      style={themed($subtitle)}
+                    />
+                  ) : (
+                    members.map((member) => (
+                      <View key={member.id} style={themed($memberCard)}>
+                        <View style={themed($memberHeader)}>
+                          <View>
+                            <Text
+                              preset="caption"
+                              text={member.label}
+                              style={themed($memberName)}
+                            />
+                            <Text preset="caption" text={member.role} style={themed($subtitle)} />
+                          </View>
+                          <Text
+                            preset="caption"
+                            text={`${member.assignments} assigned`}
+                            style={themed($memberLoad)}
+                          />
+                        </View>
+                      </View>
+                    ))
+                  )}
+                </View>
+              </GlassCard>
+
+              {authSession.isAuthenticated ? (
+                <GlassCard>
+                  <View style={themed($sectionHeader)}>
+                    <View>
+                      <Text preset="formLabel" text="Invite collaborators" />
+                      <Text
+                        preset="caption"
+                        text="Owner and admin roles can grow the team from here."
+                        style={themed($subtitle)}
+                      />
+                    </View>
+                  </View>
+                  <TextField
+                    value={inviteEmail}
+                    onChangeText={(value) => {
+                      setInviteEmail(value)
+                      if (inviteFeedback) setInviteFeedback(null)
+                    }}
+                    placeholder="teammate@company.com"
+                    autoCapitalize="none"
+                    keyboardType="email-address"
+                  />
+                  {inviteFeedback ? (
+                    <Text preset="caption" text={inviteFeedback} style={themed($feedback)} />
+                  ) : null}
                   <View style={themed($stack)}>
-                    {group.items.map((task) => (
+                    <Button text="Send invite" onPress={handleInvite} />
+                    {invites.map((invite) => (
+                      <View key={invite.id} style={themed($inviteCard)}>
+                        <Text preset="caption" text={invite.email} style={themed($memberName)} />
+                        <Text
+                          preset="caption"
+                          text={`${invite.role} · ${invite.status}`}
+                          style={themed($subtitle)}
+                        />
+                      </View>
+                    ))}
+                  </View>
+                </GlassCard>
+              ) : null}
+            </>
+          ) : null}
+
+          {segment === "overview" ? (
+            <>
+              <GlassCard>
+                <View style={themed($sectionHeader)}>
+                  <View>
+                    <Text preset="formLabel" text="Priority queue" />
+                    <Text
+                      preset="caption"
+                      text="Items to unblock or move first."
+                      style={themed($subtitle)}
+                    />
+                  </View>
+                </View>
+                {highPriorityTasks.length === 0 ? (
+                  <Text
+                    preset="caption"
+                    text="No high-priority tasks are currently stalled."
+                    style={themed($subtitle)}
+                  />
+                ) : (
+                  <View style={themed($stack)}>
+                    {highPriorityTasks.slice(0, 4).map((task) => (
                       <CompactTaskItem
                         key={task.id}
                         task={task}
@@ -409,165 +559,48 @@ export function ProjectDetailScreen() {
                       />
                     ))}
                   </View>
-                </View>
-              ))}
-            </View>
-          </GlassCard>
-        </>
-      ) : null}
+                )}
+              </GlassCard>
 
-      {segment === "team" ? (
-        <>
-          <GlassCard>
-            <View style={themed($sectionHeader)}>
-              <View>
-                <Text preset="formLabel" text="Team overview" />
-                <Text
-                  preset="caption"
-                  text="Assignment load and collaboration roles."
-                  style={themed($subtitle)}
-                />
-              </View>
-            </View>
-            <View style={themed($stack)}>
-              {members.length === 0 ? (
-                <Text
-                  preset="caption"
-                  text="No team members synced for this project yet."
-                  style={themed($subtitle)}
-                />
-              ) : (
-                members.map((member) => (
-                  <View key={member.id} style={themed($memberCard)}>
-                    <View style={themed($memberHeader)}>
-                      <View>
-                        <Text preset="caption" text={member.label} style={themed($memberName)} />
-                        <Text preset="caption" text={member.role} style={themed($subtitle)} />
-                      </View>
-                      <Text
-                        preset="caption"
-                        text={`${member.assignments} assigned`}
-                        style={themed($memberLoad)}
-                      />
-                    </View>
+              <GlassCard>
+                <View style={themed($sectionHeader)}>
+                  <View>
+                    <Text preset="formLabel" text="Tracks" />
+                    <Text
+                      preset="caption"
+                      text="Nested streams inside this project."
+                      style={themed($subtitle)}
+                    />
                   </View>
-                ))
-              )}
-            </View>
-          </GlassCard>
-
-          {authSession.isAuthenticated ? (
-            <GlassCard>
-              <View style={themed($sectionHeader)}>
-                <View>
-                  <Text preset="formLabel" text="Invite collaborators" />
+                </View>
+                {streams.length === 0 ? (
                   <Text
                     preset="caption"
-                    text="Owner and admin roles can grow the team from here."
+                    text="No additional tracks yet. Tasks are running on the primary board."
                     style={themed($subtitle)}
                   />
-                </View>
-              </View>
-              <TextField
-                value={inviteEmail}
-                onChangeText={(value) => {
-                  setInviteEmail(value)
-                  if (inviteFeedback) setInviteFeedback(null)
-                }}
-                placeholder="teammate@company.com"
-                autoCapitalize="none"
-                keyboardType="email-address"
-              />
-              {inviteFeedback ? (
-                <Text preset="caption" text={inviteFeedback} style={themed($feedback)} />
-              ) : null}
-              <View style={themed($stack)}>
-                <Button text="Send invite" onPress={handleInvite} />
-                {invites.map((invite) => (
-                  <View key={invite.id} style={themed($inviteCard)}>
-                    <Text preset="caption" text={invite.email} style={themed($memberName)} />
-                    <Text
-                      preset="caption"
-                      text={`${invite.role} · ${invite.status}`}
-                      style={themed($subtitle)}
-                    />
+                ) : (
+                  <View style={themed($stack)}>
+                    {streams.map((stream) => (
+                      <View key={stream.id} style={themed($streamCard)}>
+                        <Text preset="caption" text={stream.name} style={themed($memberName)} />
+                        <Text
+                          preset="caption"
+                          text={`Updated ${formatDateTime(stream.updatedAt)}`}
+                          style={themed($subtitle)}
+                        />
+                      </View>
+                    ))}
                   </View>
-                ))}
-              </View>
-            </GlassCard>
+                )}
+              </GlassCard>
+            </>
           ) : null}
-        </>
+
+          <View style={{ height: fabBottom }} />
+        </ScrollView>
       ) : null}
 
-      {segment === "overview" ? (
-        <>
-          <GlassCard>
-            <View style={themed($sectionHeader)}>
-              <View>
-                <Text preset="formLabel" text="Priority queue" />
-                <Text
-                  preset="caption"
-                  text="Items to unblock or move first."
-                  style={themed($subtitle)}
-                />
-              </View>
-            </View>
-            {highPriorityTasks.length === 0 ? (
-              <Text
-                preset="caption"
-                text="No high-priority tasks are currently stalled."
-                style={themed($subtitle)}
-              />
-            ) : (
-              <View style={themed($stack)}>
-                {highPriorityTasks.slice(0, 4).map((task) => (
-                  <CompactTaskItem
-                    key={task.id}
-                    task={task}
-                    statusLabel={statusById[task.statusId]?.name ?? "Task"}
-                    onPress={() => navigation.navigate("TaskDetail", { taskId: task.id })}
-                  />
-                ))}
-              </View>
-            )}
-          </GlassCard>
-
-          <GlassCard>
-            <View style={themed($sectionHeader)}>
-              <View>
-                <Text preset="formLabel" text="Tracks" />
-                <Text
-                  preset="caption"
-                  text="Nested streams inside this project."
-                  style={themed($subtitle)}
-                />
-              </View>
-            </View>
-            {streams.length === 0 ? (
-              <Text
-                preset="caption"
-                text="No additional tracks yet. Tasks are running on the primary board."
-                style={themed($subtitle)}
-              />
-            ) : (
-              <View style={themed($stack)}>
-                {streams.map((stream) => (
-                  <View key={stream.id} style={themed($streamCard)}>
-                    <Text preset="caption" text={stream.name} style={themed($memberName)} />
-                    <Text
-                      preset="caption"
-                      text={`Updated ${formatDateTime(stream.updatedAt)}`}
-                      style={themed($subtitle)}
-                    />
-                  </View>
-                ))}
-              </View>
-            )}
-          </GlassCard>
-        </>
-      ) : null}
-
-      <View style={{ height: fabBottom + 18 }} />
       <ProjectFab bottom={fabBottom} onPress={() => navigation.navigate("TaskEditor")} />
     </Screen>
   )
@@ -711,11 +744,10 @@ function ProjectFab({ bottom, onPress }: { bottom: number; onPress: () => void }
 }
 
 const $screen: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flex: 1,
   paddingHorizontal: spacing.screenHorizontal,
   paddingTop: spacing.md,
-  paddingBottom: spacing.xxxl,
   gap: spacing.md,
-  flex:1,
 })
 
 const $header: ThemedStyle<ViewStyle> = ({ spacing }) => ({
@@ -772,14 +804,19 @@ const $segmentChipActive: ThemedStyle<ViewStyle> = ({ colors }) => ({
   backgroundColor: colors.glowSoft,
 })
 
+const $boardRegion: ThemedStyle<ViewStyle> = () => ({
+  flex: 1,
+})
+
 const $boardScroll: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.sm,
   paddingRight: spacing.screenHorizontal,
-  paddingBottom: spacing.lg,
+  paddingBottom: spacing.sm,
 })
 
-const $laneCard: ThemedStyle<ViewStyle> = () => ({
+const $laneCard: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   width: 270,
+  gap: spacing.xs,
 })
 
 const $laneHeader: ThemedStyle<ViewStyle> = ({ spacing }) => ({
@@ -792,6 +829,10 @@ const $laneHeader: ThemedStyle<ViewStyle> = ({ spacing }) => ({
 
 const $stack: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.xs,
+})
+
+const $laneTasksScroll: ThemedStyle<ViewStyle> = () => ({
+  flex: 1,
 })
 
 const $boardTaskCard: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
@@ -864,6 +905,11 @@ const $moveButtonTextPrimary: ThemedStyle<TextStyle> = ({ colors }) => ({
 
 const $sectionHeader: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   marginBottom: spacing.sm,
+})
+
+const $secondaryContent: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  paddingBottom: spacing.md,
+  gap: spacing.md,
 })
 
 const $timelineBars: ThemedStyle<ViewStyle> = ({ spacing }) => ({
