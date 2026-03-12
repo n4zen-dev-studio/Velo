@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react"
-import { Modal, Pressable, TextStyle, View, ViewStyle } from "react-native"
+import { Alert, Modal, Pressable, TextStyle, View, ViewStyle } from "react-native"
 import { useFocusEffect, useNavigation } from "@react-navigation/native"
 
 import { Button } from "@/components/Button"
@@ -9,6 +9,7 @@ import { Text } from "@/components/Text"
 import { TextField } from "@/components/TextField"
 import { goToInvites } from "@/navigation/navigationActions"
 import type { ProjectsStackScreenProps } from "@/navigators/navigationTypes"
+import { useAuthSession } from "@/services/auth/session"
 import { listProjects } from "@/services/db/repositories/projectsRepository"
 import { listStatuses } from "@/services/db/repositories/statusesRepository"
 import { listTasksByWorkspace } from "@/services/db/repositories/tasksRepository"
@@ -30,6 +31,7 @@ type ProjectCard = {
 export function ProjectsScreen() {
   const { themed } = useAppTheme()
   const navigation = useNavigation<ProjectsStackScreenProps<"ProjectsHome">["navigation"]>()
+  const authSession = useAuthSession()
   const {
     workspaces,
     activeWorkspaceId,
@@ -152,6 +154,17 @@ export function ProjectsScreen() {
     navigation.navigate("ProjectDetail", { workspaceId })
   }
 
+  const handleCreatePress = () => {
+    if (!authSession.isAuthenticated) {
+      Alert.alert(
+        "Sign in to create projects",
+        "You're currently in guest mode. Sign in to create and sync projects.",
+      )
+      return
+    }
+    setCreateOpen(true)
+  }
+
   return (
     <Screen
       preset="scroll"
@@ -169,7 +182,7 @@ export function ProjectsScreen() {
           />
         </View>
 
-        <Pressable onPress={() => setCreateOpen(true)} style={themed($iconAction)}>
+        <Pressable onPress={handleCreatePress} style={themed($iconAction)}>
           <Text preset="subheading" text="+" />
         </Pressable>
       </View>
