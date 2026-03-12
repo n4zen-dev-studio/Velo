@@ -1,200 +1,453 @@
-import { useMemo } from "react"
+import { useMemo, useRef, useState } from "react"
 import {
-  ImageBackground,
+  FlatList,
   Pressable,
   View,
   ViewStyle,
   TextStyle,
-  ImageStyle,
-  StyleSheet,
-  Dimensions,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  useWindowDimensions,
 } from "react-native"
 import type { NativeStackScreenProps } from "@react-navigation/native-stack"
+import LottieView from "lottie-react-native"
 
+import { Button } from "@/components/Button"
+import { GlassCard } from "@/components/GlassCard"
 import { Screen } from "@/components/Screen"
 import { Text } from "@/components/Text"
+import type { RootStackParamList } from "@/navigators/navigationTypes"
 import { setSeenOnboarding } from "@/services/storage/firstLaunch"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
-import type { RootStackParamList } from "@/navigators/navigationTypes"
-import { SliderCTA } from "@/components/SliderTCA"
 
 type ScreenProps = NativeStackScreenProps<RootStackParamList, "Onboarding">
 
-const onboardingMain = require("@assets/onboarding/onboarding-main.png")
+const ROBOT_ANIM = require("@assets/animations/robot.json")
+
+type Slide = {
+  id: string
+  overline: string
+  title: string
+  body: string
+  cta: string
+  kind: "robot" | "offline" | "sync"
+}
+
+const SLIDES: Slide[] = [
+  {
+    id: "welcome",
+    overline: "Welcome",
+    title: "Welcome to Velo.\nMove work forward.",
+    body: "Plan, track, and move work forward with a workspace built for focus.",
+    cta: "Continue",
+    kind: "robot",
+  },
+  {
+    id: "offline",
+    overline: "Offline-first",
+    title: "Stay in motion offline.",
+    body: "Keep creating and updating tasks locally. Velo keeps every change ready to sync when you are.",
+    cta: "Continue",
+    kind: "offline",
+  },
+  {
+    id: "sync",
+    overline: "Execution",
+    title: "Sync when it matters.",
+    body: "Organize projects, move tasks across stages, and sync your work when connection is available.",
+    cta: "Get Started",
+    kind: "sync",
+  },
+]
 
 export function OnboardingScreen({ navigation }: ScreenProps) {
   const { themed } = useAppTheme()
+  const { width } = useWindowDimensions()
+  const listRef = useRef<FlatList<Slide>>(null)
+  const [index, setIndex] = useState(0)
+
+  const slides = useMemo(() => SLIDES, [])
+
+  const completeOnboarding = async () => {
+    await setSeenOnboarding()
+    navigation.replace("AuthGate")
+  }
+
+  const handleContinue = async () => {
+    if (index === slides.length - 1) {
+      await completeOnboarding()
+      return
+    }
+    const nextIndex = index + 1
+    listRef.current?.scrollToIndex({ index: nextIndex, animated: true })
+    setIndex(nextIndex)
+  }
+
+  const handleMomentumEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const nextIndex = Math.round(event.nativeEvent.contentOffset.x / width)
+    if (Number.isFinite(nextIndex)) {
+      setIndex(Math.max(0, Math.min(slides.length - 1, nextIndex)))
+    }
+  }
 
   return (
-    // 1. Ensure Screen doesn't add padding and uses the full window
     <Screen
       preset="fixed"
-      safeAreaEdges={[]}
-      contentContainerStyle={{ flex: 1 }} // Force the internal container to fill
+      safeAreaEdges={["top", "bottom"]}
+      contentContainerStyle={themed($screen)}
       style={themed($root)}
     >
-      <ImageBackground
-        source={onboardingMain}
-        resizeMode="cover"
-        // 2. Use style for the container, imageStyle for the actual bitmap
-        style={StyleSheet.absoluteFill}
-        imageStyle={themed($bgImage)}
-      >
-        {/* 3. The Overlay must be absolute to stay behind text */}
-        <View style={themed($overlay)} />
-        {/* <View style={themed($bottomFade)} /> */}
+      <View style={themed($backgroundGlowTop)} pointerEvents="none" />
+      <View style={themed($backgroundGlowBottom)} pointerEvents="none" />
 
-        {/* 4. This container now controls the layout flow */}
-        <View style={themed($mainContainer)}>
-          <View style={themed($centerMarkWrap)} pointerEvents="none">
-            <Text text="VELO" style={themed($centerMark)} />
-          </View>
-
-          <View style={themed($content)}>
-            <View style={themed($copy)}>
-              <Text text={"Momentum for\nmodern teams."} style={themed($title)} />
-              <Text
-                text="A polished execution workspace built for clarity, speed, and dependable offline progress."
-                style={themed($subtitle)}
-              />
-            </View>
-
-            <SliderCTA
-              text="Get Started"
-              completeAt={0.85}
-              onComplete={async () => {
-                await setSeenOnboarding()
-                navigation.replace("AuthGate")
-              }}
-            />
-          </View>
+      <View style={themed($topBar)}>
+        <View style={themed($brandPill)}>
+          <Text preset="overline" text="VELO" style={themed($brandText)} />
         </View>
-      </ImageBackground>
+        <Pressable onPress={() => void completeOnboarding()} hitSlop={12}>
+          <Text preset="caption" text="Skip" style={themed($skipText)} />
+        </Pressable>
+      </View>
+
+      <FlatList
+        ref={listRef}
+        data={slides}
+        keyExtractor={(item) => item.id}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        bounces={false}
+        onMomentumScrollEnd={handleMomentumEnd}
+        renderItem={({ item }) => (
+          <OnboardingSlide slide={item} width={width} isFirst={item.id === "welcome"} />
+        )}
+      />
+
+      <View style={themed($footer)}>
+        <Pagination count={slides.length} index={index} />
+        <Button text={slides[index]?.cta} onPress={() => void handleContinue()} />
+      </View>
     </Screen>
   )
 }
 
-const $root: ThemedStyle<ViewStyle> = () => ({
+function OnboardingSlide({
+  slide,
+  width,
+  isFirst,
+}: {
+  slide: Slide
+  width: number
+  isFirst: boolean
+}) {
+  const { themed } = useAppTheme()
+
+  return (
+    <View style={[themed($page), { width }]}>
+      <View style={themed($heroBlock(isFirst))}>
+        <View style={themed($heroOrbPrimary(slide.kind))} pointerEvents="none" />
+        <View style={themed($heroOrbSecondary)} pointerEvents="none" />
+        <IllustrationHero kind={slide.kind} />
+      </View>
+
+      <View style={themed($copyBlock)}>
+        <Text preset="overline" text={slide.overline} style={themed($slideOverline)} />
+        <Text preset="display" text={slide.title} style={themed($slideTitle)} />
+        <Text preset="body" text={slide.body} style={themed($slideBody)} />
+      </View>
+    </View>
+  )
+}
+
+function IllustrationHero({ kind }: { kind: Slide["kind"] }) {
+  const { themed } = useAppTheme()
+
+  if (kind === "robot") {
+    return (
+      <GlassCard style={themed($robotCard)}>
+        <View style={themed($robotFrame)}>
+          <LottieView source={ROBOT_ANIM} autoPlay loop style={themed($robot)} />
+        </View>
+        <View style={themed($heroBadgeRow)}>
+          <MiniBadge label="Offline-first" />
+          <MiniBadge label="Focused flow" />
+        </View>
+      </GlassCard>
+    )
+  }
+
+  return (
+    <GlassCard style={themed($placeholderCard)}>
+      <View style={themed($placeholderOrb(kind))} />
+      <View style={themed($placeholderPanel)}>
+        <View style={themed($placeholderLineWide)} />
+        <View style={themed($placeholderLineShort)} />
+      </View>
+      <View style={themed($placeholderBadgeRow)}>
+        <MiniBadge label={kind === "offline" ? "Saved locally" : "Boards"} />
+        <MiniBadge label={kind === "offline" ? "Sync later" : "Projects"} />
+      </View>
+    </GlassCard>
+  )
+}
+
+function MiniBadge({ label }: { label: string }) {
+  const { themed } = useAppTheme()
+  return (
+    <View style={themed($miniBadge)}>
+      <Text preset="caption" text={label} style={themed($miniBadgeText)} />
+    </View>
+  )
+}
+
+function Pagination({ count, index }: { count: number; index: number }) {
+  const { themed } = useAppTheme()
+  return (
+    <View style={themed($pagination)}>
+      {Array.from({ length: count }).map((_, dotIndex) => (
+        <View
+          key={`dot-${dotIndex}`}
+          style={[themed($paginationDot), dotIndex === index ? themed($paginationDotActive) : null]}
+        />
+      ))}
+    </View>
+  )
+}
+
+const $root: ThemedStyle<ViewStyle> = ({ colors }) => ({
   flex: 1,
-  backgroundColor: "#05060D",
-  zIndex: 0,
+  backgroundColor: colors.background,
 })
 
-const $bgImage: ThemedStyle<ImageStyle> = () => ({
+const $screen: ThemedStyle<ViewStyle> = () => ({
   flex: 1,
-  zIndex: -3,
 })
 
-const $mainContainer: ThemedStyle<ViewStyle> = () => ({
-  flex: 1,
-  justifyContent: "flex-end", // Pushes content to bottom
-})
-
-const $overlay: ThemedStyle<ViewStyle> = ({ colors }) => ({
-  ...StyleSheet.absoluteFillObject,
-  backgroundColor: "rgba(6,8,18,0.44)",
-  zIndex: -1,
-})
-
-const $bottomFade: ThemedStyle<ViewStyle> = () => ({
+const $backgroundGlowTop: ThemedStyle<ViewStyle> = ({ colors }) => ({
   position: "absolute",
-  left: 0,
-  right: 0,
-  bottom: 0,
-  height: "100%",
-  backgroundColor: "rgba(0, 0, 0, 0.5)",
-  zIndex: -1,
+  top: -120,
+  right: -40,
+  width: 280,
+  height: 280,
+  borderRadius: 999,
+  backgroundColor: colors.gradientStart,
+  opacity: 0.22,
 })
 
-const $content: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  paddingHorizontal: spacing.screenHorizontal,
-  paddingBottom: spacing.xxxl,
-  gap: spacing.sectionGap,
-})
-
-const $bg: ThemedStyle<ViewStyle> = () => ({ flex: 1 })
-
-const $centerMarkWrap: ThemedStyle<ViewStyle> = () => ({
+const $backgroundGlowBottom: ThemedStyle<ViewStyle> = ({ colors }) => ({
   position: "absolute",
-  top: 0.2 * Dimensions.get("window").height,
-  left: 0,
-  right: 0,
+  left: -60,
+  bottom: 120,
+  width: 240,
+  height: 240,
+  borderRadius: 999,
+  backgroundColor: colors.gradientEnd,
+  opacity: 0.16,
+})
+
+const $topBar: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
   alignItems: "center",
+  justifyContent: "space-between",
+  paddingHorizontal: spacing.screenHorizontal,
+  paddingTop: spacing.md,
+  paddingBottom: spacing.sm,
 })
 
-const $centerMark: ThemedStyle<TextStyle> = ({ colors }) => ({
-  fontSize: 68,
-  lineHeight: 130,
-  fontWeight: "800",
-  letterSpacing: 6,
-  color: colors.palette.neutral100,
-  opacity: 0.2,
+const $brandPill: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
+  paddingHorizontal: spacing.sm,
+  paddingVertical: spacing.xs,
+  borderRadius: radius.pill,
+  borderWidth: 1,
+  borderColor: colors.borderStrong,
+  backgroundColor: colors.surfaceGlass,
 })
 
-const $copy: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+const $brandText: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.text,
+})
+
+const $skipText: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.textMuted,
+})
+
+const $page: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flex: 1,
+  paddingHorizontal: spacing.screenHorizontal,
+  paddingTop: spacing.sm,
+  paddingBottom: spacing.lg,
+  justifyContent: "space-between",
+})
+
+const $heroBlock =
+  (isFirst: boolean): ThemedStyle<ViewStyle> =>
+  ({ spacing, radius }) => ({
+    minHeight: isFirst ? 360 : 332,
+    borderRadius: radius.xl,
+    justifyContent: "center",
+    alignItems: "center",
+    overflow: "hidden",
+    marginTop: spacing.sm,
+  })
+
+const $heroOrbPrimary =
+  (kind: Slide["kind"]): ThemedStyle<ViewStyle> =>
+  ({ colors }) => ({
+    position: "absolute",
+    width: kind === "robot" ? 280 : 240,
+    height: kind === "robot" ? 280 : 240,
+    borderRadius: 999,
+    backgroundColor:
+      kind === "robot"
+        ? colors.gradientStart
+        : kind === "offline"
+          ? colors.gradientMid
+          : colors.gradientEnd,
+    opacity: 0.24,
+  })
+
+const $heroOrbSecondary: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  position: "absolute",
+  top: 34,
+  width: 120,
+  height: 120,
+  borderRadius: 999,
+  backgroundColor: colors.glowStrong,
+  opacity: 0.3,
+})
+
+const $robotCard: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  width: "100%",
+  alignItems: "center",
+  gap: spacing.md,
+})
+
+const $robotFrame: ThemedStyle<ViewStyle> = ({ colors, radius }) => ({
+  width: 240,
+  height: 240,
+  borderRadius: radius.xl,
+  overflow: "hidden",
+  alignItems: "center",
+  justifyContent: "center",
+  backgroundColor: colors.surfaceGlass,
+})
+
+const $robot: ThemedStyle<ViewStyle> = () => ({
+  width: 240,
+  height: 240,
+})
+
+const $heroBadgeRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  flexWrap: "wrap",
+  justifyContent: "center",
   gap: spacing.xs,
+})
+
+const $placeholderCard: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  width: "100%",
+  alignItems: "center",
+  gap: spacing.md,
+  paddingVertical: spacing.lg,
+})
+
+const $placeholderOrb =
+  (kind: Slide["kind"]): ThemedStyle<ViewStyle> =>
+  ({ colors }) => ({
+    width: 164,
+    height: 164,
+    borderRadius: 999,
+    backgroundColor: kind === "offline" ? colors.gradientMid : colors.gradientEnd,
+    opacity: 0.9,
+  })
+
+const $placeholderPanel: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
+  width: "78%",
+  borderRadius: radius.large,
+  borderWidth: 1,
+  borderColor: colors.borderSubtle,
+  backgroundColor: colors.surface,
+  padding: spacing.md,
+  gap: spacing.sm,
+})
+
+const $placeholderLineWide: ThemedStyle<ViewStyle> = ({ colors, radius }) => ({
+  height: 12,
+  borderRadius: radius.pill,
+  backgroundColor: colors.surfaceElevated,
+})
+
+const $placeholderLineShort: ThemedStyle<ViewStyle> = ({ colors, radius }) => ({
+  width: "66%",
+  height: 12,
+  borderRadius: radius.pill,
+  backgroundColor: colors.surfaceElevated,
+})
+
+const $placeholderBadgeRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  gap: spacing.xs,
+})
+
+const $miniBadge: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
+  borderRadius: radius.pill,
+  borderWidth: 1,
+  borderColor: colors.borderStrong,
+  backgroundColor: colors.surfaceGlass,
+  paddingHorizontal: spacing.sm,
+  paddingVertical: spacing.xs,
+})
+
+const $miniBadgeText: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.textMuted,
+})
+
+const $copyBlock: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  alignItems: "center",
+  gap: spacing.sm,
+  paddingHorizontal: spacing.md,
+})
+
+const $slideOverline: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.primary,
+  textAlign: "center",
+})
+
+const $slideTitle: ThemedStyle<TextStyle> = () => ({
+  textAlign: "center",
+  fontSize: 34,
+  lineHeight: 40,
+})
+
+const $slideBody: ThemedStyle<TextStyle> = ({ colors }) => ({
+  textAlign: "center",
+  color: colors.textMuted,
   maxWidth: 320,
 })
 
-const $title: ThemedStyle<TextStyle> = () => ({
-  fontSize: 44,
-  lineHeight: 48,
-  fontWeight: "800",
-  color: "#FFFFFF",
+const $footer: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  paddingHorizontal: spacing.screenHorizontal,
+  paddingBottom: spacing.xl,
+  gap: spacing.md,
 })
 
-const $subtitle: ThemedStyle<TextStyle> = ({ colors }) => ({
-  fontSize: 15,
-  lineHeight: 22,
-  color: "rgba(244,247,255,0.78)",
-})
-
-const $cta: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  height: 64,
-  borderRadius: 999,
-  paddingHorizontal: spacing.md,
+const $pagination: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexDirection: "row",
-  alignItems: "center",
-  backgroundColor: "rgba(23,20,24,0.95)",
-  borderWidth: 1,
-  borderColor: "rgba(255,255,255,0.08)",
-})
-
-const $ctaIcon: ThemedStyle<ViewStyle> = ({ colors }) => ({
-  width: 46,
-  height: 46,
-  borderRadius: 23,
-  backgroundColor: colors.palette.primary300,
-  alignItems: "center",
   justifyContent: "center",
+  gap: spacing.xs,
 })
 
-const $ctaDot: ThemedStyle<ViewStyle> = () => ({
-  width: 14,
-  height: 14,
-  borderRadius: 7,
-  backgroundColor: "#FFFFFF",
+const $paginationDot: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  width: 8,
+  height: 8,
+  borderRadius: 999,
+  backgroundColor: colors.borderStrong,
+  opacity: 0.6,
 })
 
-const $ctaCenter: ThemedStyle<ViewStyle> = () => ({
-  flex: 1,
-  alignItems: "center",
-})
-
-const $ctaText: ThemedStyle<TextStyle> = () => ({
-  color: "#FFFFFF",
-  fontSize: 15,
-  fontWeight: "700",
-})
-
-const $ctaRight: ThemedStyle<ViewStyle> = () => ({
-  width: 52,
-  alignItems: "flex-end",
-})
-
-const $ctaChevron: ThemedStyle<TextStyle> = ({ colors }) => ({
-  fontSize: 18,
-  letterSpacing: 2,
-  color: colors.palette.neutral600,
+const $paginationDotActive: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  width: 24,
+  backgroundColor: colors.primary,
+  opacity: 1,
 })
