@@ -1,16 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Pressable, RefreshControl, TextStyle, View, ViewStyle } from "react-native"
 import { useNavigation } from "@react-navigation/native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
-import { Button } from "@/components/Button"
 import { GlassCard } from "@/components/GlassCard"
 import { HeaderAvatar } from "@/components/HeaderAvatar"
 import { PriorityDot } from "@/components/PriorityDot"
 import { Screen } from "@/components/Screen"
 import { SyncBadge } from "@/components/SyncBadge"
 import { Text } from "@/components/Text"
-import { WorkspaceSwitcher } from "@/components/WorkspaceSwitcher"
 import { goToInvites, goToProfile, goToProjectsTab } from "@/navigation/navigationActions"
 import type { HomeStackScreenProps } from "@/navigators/navigationTypes"
 import { createHttpClient } from "@/services/api/httpClient"
@@ -24,10 +22,18 @@ import { formatDateTime } from "@/utils/dateFormat"
 
 import { useHomeViewModel } from "./useHomeViewModel"
 
-type FocusSection = {
+type ActivityItem = {
+  id: string
   title: string
-  helper: string
-  tasks: Task[]
+  meta: string
+  tone: string
+}
+
+type AlertItem = {
+  id: string
+  label: string
+  count: number
+  tone: string
 }
 
 export function HomeScreen() {
@@ -86,6 +92,15 @@ export function HomeScreen() {
       ),
     [uiTasksByStatus],
   )
+
+  const todoCount = useMemo(
+    () =>
+      uiTasksByStatus
+        .filter((lane) => lane.status.category === "todo")
+        .reduce((sum, lane) => sum + lane.tasks.length, 0),
+    [uiTasksByStatus],
+  )
+
   const inProgressCount = useMemo(
     () =>
       uiTasksByStatus
@@ -93,6 +108,7 @@ export function HomeScreen() {
         .reduce((sum, lane) => sum + lane.tasks.length, 0),
     [uiTasksByStatus],
   )
+
   const doneCount = useMemo(
     () =>
       uiTasksByStatus
@@ -100,18 +116,21 @@ export function HomeScreen() {
         .reduce((sum, lane) => sum + lane.tasks.length, 0),
     [uiTasksByStatus],
   )
-  const openCount = allTasks.length - doneCount
+
+  const openCount = Math.max(allTasks.length - doneCount, 0)
   const highPriorityOpen = useMemo(
     () => allTasks.filter((task) => task.priority === "high" && !doneStatusIds.has(task.statusId)),
     [allTasks, doneStatusIds],
   )
+
   const recentTasks = useMemo(
     () =>
       [...allTasks]
         .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-        .slice(0, 4),
+        .slice(0, 5),
     [allTasks],
   )
+
   const completedTasks = useMemo(
     () =>
       [...allTasks]
@@ -121,52 +140,119 @@ export function HomeScreen() {
     [allTasks, doneStatusIds],
   )
 
-  const focusSections = useMemo<FocusSection[]>(
-    () => [
-      {
-        title: "Needs attention",
-        helper: "High-priority items still outside done lanes.",
-        tasks: highPriorityOpen.slice(0, 3),
-      },
-      {
-        title: "In motion",
-        helper: "Current work moving through in-progress lanes.",
-        tasks: uiTasksByStatus
-          .filter((lane) => lane.status.category === "in_progress")
-          .flatMap((lane) => lane.tasks)
-          .slice(0, 3),
-      },
-      {
-        title: "Recently updated",
-        helper: "Latest activity across this project.",
-        tasks: recentTasks.slice(0, 3),
-      },
-    ],
-    [highPriorityOpen, recentTasks, uiTasksByStatus],
+  const activeProjectsCount = useMemo(
+    () =>
+      workspaces.filter(
+        (workspace) => workspace.kind !== "personal" || workspace.id === activeWorkspaceId,
+      ).length,
+    [activeWorkspaceId, workspaces],
   )
 
-  const statusBreakdown = useMemo(() => {
-    return [
-      {
-        label: "To do",
-        value: uiTasksByStatus
-          .filter((lane) => lane.status.category === "todo")
-          .reduce((sum, lane) => sum + lane.tasks.length, 0),
-        tone: theme.colors.warning,
-      },
+  const statusBreakdown = useMemo(
+    () => [
+      { label: "To do", value: todoCount, tone: theme.colors.warning },
       { label: "In progress", value: inProgressCount, tone: theme.colors.primary },
       { label: "Done", value: doneCount, tone: theme.colors.success },
-    ]
-  }, [
-    doneCount,
-    inProgressCount,
-    theme.colors.primary,
-    theme.colors.success,
-    theme.colors.warning,
-    uiTasksByStatus,
-  ])
+    ],
+    [
+      doneCount,
+      inProgressCount,
+      theme.colors.primary,
+      theme.colors.success,
+      theme.colors.warning,
+      todoCount,
+    ],
+  )
 
-  const maxBreakdown = Math.max(...statusBreakdown.map((item) => item.value), 1)
+  const totalBreakdown = Math.max(
+    statusBreakdown.reduce((sum, item) => sum + item.value, 0),
+    1,
+  )
+  const maxBar = Math.max(...statusBreakdown.map((item) => item.value), 1)
+
+  const activityItems = useMemo<ActivityItem[]>(
+    () =>
+      recentTasks.map((task) => ({
+        id: task.id,
+        title: task.title,
+        meta: `${
+          task.assigneeUserId ? (assigneeLabels[task.assigneeUserId] ?? "Assigned") : "Unassigned"
+        } · ${formatDateTime(task.updatedAt)}`,
+        tone:
+          task.priority === "high"
+            ? theme.colors.danger
+            : task.priority === "medium"
+              ? theme.colors.warning
+              : theme.colors.accent,
+      })),
+    [assigneeLabels, recentTasks, theme.colors.accent, theme.colors.danger, theme.colors.warning],
+  )
+
+  const alertItems = useMemo<AlertItem[]>(
+    () => [
+      {
+        id: "risk",
+        label: "At risk",
+        count: highPriorityOpen.length,
+        tone: theme.colors.danger,
+      },
+      {
+        id: "review",
+        label: "Waiting review",
+        count: inProgressCount,
+        tone: theme.colors.primary,
+      },
+      {
+        id: "done",
+        label: "Completed recently",
+        count: completedTasks.length,
+        tone: theme.colors.success,
+      },
+    ],
+    [
+      completedTasks.length,
+      highPriorityOpen.length,
+      inProgressCount,
+      theme.colors.danger,
+      theme.colors.primary,
+      theme.colors.success,
+    ],
+  )
+
+  const agendaRows = useMemo(() => {
+    const today = recentTasks.slice(0, 2)
+    const tomorrow = highPriorityOpen.slice(0, 2)
+    const thisWeek = [...allTasks].filter((task) => !doneStatusIds.has(task.statusId)).slice(0, 3)
+
+    return [
+      { label: "Today", tasks: today },
+      { label: "Tomorrow", tasks: tomorrow },
+      { label: "This week", tasks: thisWeek },
+    ]
+  }, [allTasks, doneStatusIds, highPriorityOpen, recentTasks])
+
+  const statCards = [
+    {
+      label: "Active Projects",
+      value: `${Math.max(activeProjectsCount, 1)}`,
+      tone: theme.colors.primaryAlt,
+    },
+    {
+      label: "Open Tasks",
+      value: `${openCount}`,
+      tone: theme.colors.primary,
+    },
+    {
+      label: "In Motion",
+      value: `${inProgressCount}`,
+      tone: theme.colors.accent,
+    },
+    {
+      label: "At Risk",
+      value: `${highPriorityOpen.length}`,
+      tone: theme.colors.danger,
+    },
+  ]
 
   return (
     <Screen
@@ -184,405 +270,680 @@ export function HomeScreen() {
       }}
     >
       <View style={themed($header)}>
-        <View style={themed($headerLead)}>
-          <HeaderAvatar onPress={goToProfile} size={52} />
-          <View style={themed($headerCopy)}>
-            <Text preset="overline" text="Dashboard" />
-            <Text preset="display" text="Execution pulse" style={themed($title)} />
+        <View style={themed($headerTopRow)}>
+          <View style={themed($headerLead)}>
+            <HeaderAvatar onPress={goToProfile} size={40} />
+            <View style={themed($headerTitleWrap)}>
+              <Text preset="sectionTitle" text="Dashboard" style={themed($headerTitle)} />
+              <Text
+                preset="caption"
+                text={activeWorkspace?.kind === "personal" ? "Personal project" : "Project view"}
+                style={themed($headerCaption)}
+              />
+            </View>
+          </View>
+          <SyncBadge />
+        </View>
+
+        <View style={themed($headerMetaRow)}>
+          <Pressable onPress={goToProjectsTab} style={themed($workspacePill)}>
             <Text
-              preset="formHelper"
-              text={`Focused on ${activeWorkspace?.label ?? "your project"} right now.`}
-              style={themed($subtitle)}
+              preset="caption"
+              text={activeWorkspace?.label ?? "Personal"}
+              numberOfLines={1}
+              style={themed($workspacePillText)}
             />
+          </Pressable>
+
+          <View style={themed($statusPill)}>
+            <View style={themed($statusDot)} />
+            <Text preset="caption" text={isRefreshing ? "Refreshing" : "Idle"} />
           </View>
         </View>
-        <View style={themed($headerActions)}>
-          <SyncBadge />
+
+        <View style={themed($switcherRow)}>
+          {workspaces.slice(0, 4).map((workspace) => {
+            const isActive = workspace.id === activeWorkspaceId
+            return (
+              <Pressable
+                key={workspace.id}
+                onPress={() => void setActiveWorkspaceId(workspace.id)}
+                style={[themed($switchChip), isActive && themed($switchChipActive)]}
+              >
+                <Text preset="caption" text={workspace.label} numberOfLines={1} />
+              </Pressable>
+            )
+          })}
         </View>
       </View>
 
-      <WorkspaceSwitcher
-        options={workspaces.map((workspace) => ({
-          id: workspace.id,
-          label: workspace.label,
-          subtitle:
-            workspace.kind === "personal"
-              ? "Personal"
-              : `${workspace.membersCount ?? 0} member${(workspace.membersCount ?? 0) === 1 ? "" : "s"}`,
-        }))}
-        activeId={activeWorkspaceId}
-        onSelect={(id) => void setActiveWorkspaceId(id)}
-      />
-
-      <GlassCard style={themed($heroCard)}>
-        <View style={themed($heroGlow)} />
-        <View style={themed($heroHeader)}>
-          <View>
-            <Text preset="overline" text="Execution snapshot" />
-            <Text preset="sectionTitle" text={activeWorkspace?.label ?? "Current project"} />
-          </View>
-          <Pressable onPress={goToProjectsTab} style={themed($chipAction)}>
-            <Text preset="caption" text="Open projects" />
-          </Pressable>
-        </View>
-
-        <View style={themed($summaryGrid)}>
-          <MetricCard
-            label="Active projects"
-            value={`${workspaces.length}`}
-            tone={theme.colors.primaryAlt}
-          />
-          <MetricCard label="Open tasks" value={`${openCount}`} tone={theme.colors.primary} />
-          <MetricCard label="In motion" value={`${inProgressCount}`} tone={theme.colors.accent} />
-          <MetricCard
-            label="At risk"
-            value={`${highPriorityOpen.length}`}
-            tone={theme.colors.danger}
-          />
-        </View>
-
-        <View style={themed($quickActions)}>
-          <Button text="Create task" onPress={() => navigation.navigate("TaskEditor")} />
-          <Button text="Projects hub" preset="glass" onPress={goToProjectsTab} />
-          {pendingInvitesCount > 0 ? (
-            <Button
-              text={`Invites · ${pendingInvitesCount}`}
-              preset="filled"
-              onPress={goToInvites}
+      <View style={themed($content)}>
+        <View style={themed($statsGrid)}>
+          {statCards.map((card) => (
+            <DashboardStatCard
+              key={card.label}
+              label={card.label}
+              value={card.value}
+              tone={card.tone}
             />
-          ) : null}
-        </View>
-      </GlassCard>
-
-      <GlassCard>
-        <View style={themed($sectionHeader)}>
-          <View>
-            <Text preset="sectionTitle" text="Progress and load" />
-            <Text
-              preset="formHelper"
-              text={`${projectStreams.length} track${projectStreams.length === 1 ? "" : "s"} inside this project`}
-            />
-          </View>
-          <Text preset="caption" text={`${doneCount}/${Math.max(allTasks.length, 1)} complete`} />
-        </View>
-
-        <View style={themed($breakdownStack)}>
-          {statusBreakdown.map((item) => (
-            <View key={item.label} style={themed($breakdownRow)}>
-              <Text preset="caption" text={item.label} style={themed($breakdownLabel)} />
-              <View style={themed($barTrack)}>
-                <View
-                  style={[
-                    themed($barFill(item.tone)),
-                    {
-                      width: `${Math.max((item.value / maxBreakdown) * 100, item.value > 0 ? 16 : 0)}%`,
-                    },
-                  ]}
-                />
-              </View>
-              <Text preset="caption" text={`${item.value}`} />
-            </View>
           ))}
         </View>
-      </GlassCard>
 
-      {focusSections.map((section) => (
-        <GlassCard key={section.title}>
-          <View style={themed($sectionHeader)}>
-            <View>
-              <Text preset="sectionTitle" text={section.title} />
-              <Text preset="formHelper" text={section.helper} />
-            </View>
-            <Text preset="caption" text={`${section.tasks.length}`} />
-          </View>
-
-          {section.tasks.length === 0 ? (
+        <GlassCard style={themed($chartCard)}>
+          <View style={themed($compactSectionHeader)}>
+            <Text preset="formLabel" text="Task status" />
             <Text
-              preset="formHelper"
-              text="Nothing urgent in this view."
-              style={themed($emptyText)}
+              preset="caption"
+              text={`${doneCount}/${Math.max(allTasks.length, 1)} complete`}
+              style={themed($mutedText)}
             />
-          ) : (
-            <View style={themed($taskStack)}>
-              {section.tasks.map((task) => (
-                <TaskRow
-                  key={task.id}
-                  task={task}
-                  assigneeLabel={
-                    task.assigneeUserId
-                      ? (assigneeLabels[task.assigneeUserId] ?? "Assigned")
-                      : "Unassigned"
-                  }
-                  onPress={() => navigation.navigate("TaskDetail", { taskId: task.id })}
-                />
-              ))}
-            </View>
-          )}
-        </GlassCard>
-      ))}
-
-      <GlassCard>
-        <View style={themed($sectionHeader)}>
-          <View>
-            <Text preset="sectionTitle" text="Recently finished" />
-            <Text preset="formHelper" text="Momentum worth keeping visible." />
           </View>
-        </View>
-        {completedTasks.length === 0 ? (
-          <Text preset="formHelper" text="No completed tasks yet." style={themed($emptyText)} />
-        ) : (
-          <View style={themed($taskStack)}>
-            {completedTasks.map((task) => (
-              <TaskRow
-                key={task.id}
-                task={task}
-                assigneeLabel={
-                  task.assigneeUserId
-                    ? (assigneeLabels[task.assigneeUserId] ?? "Assigned")
-                    : "Unassigned"
-                }
-                onPress={() => navigation.navigate("TaskDetail", { taskId: task.id })}
+
+          <View style={themed($distributionBar)}>
+            {statusBreakdown.map((item) => (
+              <View
+                key={item.label}
+                style={[
+                  themed($distributionSlice(item.tone)),
+                  { flex: Math.max(item.value, item.value === 0 ? 0.5 : item.value) },
+                ]}
               />
             ))}
           </View>
-        )}
-      </GlassCard>
 
-      <View style={{ height: Math.max(insets.bottom, 16) + 90 }} />
+          <View style={themed($chartLegend)}>
+            {statusBreakdown.map((item) => (
+              <MiniChartLegend
+                key={item.label}
+                label={item.label}
+                value={item.value}
+                tone={item.tone}
+                percent={Math.round((item.value / totalBreakdown) * 100)}
+              />
+            ))}
+          </View>
+
+          <View style={themed($miniBarsRow)}>
+            {statusBreakdown.map((item) => (
+              <View key={item.label} style={themed($miniBarColumn)}>
+                <View style={themed($miniBarTrack)}>
+                  <View
+                    style={[
+                      themed($miniBarFill(item.tone)),
+                      {
+                        height: `${Math.max((item.value / maxBar) * 100, item.value > 0 ? 14 : 0)}%`,
+                      },
+                    ]}
+                  />
+                </View>
+                <Text
+                  preset="caption"
+                  text={item.label.split(" ")[0]}
+                  style={themed($miniBarLabel)}
+                />
+              </View>
+            ))}
+          </View>
+        </GlassCard>
+
+        <GlassCard style={themed($actionsCard)}>
+          <View style={themed($compactSectionHeader)}>
+            <Text preset="formLabel" text="Quick actions" />
+            {pendingInvitesCount > 0 ? (
+              <Text
+                preset="caption"
+                text={`${pendingInvitesCount} invites`}
+                style={themed($mutedText)}
+              />
+            ) : null}
+          </View>
+          <View style={themed($quickActionsRow)}>
+            <CompactAction label="Create task" onPress={() => navigation.navigate("TaskEditor")} />
+            <CompactAction label="Create project" onPress={goToProjectsTab} />
+            <CompactAction label="Assign task" onPress={goToProjectsTab} />
+            {pendingInvitesCount > 0 ? (
+              <CompactAction label="Invites" onPress={goToInvites} />
+            ) : null}
+          </View>
+        </GlassCard>
+
+        <View style={themed($twoColumnRow)}>
+          <GlassCard style={themed($halfCard)}>
+            <View style={themed($compactSectionHeader)}>
+              <Text preset="formLabel" text="Recent activity" />
+              <Text preset="caption" text={`${activityItems.length}`} style={themed($mutedText)} />
+            </View>
+            <View style={themed($tightStack)}>
+              {activityItems.length === 0 ? (
+                <Text preset="caption" text="No recent activity." style={themed($mutedText)} />
+              ) : (
+                activityItems.slice(0, 4).map((item) => <ActivityRow key={item.id} item={item} />)
+              )}
+            </View>
+          </GlassCard>
+
+          <GlassCard style={themed($halfCard)}>
+            <View style={themed($compactSectionHeader)}>
+              <Text preset="formLabel" text="Attention" />
+              <Text
+                preset="caption"
+                text={`${projectStreams.length} tracks`}
+                style={themed($mutedText)}
+              />
+            </View>
+            <View style={themed($tightStack)}>
+              {alertItems.map((item) => (
+                <AlertRow key={item.id} item={item} />
+              ))}
+            </View>
+          </GlassCard>
+        </View>
+
+        <GlassCard>
+          <View style={themed($compactSectionHeader)}>
+            <Text preset="formLabel" text="Upcoming work" />
+            <Text preset="caption" text="Agenda" style={themed($mutedText)} />
+          </View>
+          <View style={themed($tightStack)}>
+            {agendaRows.map((row) => (
+              <AgendaRow
+                key={row.label}
+                label={row.label}
+                tasks={row.tasks}
+                assigneeLabels={assigneeLabels}
+                onPressTask={(taskId) => navigation.navigate("TaskDetail", { taskId })}
+              />
+            ))}
+          </View>
+        </GlassCard>
+
+        <View style={{ height: Math.max(insets.bottom, 14) + 88 }} />
+      </View>
     </Screen>
   )
 }
 
-function MetricCard({ label, value, tone }: { label: string; value: string; tone: string }) {
+function DashboardStatCard({ label, value, tone }: { label: string; value: string; tone: string }) {
   const { themed } = useAppTheme()
 
   return (
-    <View style={themed($metricCard)}>
-      <View style={[themed($metricDot), { backgroundColor: tone }]} />
-      <Text preset="caption" text={label} style={themed($metricLabel)} />
-      <Text preset="heading" text={value} />
+    <View style={themed($statCard)}>
+      <View style={themed($statTopRow)}>
+        <View style={[themed($statDot), { backgroundColor: tone }]} />
+        <Text preset="caption" text={label} style={themed($statLabel)} />
+      </View>
+      <Text preset="subheading" text={value} style={themed($statValue)} />
     </View>
   )
 }
 
-function TaskRow({
-  task,
-  assigneeLabel,
-  onPress,
+function MiniChartLegend({
+  label,
+  value,
+  tone,
+  percent,
 }: {
-  task: Task
-  assigneeLabel: string
-  onPress: () => void
+  label: string
+  value: number
+  tone: string
+  percent: number
 }) {
   const { themed } = useAppTheme()
-  const updatedLabel = useMemo(() => formatDateTime(task.updatedAt), [task.updatedAt])
 
   return (
-    <Pressable onPress={onPress} style={themed($taskCard)}>
-      <View style={themed($taskHeader)}>
-        <View style={themed($taskTitleRow)}>
-          <PriorityDot priority={task.priority} />
-          <Text preset="formLabel" text={task.title} style={themed($taskTitle)} />
-        </View>
-        <Text preset="caption" text={task.priority.toUpperCase()} />
+    <View style={themed($legendItem)}>
+      <View style={[themed($legendDot), { backgroundColor: tone }]} />
+      <View style={themed($legendCopy)}>
+        <Text preset="caption" text={label} style={themed($legendLabel)} />
+        <Text preset="caption" text={`${value} · ${percent}%`} style={themed($legendValue)} />
       </View>
-      {!!task.description ? (
-        <Text
-          preset="formHelper"
-          text={task.description}
-          numberOfLines={2}
-          style={themed($taskDescription)}
-        />
-      ) : null}
-      <View style={themed($taskMetaRow)}>
-        <Text preset="caption" text={assigneeLabel} />
-        <Text preset="caption" text={updatedLabel} />
+    </View>
+  )
+}
+
+function ActivityRow({ item }: { item: ActivityItem }) {
+  const { themed } = useAppTheme()
+
+  return (
+    <View style={themed($rowCard)}>
+      <View style={[themed($rowMarker), { backgroundColor: item.tone }]} />
+      <View style={themed($rowCopy)}>
+        <Text preset="caption" text={item.title} numberOfLines={1} style={themed($rowTitle)} />
+        <Text preset="caption" text={item.meta} numberOfLines={1} style={themed($rowMeta)} />
       </View>
+    </View>
+  )
+}
+
+function AlertRow({ item }: { item: AlertItem }) {
+  const { themed } = useAppTheme()
+
+  return (
+    <View style={themed($alertRow)}>
+      <View style={themed($alertLead)}>
+        <View style={[themed($alertDot), { backgroundColor: item.tone }]} />
+        <Text preset="caption" text={item.label} style={themed($rowTitle)} />
+      </View>
+      <Text preset="caption" text={`${item.count}`} style={themed($rowMeta)} />
+    </View>
+  )
+}
+
+function AgendaRow({
+  label,
+  tasks,
+  assigneeLabels,
+  onPressTask,
+}: {
+  label: string
+  tasks: Task[]
+  assigneeLabels: Record<string, string>
+  onPressTask: (taskId: string) => void
+}) {
+  const { themed } = useAppTheme()
+
+  return (
+    <View style={themed($agendaRow)}>
+      <Text preset="caption" text={label} style={themed($agendaLabel)} />
+      <View style={themed($agendaItems)}>
+        {tasks.length === 0 ? (
+          <Text preset="caption" text="Nothing queued" style={themed($mutedText)} />
+        ) : (
+          tasks.slice(0, 2).map((task) => (
+            <Pressable
+              key={task.id}
+              onPress={() => onPressTask(task.id)}
+              style={themed($agendaItem)}
+            >
+              <View style={themed($agendaTitleRow)}>
+                <PriorityDot priority={task.priority} />
+                <Text
+                  preset="caption"
+                  text={task.title}
+                  numberOfLines={1}
+                  style={themed($rowTitle)}
+                />
+              </View>
+              <Text
+                preset="caption"
+                text={
+                  task.assigneeUserId
+                    ? (assigneeLabels[task.assigneeUserId] ?? "Assigned")
+                    : "Unassigned"
+                }
+                numberOfLines={1}
+                style={themed($rowMeta)}
+              />
+            </Pressable>
+          ))
+        )}
+      </View>
+    </View>
+  )
+}
+
+function CompactAction({ label, onPress }: { label: string; onPress: () => void }) {
+  const { themed } = useAppTheme()
+
+  return (
+    <Pressable onPress={onPress} style={themed($actionPill)}>
+      <Text preset="caption" text={`+ ${label}`} style={themed($actionText)} />
     </Pressable>
   )
 }
 
 const $screen: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  paddingTop: spacing.screenVertical,
-  paddingBottom: spacing.xxxl,
-  gap: spacing.sectionGap,
+  paddingTop: spacing.md,
+  paddingBottom: spacing.xxl,
+})
+
+const $content: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  paddingHorizontal: spacing.screenHorizontal,
+  gap: spacing.md,
 })
 
 const $header: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   paddingHorizontal: spacing.screenHorizontal,
+  paddingBottom: spacing.sm,
+  gap: spacing.sm,
+})
+
+const $headerTopRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexDirection: "row",
+  alignItems: "center",
   justifyContent: "space-between",
-  gap: spacing.md,
-  alignItems: "flex-start",
+  gap: spacing.sm,
 })
 
 const $headerLead: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  flex: 1,
   flexDirection: "row",
-  gap: spacing.md,
-})
-
-const $headerCopy: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  alignItems: "center",
+  gap: spacing.sm,
   flex: 1,
-  gap: spacing.xxs,
 })
 
-const $headerActions: ThemedStyle<ViewStyle> = () => ({
-  alignItems: "flex-end",
+const $headerTitleWrap: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: 2,
+  flex: 1,
 })
 
-const $title: ThemedStyle<TextStyle> = () => ({
-  lineHeight: 40,
+const $headerTitle: ThemedStyle<TextStyle> = () => ({
+  lineHeight: 22,
 })
 
-const $subtitle: ThemedStyle<TextStyle> = ({ colors }) => ({
+const $headerCaption: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.textDim,
+})
+
+const $headerMetaRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  alignItems: "center",
+  gap: spacing.sm,
+})
+
+const $workspacePill: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
+  flex: 1,
+  borderRadius: radius.pill,
+  borderWidth: 1,
+  borderColor: colors.borderSubtle,
+  backgroundColor: colors.surface,
+  paddingHorizontal: spacing.sm,
+  paddingVertical: spacing.xs,
+})
+
+const $workspacePillText: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.textMuted,
 })
 
-const $heroCard: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  marginHorizontal: spacing.screenHorizontal,
-  overflow: "hidden",
-})
-
-const $heroGlow: ThemedStyle<ViewStyle> = ({ colors }) => ({
-  position: "absolute",
-  width: 180,
-  height: 180,
-  borderRadius: 999,
-  backgroundColor: colors.glowStrong,
-  top: -52,
-  right: -32,
-})
-
-const $heroHeader: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+const $statusPill: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
   flexDirection: "row",
-  justifyContent: "space-between",
-  gap: spacing.md,
-  alignItems: "flex-start",
-  marginBottom: spacing.md,
-})
-
-const $chipAction: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
+  alignItems: "center",
+  gap: spacing.xs,
   borderRadius: radius.pill,
   borderWidth: 1,
-  borderColor: colors.borderStrong,
-  backgroundColor: colors.surfaceGlass,
+  borderColor: colors.borderSubtle,
+  backgroundColor: colors.surface,
   paddingHorizontal: spacing.sm,
-  paddingVertical: spacing.xxs,
+  paddingVertical: spacing.xs,
 })
 
-const $summaryGrid: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+const $statusDot: ThemedStyle<ViewStyle> = ({ colors, radius }) => ({
+  width: 6,
+  height: 6,
+  borderRadius: radius.pill,
+  backgroundColor: colors.success,
+})
+
+const $switcherRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  gap: spacing.xs,
+})
+
+const $switchChip: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
+  flex: 1,
+  borderRadius: radius.pill,
+  borderWidth: 1,
+  borderColor: colors.borderSubtle,
+  backgroundColor: colors.surfaceGlass,
+  paddingHorizontal: spacing.sm,
+  paddingVertical: spacing.xs,
+  minHeight: 32,
+  justifyContent: "center",
+})
+
+const $switchChipActive: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  borderColor: colors.primary,
+  backgroundColor: colors.glowSoft,
+})
+
+const $statsGrid: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexDirection: "row",
   flexWrap: "wrap",
   gap: spacing.sm,
 })
 
-const $metricCard: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
-  width: "47%",
-  minWidth: 140,
+const $statCard: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
+  width: "47.5%",
+  minHeight: 78,
   borderRadius: radius.medium,
   borderWidth: 1,
   borderColor: colors.borderSubtle,
   backgroundColor: colors.surface,
-  padding: spacing.md,
-  gap: spacing.xxs,
+  paddingHorizontal: spacing.sm,
+  paddingVertical: spacing.sm,
+  justifyContent: "space-between",
 })
 
-const $metricDot: ThemedStyle<ViewStyle> = ({ radius }) => ({
-  width: 8,
-  height: 8,
+const $statTopRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  alignItems: "center",
+  gap: spacing.xs,
+})
+
+const $statDot: ThemedStyle<ViewStyle> = ({ radius }) => ({
+  width: 7,
+  height: 7,
   borderRadius: radius.pill,
 })
 
-const $metricLabel: ThemedStyle<TextStyle> = ({ colors }) => ({
+const $statLabel: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.textMuted,
+  flex: 1,
 })
 
-const $quickActions: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  marginTop: spacing.lg,
+const $statValue: ThemedStyle<TextStyle> = () => ({
+  lineHeight: 24,
+})
+
+const $chartCard: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.sm,
 })
 
-const $sectionHeader: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+const $compactSectionHeader: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexDirection: "row",
   justifyContent: "space-between",
-  alignItems: "flex-start",
-  gap: spacing.sm,
-  marginBottom: spacing.md,
-})
-
-const $breakdownStack: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  gap: spacing.sm,
-})
-
-const $breakdownRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  flexDirection: "row",
   alignItems: "center",
   gap: spacing.sm,
 })
 
-const $breakdownLabel: ThemedStyle<TextStyle> = ({ colors }) => ({
-  width: 76,
-  color: colors.textMuted,
+const $mutedText: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.textDim,
 })
 
-const $barTrack: ThemedStyle<ViewStyle> = ({ colors, radius }) => ({
-  flex: 1,
-  height: 10,
+const $distributionBar: ThemedStyle<ViewStyle> = ({ colors, radius }) => ({
+  flexDirection: "row",
+  height: 12,
   borderRadius: radius.pill,
   backgroundColor: colors.backgroundSecondary,
   overflow: "hidden",
 })
 
-const $barFill =
+const $distributionSlice =
   (backgroundColor: string): ThemedStyle<ViewStyle> =>
-  ({ radius }) => ({
-    height: "100%",
-    borderRadius: radius.pill,
+  ({}) => ({
     backgroundColor,
+    height: "100%",
   })
 
-const $taskStack: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+const $chartLegend: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  flexWrap: "wrap",
   gap: spacing.sm,
 })
 
-const $taskCard: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
+const $legendItem: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  width: "47%",
+  flexDirection: "row",
+  alignItems: "center",
+  gap: spacing.xs,
+})
+
+const $legendDot: ThemedStyle<ViewStyle> = ({ radius }) => ({
+  width: 8,
+  height: 8,
+  borderRadius: radius.pill,
+})
+
+const $legendCopy: ThemedStyle<ViewStyle> = () => ({
+  flex: 1,
+})
+
+const $legendLabel: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.textMuted,
+})
+
+const $legendValue: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.textDim,
+})
+
+const $miniBarsRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  justifyContent: "space-between",
+  gap: spacing.sm,
+})
+
+const $miniBarColumn: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flex: 1,
+  alignItems: "center",
+  gap: spacing.xs,
+})
+
+const $miniBarTrack: ThemedStyle<ViewStyle> = ({ colors, radius }) => ({
+  width: "100%",
+  height: 44,
+  borderRadius: radius.medium,
+  backgroundColor: colors.backgroundSecondary,
+  justifyContent: "flex-end",
+  overflow: "hidden",
+})
+
+const $miniBarFill =
+  (backgroundColor: string): ThemedStyle<ViewStyle> =>
+  ({ radius }) => ({
+    width: "100%",
+    borderRadius: radius.medium,
+    backgroundColor,
+  })
+
+const $miniBarLabel: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.textDim,
+})
+
+const $actionsCard: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: spacing.sm,
+})
+
+const $quickActionsRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  flexWrap: "wrap",
+  gap: spacing.xs,
+})
+
+const $actionPill: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
+  borderRadius: radius.pill,
+  borderWidth: 1,
+  borderColor: colors.borderSubtle,
+  backgroundColor: colors.surface,
+  paddingHorizontal: spacing.sm,
+  paddingVertical: spacing.xs,
+})
+
+const $actionText: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.textMuted,
+})
+
+const $twoColumnRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  gap: spacing.sm,
+})
+
+const $halfCard: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flex: 1,
+  gap: spacing.sm,
+})
+
+const $tightStack: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: spacing.xs,
+})
+
+const $rowCard: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  alignItems: "center",
+  gap: spacing.xs,
+})
+
+const $rowMarker: ThemedStyle<ViewStyle> = ({ radius }) => ({
+  width: 8,
+  height: 8,
+  borderRadius: radius.pill,
+})
+
+const $rowCopy: ThemedStyle<ViewStyle> = () => ({
+  flex: 1,
+})
+
+const $rowTitle: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.textMuted,
+})
+
+const $rowMeta: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.textDim,
+})
+
+const $alertRow: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: spacing.sm,
   borderRadius: radius.medium,
   borderWidth: 1,
   borderColor: colors.borderSubtle,
   backgroundColor: colors.surface,
-  padding: spacing.md,
+  paddingHorizontal: spacing.sm,
+  paddingVertical: spacing.xs,
+})
+
+const $alertLead: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  alignItems: "center",
+  gap: spacing.xs,
+  flex: 1,
+})
+
+const $alertDot: ThemedStyle<ViewStyle> = ({ radius }) => ({
+  width: 8,
+  height: 8,
+  borderRadius: radius.pill,
+})
+
+const $agendaRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  alignItems: "flex-start",
+  gap: spacing.sm,
+})
+
+const $agendaLabel: ThemedStyle<TextStyle> = ({ colors }) => ({
+  width: 62,
+  color: colors.textDim,
+})
+
+const $agendaItems: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flex: 1,
   gap: spacing.xs,
 })
 
-const $taskHeader: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+const $agendaItem: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
+  borderRadius: radius.medium,
+  borderWidth: 1,
+  borderColor: colors.borderSubtle,
+  backgroundColor: colors.surface,
+  paddingHorizontal: spacing.sm,
+  paddingVertical: spacing.xs,
+  gap: 4,
+})
+
+const $agendaTitleRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexDirection: "row",
-  justifyContent: "space-between",
   alignItems: "center",
-  gap: spacing.sm,
-})
-
-const $taskTitleRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  flexDirection: "row",
-  alignItems: "center",
-  gap: spacing.sm,
-  flex: 1,
-})
-
-const $taskTitle: ThemedStyle<TextStyle> = () => ({
-  flex: 1,
-})
-
-const $taskDescription: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.textMuted,
-})
-
-const $taskMetaRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  flexDirection: "row",
-  justifyContent: "space-between",
-  gap: spacing.sm,
-})
-
-const $emptyText: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.textMuted,
+  gap: spacing.xs,
 })
