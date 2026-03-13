@@ -33,7 +33,11 @@ export const useAuthViewModel = () => {
 
   const signupWithEmail = async (email: string, password: string, username?: string) => {
     const result = await signup(client, email, password, username)
-    return { needsVerification: !!result.requiresEmailVerification }
+    return {
+      needsVerification: !!result.requiresEmailVerification,
+      previewToken: result.previewToken,
+      previewLink: result.previewLink,
+    }
   }
 
   const resendVerificationEmail = async (email: string) => {

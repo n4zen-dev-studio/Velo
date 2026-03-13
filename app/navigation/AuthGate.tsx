@@ -1,15 +1,24 @@
 import { useEffect, useState } from "react"
 import { createNativeStackNavigator } from "@react-navigation/native-stack"
 
+import { AppLockGate } from "@/components/AppLockGate"
 import { AuthStack } from "@/navigation/AuthStack"
 import { MainTabs } from "@/navigation/MainTabs"
-import { hasSession, isOfflineMode } from "@/services/storage/session"
-import { useAppTheme } from "@/theme/context"
 import type { AuthGateParamList } from "@/navigators/navigationTypes"
 import { useAuthSession } from "@/services/auth/session"
+import { hasSession, isOfflineMode } from "@/services/storage/session"
 import { useWorkspaceStore } from "@/stores/workspaceStore"
+import { useAppTheme } from "@/theme/context"
 
 const Stack = createNativeStackNavigator<AuthGateParamList>()
+
+function ProtectedMainTabs() {
+  return (
+    <AppLockGate>
+      <MainTabs />
+    </AppLockGate>
+  )
+}
 
 export function AuthGate() {
   const {
@@ -51,7 +60,7 @@ export function AuthGate() {
       }}
     >
       <Stack.Screen name="AuthStack" component={AuthStack} />
-      <Stack.Screen name="MainTabs" component={MainTabs} />
+      <Stack.Screen name="MainTabs" component={ProtectedMainTabs} />
     </Stack.Navigator>
   )
 }

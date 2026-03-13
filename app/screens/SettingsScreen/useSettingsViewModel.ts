@@ -1,4 +1,6 @@
-import { useCallback, useMemo, useState } from "react"
+import { useMemo } from "react"
+
+import { useBiometricLock } from "@/services/security/biometricLock"
 
 export type SettingsOptionId = "biometrics"
 
@@ -9,26 +11,9 @@ type Option = {
   helperText?: string
 }
 
-type SettingsState = Record<SettingsOptionId, boolean>
-
-const DEFAULTS: SettingsState = {
-  biometrics: false,
-}
-
 export const useSettingsViewModel = () => {
-  const [values, setValues] = useState<SettingsState>(DEFAULTS)
-
-  const setOption = useCallback((id: SettingsOptionId, value: boolean) => {
-    setValues((prev) => {
-      // no-op if unchanged (prevents extra re-renders)
-      if (prev[id] === value) return prev
-      return { ...prev, [id]: value }
-    })
-  }, [])
-
-  const toggleOption = useCallback((id: SettingsOptionId) => {
-    setValues((prev) => ({ ...prev, [id]: !prev[id] }))
-  }, [])
+  const biometricLock = useBiometricLock()
+  const values = useMemo(() => ({ biometrics: biometricLock.enabled }), [biometricLock.enabled])
 
   const options: Option[] = useMemo(
     () => [
@@ -36,15 +21,19 @@ export const useSettingsViewModel = () => {
         id: "biometrics",
         label: "Unlock with biometrics",
         value: values.biometrics,
+        helperText:
+          biometricLock.support === "unsupported"
+            ? "Biometric unlock is not available on this device."
+            : biometricLock.support === "unenrolled"
+              ? "Set up Face ID or fingerprint in device settings first."
+              : "Biometric unlock protects local access to your workspace.",
       },
     ],
-    [values],
+    [biometricLock.support, values],
   )
 
   return {
     options,
-    values, // optional: useful if other screens/services need to read them
-    setOption,
-    toggleOption,
+    values,
   }
 }

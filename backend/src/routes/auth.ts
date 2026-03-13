@@ -1,5 +1,5 @@
-import type { FastifyInstance } from "fastify"
 import bcrypt from "bcryptjs"
+import type { FastifyInstance } from "fastify"
 import crypto from "node:crypto"
 
 import { prisma } from "../prisma"
@@ -41,6 +41,11 @@ function logVerificationToken(rawToken: string) {
   console.log(`[auth] Verify email token: ${rawToken}`)
 }
 
+function buildPreviewLink(path: string, token: string) {
+  const base = (process.env.APP_SCHEME_URL || "velo://").replace(/\/$/, "")
+  return `${base}${path}${token}`
+}
+
 export async function authRoutes(app: FastifyInstance) {
   // POST /auth/register
   // curl -X POST http://localhost:8080/auth/register -H "Content-Type: application/json" -d '{"email":"dev@tasktrak.io","password":"password123"}'
@@ -75,7 +80,9 @@ export async function authRoutes(app: FastifyInstance) {
       return reply.code(409).send({ error: "Email already in use" })
     }
     if (normalizedUsername) {
-      const existingUsername = await prisma.user.findFirst({ where: { username: normalizedUsername } })
+      const existingUsername = await prisma.user.findFirst({
+        where: { username: normalizedUsername },
+      })
       if (existingUsername) {
         return reply.code(409).send({ error: "Username already in use" })
       }
@@ -98,7 +105,15 @@ export async function authRoutes(app: FastifyInstance) {
     const rawToken = await setVerificationToken(user.id)
     logVerificationToken(rawToken)
 
-    return reply.send({ ok: true, requiresEmailVerification: true })
+    return reply.send({
+      ok: true,
+      requiresEmailVerification: true,
+      previewToken: process.env.NODE_ENV === "production" ? undefined : rawToken,
+      previewLink:
+        process.env.NODE_ENV === "production"
+          ? undefined
+          : buildPreviewLink("/verify-email/", rawToken),
+    })
   })
 
   // POST /auth/verify-email
@@ -139,11 +154,21 @@ export async function authRoutes(app: FastifyInstance) {
     const { email } = request.body as { email: string }
     const normalized = normalizeEmail(email)
     const user = await prisma.user.findUnique({ where: { email: normalized } })
-    if (user && !isUserVerified(user)) {
-      const rawToken = await setVerificationToken(user.id)
-      logVerificationToken(rawToken)
+    const previewToken =
+      user && !isUserVerified(user) && process.env.NODE_ENV !== "production"
+        ? await setVerificationToken(user.id)
+        : null
+    if (previewToken) {
+      logVerificationToken(previewToken)
     }
-    return reply.send({ ok: true })
+    return reply.send({
+      ok: true,
+      previewToken: previewToken ?? undefined,
+      previewLink:
+        previewToken && process.env.NODE_ENV !== "production"
+          ? buildPreviewLink("/verify-email/", previewToken)
+          : undefined,
+    })
   })
 
   app.post("/auth/login", async (request, reply) => {
@@ -200,8 +225,10 @@ export async function authRoutes(app: FastifyInstance) {
     const { email } = request.body as { email: string }
     const normalized = normalizeEmail(email)
     const user = await prisma.user.findUnique({ where: { email: normalized } })
+    let previewToken: string | null = null
     if (user) {
       const rawToken = generateToken()
+      previewToken = rawToken
       const tokenHash = hashToken(rawToken)
       const expiresAt = new Date(Date.now() + 60 * 60 * 1000)
       await prisma.user.update({
@@ -216,7 +243,14 @@ export async function authRoutes(app: FastifyInstance) {
         console.log(`[auth] Password reset token: ${rawToken}`)
       }
     }
-    return reply.send({ ok: true })
+    return reply.send({
+      ok: true,
+      previewToken: process.env.NODE_ENV === "production" ? undefined : (previewToken ?? undefined),
+      previewLink:
+        previewToken && process.env.NODE_ENV !== "production"
+          ? buildPreviewLink("/password-reset/confirm/", previewToken)
+          : undefined,
+    })
   })
 
   // POST /auth/reset-password
@@ -298,19 +332,15 @@ export async function authRoutes(app: FastifyInstance) {
   })
 
   // POST /auth/logout
-  app.post(
-    "/auth/logout",
-    { preHandler: [app.authenticate] },
-    async (request, reply) => {
-      const { refreshToken } = request.body as { refreshToken?: string }
-      if (refreshToken) {
-        const tokenHash = hashToken(refreshToken)
-        await prisma.refreshToken.updateMany({
-          where: { tokenHash, revokedAt: null },
-          data: { revokedAt: new Date() },
-        })
-      }
-      return reply.code(200).send({ ok: true })
-    },
-  )
+  app.post("/auth/logout", { preHandler: [app.authenticate] }, async (request, reply) => {
+    const { refreshToken } = request.body as { refreshToken?: string }
+    if (refreshToken) {
+      const tokenHash = hashToken(refreshToken)
+      await prisma.refreshToken.updateMany({
+        where: { tokenHash, revokedAt: null },
+        data: { revokedAt: new Date() },
+      })
+    }
+    return reply.code(200).send({ ok: true })
+  })
 }

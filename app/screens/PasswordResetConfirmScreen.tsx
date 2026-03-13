@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { View, ViewStyle } from "react-native"
-import { useNavigation } from "@react-navigation/native"
+import { useNavigation, useRoute } from "@react-navigation/native"
 
 import { Button } from "@/components/Button"
 import { GlassCard } from "@/components/GlassCard"
@@ -15,29 +15,43 @@ import type { ThemedStyle } from "@/theme/types"
 export function PasswordResetConfirmScreen() {
   const { themed } = useAppTheme()
   const navigation = useNavigation<AuthStackScreenProps<"PasswordResetConfirm">["navigation"]>()
+  const route = useRoute<AuthStackScreenProps<"PasswordResetConfirm">["route"]>()
   const { confirmPasswordResetToken } = useAuthViewModel()
-  const [token, setToken] = useState("")
+  const [token, setToken] = useState(route.params?.token ?? "")
   const [password, setPassword] = useState("")
   const [message, setMessage] = useState<string | null>(null)
 
   const handleSubmit = async () => {
     if (!token || !password) return
     await confirmPasswordResetToken(token, password)
-    setMessage("Password updated. Please log in.")
+    setMessage("Password updated. Return to sign in with your new password.")
   }
 
   return (
     <Screen preset="scroll" contentContainerStyle={themed($screen)}>
       <View style={themed($header)}>
         <Text preset="heading" text="Set new password" />
-        <Text preset="formHelper" text="Paste your reset token and choose a new password." />
+        <Text
+          preset="formHelper"
+          text="Paste your reset token and choose a new password, or continue with the preview token already filled in."
+        />
       </View>
 
       <GlassCard>
         <Text preset="formLabel" text="Reset token" />
-        <TextField value={token} onChangeText={setToken} placeholder="token" autoCapitalize="none" />
+        <TextField
+          value={token}
+          onChangeText={setToken}
+          placeholder="token"
+          autoCapitalize="none"
+        />
         <Text preset="formLabel" text="New password" />
-        <TextField value={password} onChangeText={setPassword} placeholder="••••••••" secureTextEntry />
+        <TextField
+          value={password}
+          onChangeText={setPassword}
+          placeholder="••••••••"
+          secureTextEntry
+        />
         {message ? <Text preset="formHelper" text={message} /> : null}
         <View style={themed($buttonRow)}>
           <Button text="Update password" preset="default" onPress={handleSubmit} />

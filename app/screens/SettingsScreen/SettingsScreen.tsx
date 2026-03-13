@@ -1,5 +1,5 @@
-import { useState, type ReactNode } from "react"
-import { Modal, Pressable, View, ViewStyle, TextStyle } from "react-native"
+import { useEffect, useState, type ReactNode } from "react"
+import { Alert, Modal, Pressable, View, ViewStyle, TextStyle } from "react-native"
 
 import { Button } from "@/components/Button"
 import { GlassCard } from "@/components/GlassCard"
@@ -11,6 +11,11 @@ import { goToAuth, goToProfile, goToProjectsTab } from "@/navigation/navigationA
 import { useAuthViewModel } from "@/screens/AuthScreen/useAuthViewModel"
 import { clearTokens } from "@/services/api/tokenStore"
 import { clearAuthSession, refreshAuthSession, useAuthSession } from "@/services/auth/session"
+import {
+  loadBiometricLockState,
+  setBiometricLockEnabled,
+  useBiometricLock,
+} from "@/services/security/biometricLock"
 import { logoutCleanup } from "@/services/session/logoutCleanup"
 import { setLoggingOut } from "@/services/session/logoutState"
 import { GUEST_SCOPE_KEY } from "@/services/session/scope"
@@ -34,18 +39,13 @@ import { useSettingsViewModel } from "./useSettingsViewModel"
 
 export function SettingsScreen() {
   const { themed, toggleTheme } = useAppTheme()
-
-  const { options, setOption } = useSettingsViewModel()
-  // NOTE: setOption is expected to exist now for functionality.
-  // If your hook currently doesn't expose it, add:
-  //   const setOption = (id: string, value: boolean) => update state + persist
-  // so this screen can remain dumb UI.
-
+  const { options } = useSettingsViewModel()
   const { logoutUser } = useAuthViewModel()
   const { workspaces, activeWorkspace } = useWorkspaceStore()
   const syncStatus = useSyncStatus()
   const syncPreferences = useSyncPreferences()
   const authSession = useAuthSession()
+  const biometricLock = useBiometricLock()
 
   const syncBehaviorText = describeSyncBehavior({
     preferences: syncPreferences,
@@ -56,10 +56,30 @@ export function SettingsScreen() {
   const [showLogoutModal, setShowLogoutModal] = useState(false)
   const [logoutError, setLogoutError] = useState<string | null>(null)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const [isUpdatingBiometric, setIsUpdatingBiometric] = useState(false)
   const projectSummary =
     workspaces.filter((workspace) => workspace.kind !== "personal").length === 0
       ? "Project admin lives in the Projects tab."
       : `${workspaces.filter((workspace) => workspace.kind !== "personal").length} shared projects managed from Projects.`
+
+  useEffect(() => {
+    if (biometricLock.isLoaded) return
+    void loadBiometricLockState()
+  }, [biometricLock.isLoaded])
+
+  const handleBiometricToggle = async (value: boolean) => {
+    setIsUpdatingBiometric(true)
+    try {
+      await setBiometricLockEnabled(value)
+    } catch (error) {
+      Alert.alert(
+        value ? "Biometric unlock unavailable" : "Unable to update biometric unlock",
+        error instanceof Error ? error.message : "Please try again.",
+      )
+    } finally {
+      setIsUpdatingBiometric(false)
+    }
+  }
 
   const handleLogout = async () => {
     setLogoutError(null)
@@ -152,7 +172,6 @@ export function SettingsScreen() {
         setLoggingOut(true)
 
         // HARD STOP sync (abort if possible)
-        syncController.abortAndPause?.("logout_wipe_unsynced")
         syncController.pause()
 
         didWipe = true
@@ -359,10 +378,7 @@ export function SettingsScreen() {
         <View style={themed($compactActionRow)}>
           <View style={themed($compactActionCopy)}>
             <Text preset="caption" text="Project admin" style={themed($muted)} />
-            <Text
-              preset="formLabel"
-              text="Manage Projects"
-            />
+            <Text preset="formLabel" text="Manage Projects" />
           </View>
           <View style={themed($inlineActions)}>
             <Button text="Open projects" preset="glass" onPress={goToProjectsTab} />
@@ -392,7 +408,8 @@ export function SettingsScreen() {
               control={
                 <Switch
                   value={!!option.value}
-                  onValueChange={(value) => setOption(option.id, value)}
+                  onValueChange={handleBiometricToggle}
+                  disabled={isUpdatingBiometric}
                 />
               }
             />
@@ -619,7 +636,7 @@ const $toggleLeft: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.xxxs,
 })
 
-const $groupedList: ThemedStyle<ViewStyle> = ({ colors, radius }) => ({
+const $groupedList: ThemedStyle<ViewStyle> = ({ radius }) => ({
   borderWidth: 0,
   borderRadius: radius.large,
   overflow: "hidden",

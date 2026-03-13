@@ -52,6 +52,12 @@
       }
     ],
     [
+      "expo-local-authentication",
+      {
+        "faceIDPermission": "Velo uses Face ID or biometrics to protect local access to your workspace."
+      }
+    ],
+    [
       "expo-splash-screen",
       {
         "image": "./assets/images/app-icon-android-adaptive-foreground.png",
