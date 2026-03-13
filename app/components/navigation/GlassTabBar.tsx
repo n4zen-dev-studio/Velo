@@ -148,12 +148,19 @@ export function GlassTabBar({
             <Pressable
               key={tab.route.key}
               onPress={() => {
+                if (tab.focused) {
+                  return
+                }
+
                 const event = navigation.emit({
                   type: "tabPress",
                   target: tab.route.key,
                   canPreventDefault: true,
                 })
-                if (!tab.focused && !event.defaultPrevented) navigation.navigate(tab.route.name)
+
+                if (!event.defaultPrevented) {
+                  navigation.navigate(tab.route.name)
+                }
               }}
               onLongPress={() => navigation.emit({ type: "tabLongPress", target: tab.route.key })}
               style={themed($tabPressable)}

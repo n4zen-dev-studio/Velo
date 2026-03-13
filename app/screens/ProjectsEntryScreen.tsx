@@ -14,10 +14,15 @@ export function ProjectsEntryScreen() {
   const navigation = useNavigation<ProjectsStackScreenProps<"ProjectsEntry">["navigation"]>()
   const { activeWorkspace, workspaces, isHydrated } = useWorkspaceStore()
 
-  useEffect(() => {
-  if (!isHydrated) return
+  const activeWorkspaceId = activeWorkspace?.id
+  const firstWorkspaceId = workspaces[0]?.id
 
-    const targetWorkspaceId = activeWorkspace?.id ?? workspaces[0]?.id
+  useEffect(() => {
+    if (!isHydrated) return
+
+    console.log("activeWorkspace name",activeWorkspace?.label)
+
+    const targetWorkspaceId = activeWorkspaceId ?? firstWorkspaceId
 
     if (targetWorkspaceId) {
       navigation.replace("ProjectDetail", { workspaceId: targetWorkspaceId })
@@ -25,7 +30,7 @@ export function ProjectsEntryScreen() {
     }
 
     navigation.replace("ProjectsHome")
-  }, [activeWorkspace?.id, isHydrated, navigation, workspaces])
+  }, [activeWorkspaceId, firstWorkspaceId, isHydrated, navigation])
 
 
   return (

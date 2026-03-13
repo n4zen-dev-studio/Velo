@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 import {
   Pressable,
   ScrollView,
@@ -113,16 +113,12 @@ export function ProjectDetailScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      void setActiveWorkspaceId(workspaceId)
+      if (activeWorkspaceId !== workspaceId) {
+        void setActiveWorkspaceId(workspaceId)
+      }
       void loadProjectData()
-    }, [loadProjectData, setActiveWorkspaceId, workspaceId]),
+    }, [activeWorkspaceId, loadProjectData, setActiveWorkspaceId, workspaceId]),
   )
-
-  useEffect(() => {
-    if (activeWorkspaceId !== workspaceId) {
-      void setActiveWorkspaceId(workspaceId)
-    }
-  }, [activeWorkspaceId, setActiveWorkspaceId, workspaceId])
 
   const statusById = useMemo(
     () => Object.fromEntries(statuses.map((status) => [status.id, status])),
