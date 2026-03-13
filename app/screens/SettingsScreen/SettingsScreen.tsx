@@ -263,7 +263,7 @@ export function SettingsScreen() {
               style={themed($muted)}
             />
           </View>
-          <HeaderAvatar onPress={goToProfile} />
+          <HeaderAvatar onPress={() => authSession.isAuthenticated && goToProfile()} />
         </View>
         <View style={themed($headerMetaRow)}>
           <CompactMetaPill
@@ -341,39 +341,6 @@ export function SettingsScreen() {
       </GlassCard>
 
       <GlassCard>
-        <CompactSectionHeader title="Preferences" subtitle={`${options.length} controls`} />
-        <View style={themed($groupedList)}>
-          {options.map((option: any, index: number) => (
-            <CompactSettingRow
-              key={option.id}
-              label={option.label}
-              helperText={option.helperText}
-              withDivider={index < options.length - 1}
-              control={
-                <Switch
-                  value={!!option.value}
-                  onValueChange={(value) => setOption(option.id, value)}
-                />
-              }
-            />
-          ))}
-        </View>
-      </GlassCard>
-
-      <GlassCard>
-        <CompactSectionHeader title="Theme" subtitle="Appearance" />
-        <View style={themed($compactActionRow)}>
-          <View style={themed($compactActionCopy)}>
-            <Text preset="caption" text="Current mode" style={themed($muted)} />
-            <Text preset="formLabel" text="Switch light or dark theme" />
-          </View>
-          <View style={themed($inlineActions)}>
-            <Button text="Switch theme" onPress={toggleTheme} preset="glass" />
-          </View>
-        </View>
-      </GlassCard>
-
-      <GlassCard>
         <View style={themed($cardHeaderRow)}>
           <View style={themed($titleBlock)}>
             <Text preset="subheading" text="Projects" />
@@ -404,6 +371,33 @@ export function SettingsScreen() {
       </GlassCard>
 
       <GlassCard>
+        <CompactSectionHeader title="Theme" subtitle="Appearance" />
+        <View style={themed($compactActionRow)}>
+          <View style={themed($compactActionCopy)}>
+            <Text preset="caption" text="Current mode" style={themed($muted)} />
+            <Text preset="formLabel" text="Switch light or dark theme" />
+          </View>
+          <View style={themed($inlineActions)}>
+            <Button text="Switch theme" onPress={toggleTheme} preset="glass" />
+          </View>
+        </View>
+        <CompactSectionHeader title="Security" subtitle={`${options.length} controls`} />
+        <View style={themed($groupedList)}>
+          {options.map((option: any, index: number) => (
+            <CompactSettingRow
+              key={option.id}
+              label={option.label}
+              helperText={option.helperText}
+              withDivider={index < options.length - 1}
+              control={
+                <Switch
+                  value={!!option.value}
+                  onValueChange={(value) => setOption(option.id, value)}
+                />
+              }
+            />
+          ))}
+        </View>
         <CompactSectionHeader title="Account" subtitle="Session actions" />
         <View style={themed($compactActionRow)}>
           <View style={themed($compactActionCopy)}>
@@ -626,8 +620,7 @@ const $toggleLeft: ThemedStyle<ViewStyle> = ({ spacing }) => ({
 })
 
 const $groupedList: ThemedStyle<ViewStyle> = ({ colors, radius }) => ({
-  borderWidth: 1,
-  borderColor: colors.borderSubtle,
+  borderWidth: 0,
   borderRadius: radius.large,
   overflow: "hidden",
 })

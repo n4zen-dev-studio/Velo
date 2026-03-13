@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { Pressable, ScrollView, View, ViewStyle, TextStyle } from "react-native"
 
+import { SyncHealthCard } from "@/components/charts/SyncHealthCard"
 import { GlassCard } from "@/components/GlassCard"
 import { Screen } from "@/components/Screen"
 import { SyncBadge } from "@/components/SyncBadge"
@@ -48,6 +49,7 @@ type SyncMetrics = {
   sent: number
   total: number
   healthPercent: number
+  trend: Array<{ key: string; label: string; total: number; successRate: number }>
 }
 
 export function SyncDebugScreen() {
@@ -70,6 +72,7 @@ export function SyncDebugScreen() {
     sent: 0,
     total: 0,
     healthPercent: 100,
+    trend: [],
   })
 
   const load = async () => {
@@ -129,15 +132,6 @@ export function SyncDebugScreen() {
     ],
     [syncState.pendingCount, syncState.conflictCount, failedCount],
   )
-  const metricSegments = useMemo(
-    () => [
-      { label: "Sent", value: syncMetrics.sent, tone: "#44D39B" },
-      { label: "Pending", value: syncMetrics.pending, tone: "#7AA2FF" },
-      { label: "Failed", value: syncMetrics.failed, tone: "#FF6C8F" },
-    ],
-    [syncMetrics.failed, syncMetrics.pending, syncMetrics.sent],
-  )
-
   const pendingViewModels = useMemo(
     () =>
       pendingOps.map((op) =>
@@ -198,7 +192,7 @@ export function SyncDebugScreen() {
         ) : null}
       </View>
 
-      <GlassCard>
+      <View>
         <View style={themed($syncEntryRow)}>
           <View style={themed($syncEntryCopy)}>
             <Text preset="formLabel" text="Sync status" />
@@ -223,7 +217,7 @@ export function SyncDebugScreen() {
             <Text preset="caption" text="Review" style={themed($strongText)} />
           </Pressable>
         ) : null}
-      </GlassCard>
+      </View>
 
       <View style={themed($statsGrid)}>
         {topStats.map((stat) => (
@@ -231,42 +225,13 @@ export function SyncDebugScreen() {
         ))}
       </View>
 
-      <GlassCard>
-        <View style={themed($cardHeaderRow)}>
-          <View>
-            <Text preset="formLabel" text="Sync health" />
-            <Text
-              preset="caption"
-              text={`${syncMetrics.sent} delivered · ${syncMetrics.pending} queued`}
-              style={themed($muted)}
-            />
-          </View>
-          <Text preset="subheading" text={`${syncMetrics.healthPercent}%`} />
-        </View>
-        <View style={themed($healthBar)}>
-          {metricSegments.map((segment) => (
-            <View
-              key={segment.label}
-              style={[
-                themed($healthSlice(segment.tone)),
-                { flex: Math.max(segment.value, segment.value === 0 ? 0.35 : segment.value) },
-              ]}
-            />
-          ))}
-        </View>
-        <View style={themed($healthLegend)}>
-          {metricSegments.map((segment) => (
-            <View key={segment.label} style={themed($healthLegendItem)}>
-              <View style={[themed($healthLegendDot), { backgroundColor: segment.tone }]} />
-              <Text
-                preset="caption"
-                text={`${segment.label} ${segment.value}`}
-                style={themed($muted)}
-              />
-            </View>
-          ))}
-        </View>
-      </GlassCard>
+      <SyncHealthCard
+        healthPercent={syncMetrics.healthPercent}
+        sent={syncMetrics.sent}
+        pending={syncMetrics.pending}
+        failed={syncMetrics.failed}
+        trend={syncMetrics.trend}
+      />
 
       {isGuestMode ? (
         <GlassCard>
@@ -559,7 +524,7 @@ const $screen: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   paddingHorizontal: spacing.screenHorizontal,
   paddingTop: spacing.md,
   gap: spacing.md,
-  paddingBottom: 50,
+  paddingBottom: 70,
 })
 
 const $header: ThemedStyle<ViewStyle> = ({ spacing }) => ({
@@ -825,41 +790,6 @@ const $guestNoticeHeader: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.xs,
 })
 
-const $healthBar: ThemedStyle<ViewStyle> = ({ colors, radius, spacing }) => ({
-  flexDirection: "row",
-  height: 14,
-  borderRadius: radius.pill,
-  backgroundColor: colors.backgroundSecondary,
-  overflow: "hidden",
-  marginTop: spacing.sm,
-})
-
-const $healthSlice =
-  (backgroundColor: string): ThemedStyle<ViewStyle> =>
-  () => ({
-    backgroundColor,
-    height: "100%",
-  })
-
-const $healthLegend: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  flexDirection: "row",
-  flexWrap: "wrap",
-  gap: spacing.sm,
-  marginTop: spacing.sm,
-})
-
-const $healthLegendItem: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  flexDirection: "row",
-  alignItems: "center",
-  gap: spacing.xs,
-})
-
-const $healthLegendDot: ThemedStyle<ViewStyle> = ({ radius }) => ({
-  width: 8,
-  height: 8,
-  borderRadius: radius.pill,
-})
-
 async function getSyncStateRow() {
   const { queryFirst } = await import("@/services/db/queries")
   const { getActiveScopeKey } = await import("@/services/session/scope")
@@ -900,6 +830,30 @@ async function getSyncMetrics(): Promise<SyncMetrics> {
   const sentCount = sent?.count ?? 0
   const total = pendingCount + failedCount + sentCount
   const healthPercent = total === 0 ? 100 : Math.round((sentCount / total) * 100)
+  const now = new Date()
+  const trend = await Promise.all(
+    Array.from({ length: 7 }).map(async (_, index) => {
+      const day = new Date(now)
+      day.setDate(now.getDate() - (6 - index))
+      const key = day.toISOString().slice(0, 10)
+      const rows = await queryAll<{ status: string; count: number }>(
+        db,
+        `SELECT status, COUNT(1) as count
+         FROM change_log
+         WHERE scopeKey = ? AND substr(createdAt, 1, 10) = ?
+         GROUP BY status`,
+        [scopeKey, key],
+      )
+      const totalForDay = rows.reduce((sum, row) => sum + row.count, 0)
+      const sentForDay = rows.find((row) => row.status === "SENT")?.count ?? 0
+      return {
+        key,
+        label: day.toLocaleDateString(undefined, { weekday: "short" }).slice(0, 1),
+        total: totalForDay,
+        successRate: totalForDay === 0 ? 100 : Math.round((sentForDay / totalForDay) * 100),
+      }
+    }),
+  )
 
   return {
     pending: pendingCount,
@@ -907,6 +861,7 @@ async function getSyncMetrics(): Promise<SyncMetrics> {
     sent: sentCount,
     total,
     healthPercent,
+    trend,
   }
 }
 
