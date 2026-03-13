@@ -66,8 +66,25 @@ export interface Task {
   priority: Priority
   assigneeUserId: string | null
   createdByUserId: string
+  startDate: string | null
+  endDate: string | null
   updatedAt: string
   revision: string
+  deletedAt: string | null
+  scopeKey: string
+}
+
+export interface TaskAttachment {
+  id: string
+  taskId: string
+  workspaceId: string
+  fileName: string
+  mimeType: string
+  localUri: string
+  remoteUri: string | null
+  fileSize: number | null
+  createdAt: string
+  updatedAt: string
   deletedAt: string | null
   scopeKey: string
 }

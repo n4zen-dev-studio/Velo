@@ -1,19 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 
+import { ANON_USER_ID } from "@/services/constants/identity"
 import {
   getTaskById,
   insertComment,
   listCommentsByTaskId,
+  listTaskAttachments,
   listTaskEventsByTask,
   listStatuses,
   markTaskDeleted,
 } from "@/services/db"
-import type { Comment, Task, TaskEvent } from "@/services/db/types"
-import { resolveAuthorLabel } from "@/services/users/resolveAuthorLabel"
-import { refreshLocalCounts } from "@/services/sync/syncStore"
-import { generateUuidV4, getCurrentUserId, getSessionMode } from "@/services/sync/identity"
-import { ANON_USER_ID } from "@/services/constants/identity"
 import { resolveScopeKeyForTaskId } from "@/services/db/scopeKey"
+import type { Comment, Task, TaskAttachment, TaskEvent } from "@/services/db/types"
+import { generateUuidV4, getCurrentUserId, getSessionMode } from "@/services/sync/identity"
+import { refreshLocalCounts } from "@/services/sync/syncStore"
+import { resolveAuthorLabel } from "@/services/users/resolveAuthorLabel"
 
 export type CommentVM = Comment & { authorLabel: string }
 export type TaskEventVM = TaskEvent & { authorLabel: string }
@@ -22,6 +23,7 @@ export const useTaskDetailViewModel = (taskId: string) => {
   const [task, setTask] = useState<Task | null>(null)
   const [comments, setComments] = useState<CommentVM[]>([])
   const [events, setEvents] = useState<TaskEventVM[]>([])
+  const [attachments, setAttachments] = useState<TaskAttachment[]>([])
   const [statusMap, setStatusMap] = useState<Record<string, string>>({})
   const [isSavingComment, setIsSavingComment] = useState(false)
   const [commentError, setCommentError] = useState<string | null>(null)
@@ -45,9 +47,10 @@ export const useTaskDetailViewModel = (taskId: string) => {
     const taskRow = await getTaskById(taskId)
     setTask(taskRow)
 
-    const [eventRows, statuses] = await Promise.all([
+    const [eventRows, statuses, attachmentRows] = await Promise.all([
       listTaskEventsByTask(taskId),
       taskRow ? listStatuses(taskRow.workspaceId, taskRow.projectId ?? null) : Promise.resolve([]),
+      listTaskAttachments(taskId),
     ])
 
     const nextMap: Record<string, string> = {}
@@ -67,6 +70,7 @@ export const useTaskDetailViewModel = (taskId: string) => {
       })),
     )
     setEvents(withAuthors)
+    setAttachments(attachmentRows)
 
     await loadComments()
   }, [taskId, loadComments])
@@ -133,6 +137,7 @@ export const useTaskDetailViewModel = (taskId: string) => {
     task,
     comments: commentsByCreatedAt,
     events,
+    attachments,
     statusMap,
     deleteTask,
     refresh: load,

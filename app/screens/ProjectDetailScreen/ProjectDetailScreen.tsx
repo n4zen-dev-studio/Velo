@@ -29,7 +29,7 @@ import type { Project, Status, Task } from "@/services/db/types"
 import { useWorkspaceStore } from "@/stores/workspaceStore"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
-import { formatDateTime } from "@/utils/dateFormat"
+import { formatDateRange, formatDateTime, formatShortDate } from "@/utils/dateFormat"
 import { resolveUserLabel, resolveUserMeta } from "@/utils/userLabel"
 
 type Segment = "board" | "timeline" | "team" | "overview"
@@ -157,9 +157,11 @@ export function ProjectDetailScreen() {
     const now = new Date()
     return Array.from({ length: 7 }).map((_, index) => {
       const day = new Date(now)
-      day.setDate(now.getDate() - (6 - index))
+      day.setDate(now.getDate() - 2 + index)
       const key = day.toISOString().slice(0, 10)
-      const count = tasks.filter((task) => task.updatedAt.slice(0, 10) === key).length
+      const count = tasks.filter(
+        (task) => (task.startDate ?? task.endDate)?.slice(0, 10) === key,
+      ).length
       return { key, label: day.toLocaleDateString(undefined, { weekday: "short" }), count }
     })
   }, [tasks])
@@ -168,12 +170,14 @@ export function ProjectDetailScreen() {
   const timelineAgenda = useMemo(() => {
     const groups: Array<{ label: string; items: Task[] }> = []
     const map = new Map<string, Task[]>()
-    boardTasks.forEach((task) => {
-      const key = task.updatedAt.slice(0, 10)
-      const current = map.get(key) ?? []
-      current.push(task)
-      map.set(key, current)
-    })
+    boardTasks
+      .filter((task) => task.startDate || task.endDate)
+      .forEach((task) => {
+        const key = (task.startDate ?? task.endDate)!.slice(0, 10)
+        const current = map.get(key) ?? []
+        current.push(task)
+        map.set(key, current)
+      })
     Array.from(map.entries())
       .sort((a, b) => new Date(b[0]).getTime() - new Date(a[0]).getTime())
       .slice(0, 5)
@@ -189,6 +193,11 @@ export function ProjectDetailScreen() {
       })
     return groups
   }, [boardTasks])
+
+  const timelineUndated = useMemo(
+    () => boardTasks.filter((task) => !task.startDate && !task.endDate).slice(0, 4),
+    [boardTasks],
+  )
 
   const moveTask = useCallback(
     async (task: Task, direction: "back" | "forward") => {
@@ -357,7 +366,7 @@ export function ProjectDetailScreen() {
                     <Text preset="formLabel" text="Weekly rhythm" />
                     <Text
                       preset="caption"
-                      text="Activity-based timeline until due dates are introduced."
+                      text="Tasks placed by start and completion dates."
                       style={themed($subtitle)}
                     />
                   </View>
@@ -388,7 +397,7 @@ export function ProjectDetailScreen() {
                     <Text preset="formLabel" text="Activity agenda" />
                     <Text
                       preset="caption"
-                      text="Recent updates grouped into a planning-friendly stream."
+                      text="Upcoming and completed work grouped by task dates."
                       style={themed($subtitle)}
                     />
                   </View>
@@ -403,12 +412,29 @@ export function ProjectDetailScreen() {
                             key={task.id}
                             task={task}
                             statusLabel={statusById[task.statusId]?.name ?? "Task"}
+                            timelineLabel={formatDateRange(task.startDate, task.endDate)}
                             onPress={() => navigation.navigate("TaskDetail", { taskId: task.id })}
                           />
                         ))}
                       </View>
                     </View>
                   ))}
+                  {timelineUndated.length > 0 ? (
+                    <View style={themed($agendaGroup)}>
+                      <Text preset="overline" text="No date yet" />
+                      <View style={themed($stack)}>
+                        {timelineUndated.map((task) => (
+                          <CompactTaskItem
+                            key={task.id}
+                            task={task}
+                            statusLabel={statusById[task.statusId]?.name ?? "Task"}
+                            timelineLabel="No start or end date"
+                            onPress={() => navigation.navigate("TaskDetail", { taskId: task.id })}
+                          />
+                        ))}
+                      </View>
+                    </View>
+                  ) : null}
                 </View>
               </GlassCard>
             </>
@@ -486,6 +512,7 @@ export function ProjectDetailScreen() {
                         key={task.id}
                         task={task}
                         statusLabel={statusById[task.statusId]?.name ?? "Task"}
+                        timelineLabel={formatDateRange(task.startDate, task.endDate)}
                         onPress={() => navigation.navigate("TaskDetail", { taskId: task.id })}
                       />
                     ))}
@@ -593,7 +620,11 @@ function BoardTaskCard({
         <Text preset="caption" text={assigneeLabel} numberOfLines={1} style={themed($subtitle)} />
         <Text
           preset="caption"
-          text={formatDateTime(task.updatedAt)}
+          text={
+            task.startDate || task.endDate
+              ? formatDateRange(task.startDate, task.endDate)
+              : formatDateTime(task.updatedAt)
+          }
           numberOfLines={1}
           style={themed($subtitle)}
         />
@@ -643,10 +674,12 @@ function TaskMoveControls({
 function CompactTaskItem({
   task,
   statusLabel,
+  timelineLabel,
   onPress,
 }: {
   task: Task
   statusLabel: string
+  timelineLabel?: string
   onPress: () => void
 }) {
   const { themed } = useAppTheme()
@@ -658,7 +691,7 @@ function CompactTaskItem({
       </View>
       <Text
         preset="caption"
-        text={`${statusLabel} · ${formatDateTime(task.updatedAt)}`}
+        text={`${statusLabel} · ${timelineLabel ?? formatShortDate(task.updatedAt)}`}
         style={themed($subtitle)}
       />
     </Pressable>

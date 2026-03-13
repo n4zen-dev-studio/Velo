@@ -7,6 +7,7 @@ export * from "./repositories/changeLogRepository"
 export * from "./repositories/conflictsRepository"
 export * from "./repositories/projectsRepository"
 export * from "./repositories/taskEventsRepository"
+export * from "./repositories/taskAttachmentsRepository"
 export * from "./repositories/statusesRepository"
 export * from "./repositories/tasksRepository"
 export * from "./repositories/workspacesRepository"
@@ -53,6 +54,7 @@ export async function clearLocalData() {
     // Task-related
     await executeTx(txDb, "DELETE FROM comments")
     await executeTx(txDb, "DELETE FROM task_events")
+    await executeTx(txDb, "DELETE FROM task_attachments")
     await executeTx(txDb, "DELETE FROM tasks")
 
     // Statuses / projects (if statuses reference workspace/project)

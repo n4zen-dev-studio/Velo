@@ -169,6 +169,23 @@ export function HomeScreen() {
   )
   const maxBar = Math.max(...statusBreakdown.map((item) => item.value), 1)
 
+  const completionTrend = useMemo(() => {
+    const now = new Date()
+    return Array.from({ length: 7 }).map((_, index) => {
+      const day = new Date(now)
+      day.setDate(now.getDate() - (6 - index))
+      const key = day.toISOString().slice(0, 10)
+      const value = allTasks.filter((task) => task.endDate?.slice(0, 10) === key).length
+      return {
+        key,
+        label: day.toLocaleDateString(undefined, { weekday: "short" }).slice(0, 1),
+        value,
+      }
+    })
+  }, [allTasks])
+
+  const maxCompletionValue = Math.max(...completionTrend.map((item) => item.value), 1)
+
   const activityItems = useMemo<ActivityItem[]>(
     () =>
       recentTasks.map((task) => ({
@@ -219,16 +236,40 @@ export function HomeScreen() {
   )
 
   const agendaRows = useMemo(() => {
-    const today = recentTasks.slice(0, 2)
-    const tomorrow = highPriorityOpen.slice(0, 2)
-    const thisWeek = [...allTasks].filter((task) => !doneStatusIds.has(task.statusId)).slice(0, 3)
+    const now = new Date()
+    const todayKey = now.toISOString().slice(0, 10)
+    const tomorrow = new Date(now)
+    tomorrow.setDate(now.getDate() + 1)
+    const tomorrowKey = tomorrow.toISOString().slice(0, 10)
+    const weekEnd = new Date(now)
+    weekEnd.setDate(now.getDate() + 7)
+
+    const undonTasks = allTasks.filter((task) => !doneStatusIds.has(task.statusId))
+    const datedTasks = [...undonTasks].sort((a, b) => {
+      const aDate = a.startDate ?? a.endDate ?? a.updatedAt
+      const bDate = b.startDate ?? b.endDate ?? b.updatedAt
+      return new Date(aDate).getTime() - new Date(bDate).getTime()
+    })
+
+    const today = datedTasks.filter(
+      (task) => (task.startDate ?? task.endDate)?.slice(0, 10) === todayKey,
+    )
+    const tomorrowTasks = datedTasks.filter(
+      (task) => (task.startDate ?? task.endDate)?.slice(0, 10) === tomorrowKey,
+    )
+    const thisWeek = datedTasks.filter((task) => {
+      const source = task.startDate ?? task.endDate
+      if (!source) return false
+      const date = new Date(source)
+      return date >= now && date <= weekEnd
+    })
 
     return [
       { label: "Today", tasks: today },
-      { label: "Tomorrow", tasks: tomorrow },
+      { label: "Tomorrow", tasks: tomorrowTasks },
       { label: "This week", tasks: thisWeek },
     ]
-  }, [allTasks, doneStatusIds, highPriorityOpen, recentTasks])
+  }, [allTasks, doneStatusIds])
 
   const statCards = [
     {
@@ -365,6 +406,34 @@ export function HomeScreen() {
                 />
               </View>
             ))}
+          </View>
+
+          <View style={themed($trendRow)}>
+            <View>
+              <Text preset="caption" text="Completion trend" style={themed($mutedText)} />
+              <Text
+                preset="caption"
+                text={`${doneCount}/${Math.max(allTasks.length, 1)} tasks finished`}
+                style={themed($legendValue)}
+              />
+            </View>
+            <View style={themed($sparkRow)}>
+              {completionTrend.map((point) => (
+                <View key={point.key} style={themed($sparkColumn)}>
+                  <View style={themed($sparkTrack)}>
+                    <View
+                      style={[
+                        themed($sparkFill),
+                        {
+                          height: `${Math.max((point.value / maxCompletionValue) * 100, point.value > 0 ? 20 : 0)}%`,
+                        },
+                      ]}
+                    />
+                  </View>
+                  <Text preset="caption" text={point.label} style={themed($miniBarLabel)} />
+                </View>
+              ))}
+            </View>
           </View>
         </GlassCard>
 
@@ -770,6 +839,39 @@ const $miniBarFill =
 
 const $miniBarLabel: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.textDim,
+})
+
+const $trendRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  alignItems: "flex-end",
+  justifyContent: "space-between",
+  gap: spacing.md,
+})
+
+const $sparkRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  alignItems: "flex-end",
+  gap: spacing.xs,
+})
+
+const $sparkColumn: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  alignItems: "center",
+  gap: spacing.xxxs,
+})
+
+const $sparkTrack: ThemedStyle<ViewStyle> = ({ colors, radius }) => ({
+  width: 10,
+  height: 36,
+  borderRadius: radius.pill,
+  backgroundColor: colors.backgroundSecondary,
+  justifyContent: "flex-end",
+  overflow: "hidden",
+})
+
+const $sparkFill: ThemedStyle<ViewStyle> = ({ colors, radius }) => ({
+  width: "100%",
+  borderRadius: radius.pill,
+  backgroundColor: colors.primary,
 })
 
 const $actionsCard: ThemedStyle<ViewStyle> = ({ spacing }) => ({

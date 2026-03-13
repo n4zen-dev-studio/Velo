@@ -1,17 +1,17 @@
 import { getDb } from "@/services/db/db"
 import { execute, queryAll, queryFirst } from "@/services/db/queries"
-import type { Comment, ConflictRecord, Task } from "@/services/db/types"
 import { enqueueOp } from "@/services/db/repositories/changeLogRepository"
-import { upsertTaskFromSync } from "@/services/db/repositories/tasksRepository"
 import { upsertCommentFromSync } from "@/services/db/repositories/commentsRepository"
+import { upsertTaskFromSync } from "@/services/db/repositories/tasksRepository"
 import { personalWorkspaceId } from "@/services/db/repositories/workspacesRepository"
-import { refreshLocalCounts } from "@/services/sync/syncStore"
-import { getActiveScopeKey } from "@/services/session/scope"
 import {
   isWorkspaceScopeKey,
   listAllDataScopeKeys,
   workspaceIdFromScopeKey,
 } from "@/services/db/scopeKey"
+import type { Comment, ConflictRecord, Task } from "@/services/db/types"
+import { getActiveScopeKey } from "@/services/session/scope"
+import { refreshLocalCounts } from "@/services/sync/syncStore"
 
 export async function listOpenConflicts() {
   const database = await getDb()
@@ -94,6 +94,8 @@ async function resolveConflict(conflict: ConflictRecord, payload: Task | Comment
       priority: task.priority ?? "medium",
       assigneeUserId: task.assigneeUserId ?? null,
       createdByUserId: task.createdByUserId ?? "",
+      startDate: task.startDate ?? null,
+      endDate: task.endDate ?? null,
       updatedAt: now,
       revision: nextRevision,
       deletedAt: task.deletedAt ?? null,
@@ -105,7 +107,7 @@ async function resolveConflict(conflict: ConflictRecord, payload: Task | Comment
       entityType: "task",
       entityId: updatedTask.id,
       opType: updatedTask.deletedAt ? "DELETE" : "UPSERT",
-      patch: updatedTask,
+      patch: updatedTask as unknown as Record<string, unknown>,
       baseRevision: conflict.remoteRevision,
       projectId: updatedTask.projectId ?? null,
       workspaceId: updatedTask.workspaceId,
@@ -134,12 +136,13 @@ async function resolveConflict(conflict: ConflictRecord, payload: Task | Comment
       "SELECT workspaceId FROM tasks WHERE id = ? AND scopeKey = ?",
       [updatedComment.taskId, scopeKey],
     )
-    const workspaceId = taskRow?.workspaceId ?? (workspaceIdFromScopeKey(scopeKey) ?? personalWorkspaceId(scopeKey))
+    const workspaceId =
+      taskRow?.workspaceId ?? workspaceIdFromScopeKey(scopeKey) ?? personalWorkspaceId(scopeKey)
     await enqueueOp({
       entityType: "comment",
       entityId: updatedComment.id,
       opType: updatedComment.deletedAt ? "DELETE" : "UPSERT",
-      patch: updatedComment,
+      patch: updatedComment as unknown as Record<string, unknown>,
       baseRevision: conflict.remoteRevision,
       projectId: null,
       workspaceId,

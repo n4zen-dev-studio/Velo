@@ -1,7 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { Pressable, TextStyle, View, ViewStyle } from "react-native"
+import {
+  Image,
+  ImageStyle,
+  Modal,
+  Pressable,
+  ScrollView,
+  TextStyle,
+  View,
+  ViewStyle,
+} from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native"
+import { WebView } from "react-native-webview"
 
 import { Button } from "@/components/Button"
 import { GlassCard } from "@/components/GlassCard"
@@ -13,8 +23,10 @@ import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
 import { formatDateTime } from "@/utils/dateFormat"
 import { resolveUserLabel } from "@/utils/userLabel"
+import Pdf from "react-native-pdf"
 
 import { useTaskDetailViewModel } from "./useTaskDetailViewModel"
+import { spacing } from "@/theme/spacing"
 
 export function TaskDetailScreen() {
   const { themed, theme } = useAppTheme()
@@ -25,6 +37,7 @@ export function TaskDetailScreen() {
     task,
     comments,
     events,
+    attachments,
     statusMap,
     deleteTask,
     addComment,
@@ -34,6 +47,7 @@ export function TaskDetailScreen() {
   } = useTaskDetailViewModel(taskId)
   const [commentDraft, setCommentDraft] = useState("")
   const [assigneeLabel, setAssigneeLabel] = useState<string>("Unassigned")
+  const [selectedAttachmentId, setSelectedAttachmentId] = useState<string | null>(null)
 
   const statusLabel = useMemo(() => {
     if (!task) return "—"
@@ -41,6 +55,10 @@ export function TaskDetailScreen() {
   }, [statusMap, task])
   const priorityLabel = useMemo(() => (task ? task.priority : "—"), [task])
   const canSend = commentDraft.trim().length > 0 && !isSavingComment
+  const selectedAttachment = useMemo(
+    () => attachments.find((item) => item.id === selectedAttachmentId) ?? null,
+    [attachments, selectedAttachmentId],
+  )
 
   useFocusEffect(
     useCallback(() => {
@@ -123,6 +141,11 @@ export function TaskDetailScreen() {
           <TaskMetaChip label="Status" value={statusLabel} />
           <TaskMetaChip label="Priority" value={priorityLabel} />
           <TaskMetaChip label="Assignee" value={assigneeLabel} />
+          <TaskMetaChip
+            label="Start"
+            value={task.startDate ? formatDateTime(task.startDate) : "Unset"}
+          />
+          <TaskMetaChip label="End" value={task.endDate ? formatDateTime(task.endDate) : "Unset"} />
         </View>
 
         <View style={themed($actionRow)}>
@@ -151,6 +174,53 @@ export function TaskDetailScreen() {
           text={task.description?.trim().length ? task.description : "No description yet."}
           style={themed($bodyText)}
         />
+      </GlassCard>
+
+      <GlassCard>
+        <SectionHeader title="Attachments" subtitle={`${attachments.length} linked`} />
+        {attachments.length === 0 ? (
+          <Text
+            preset="caption"
+            text="No files attached yet. Add images or PDFs from the task editor."
+            style={themed($subtitle)}
+          />
+        ) : (
+          <View style={themed($stack)}>
+            {attachments.map((attachment) => (
+              <Pressable
+                key={attachment.id}
+                onPress={() => setSelectedAttachmentId(attachment.id)}
+                style={themed($attachmentRow)}
+              >
+                {attachment.mimeType.startsWith("image/") ? (
+                  <Image source={{ uri: attachment.localUri }} style={themed($attachmentThumb)} />
+                ) : (
+                  <View style={themed($pdfIcon)}>
+                    <Text preset="caption" text="PDF" style={themed($strongInverseText)} />
+                  </View>
+                )}
+                <View style={themed($attachmentCopy)}>
+                  <Text
+                    preset="caption"
+                    text={attachment.fileName}
+                    numberOfLines={1}
+                    style={themed($strongText)}
+                  />
+                  <Text
+                    preset="caption"
+                    text={
+                      attachment.mimeType.startsWith("image/")
+                        ? "Image attachment"
+                        : "PDF attachment"
+                    }
+                    style={themed($subtitle)}
+                  />
+                </View>
+                <Ionicons name="expand-outline" size={16} color={theme.colors.textMuted} />
+              </Pressable>
+            ))}
+          </View>
+        )}
       </GlassCard>
 
       <GlassCard>
@@ -222,6 +292,11 @@ export function TaskDetailScreen() {
           )}
         </View>
       </GlassCard>
+
+      <AttachmentViewer
+        attachment={selectedAttachment}
+        onClose={() => setSelectedAttachmentId(null)}
+      />
     </Screen>
   )
 }
@@ -257,6 +332,69 @@ function TaskActivityRow({ title, detail, meta }: { title: string; detail: strin
         <Text preset="caption" text={meta} style={themed($subtitle)} />
       </View>
     </View>
+  )
+}
+
+function AttachmentViewer(props: {
+  attachment: { fileName: string; mimeType: string; localUri: string } | null
+  onClose: () => void
+}) {
+  const { themed, theme } = useAppTheme()
+
+  return (
+    <Modal
+      visible={!!props.attachment}
+      animationType="fade"
+      transparent
+      onRequestClose={props.onClose}
+    >
+      <View style={themed($viewerBackdrop)}>
+        <View style={themed($viewerCard)}>
+          <View style={themed($viewerHeader)}>
+            <View style={themed($attachmentCopy)}>
+              <Text
+                preset="caption"
+                text={props.attachment?.fileName ?? "Attachment"}
+                style={themed($strongText)}
+                numberOfLines={1}
+              />
+              <Text
+                preset="caption"
+                text={
+                  props.attachment?.mimeType?.startsWith("image/") ? "Image preview" : "PDF preview"
+                }
+                style={themed($subtitle)}
+              />
+            </View>
+            <Pressable onPress={props.onClose} style={themed($backButton)}>
+              <Ionicons name="close" size={18} color={theme.colors.text} />
+            </Pressable>
+          </View>
+
+          {props.attachment?.mimeType?.startsWith("image/") ? (
+            <ScrollView
+              contentContainerStyle={themed($viewerImageWrap)}
+              minimumZoomScale={1}
+              maximumZoomScale={4}
+              centerContent
+            >
+              <Image
+                source={{ uri: props.attachment.localUri }}
+                style={themed($viewerImage)}
+                resizeMode="contain"
+              />
+            </ScrollView>
+          ) : props.attachment ? (
+            <Pdf
+              source={{ uri: props.attachment.localUri }}
+              style={{ flex: 1 }}
+              trustAllCerts={false}
+              enablePaging
+            />
+          ) : null}
+        </View>
+      </View>
+    </Modal>
   )
 }
 
@@ -399,6 +537,80 @@ const $activityCopy: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => (
 
 const $strongText: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.text,
+})
+
+const $strongInverseText: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.textInverse,
+  fontWeight: "600",
+})
+
+const $attachmentRow: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
+  flexDirection: "row",
+  alignItems: "center",
+  gap: spacing.sm,
+  borderRadius: radius.medium,
+  borderWidth: 1,
+  borderColor: colors.borderSubtle,
+  backgroundColor: colors.surface,
+  paddingHorizontal: spacing.sm,
+  paddingVertical: spacing.sm,
+})
+
+const $attachmentThumb: ThemedStyle<ImageStyle> = () => ({
+  width: 44,
+  height: 44,
+  borderRadius: 12,
+})
+
+const $pdfIcon: ThemedStyle<ViewStyle> = ({ colors, radius }) => ({
+  width: 44,
+  height: 44,
+  borderRadius: radius.medium,
+  alignItems: "center",
+  justifyContent: "center",
+  backgroundColor: colors.primary,
+})
+
+const $attachmentCopy: ThemedStyle<ViewStyle> = () => ({
+  flex: 1,
+})
+
+const $viewerBackdrop: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+  flex: 1,
+  backgroundColor: colors.overlay,
+  padding: spacing.lg,
+  justifyContent: "center",
+})
+
+const $viewerCard: ThemedStyle<ViewStyle> = ({ colors, radius, spacing }) => ({
+  flex: 1,
+  borderRadius: radius.xl,
+  backgroundColor: colors.backgroundSecondary,
+  overflow: "hidden",
+  marginTop: spacing.xxxl,
+  marginBottom: spacing.xl,
+})
+
+const $viewerHeader: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  alignItems: "center",
+  gap: spacing.sm,
+  padding: spacing.md,
+})
+
+const $viewerImageWrap: ThemedStyle<ViewStyle> = () => ({
+  flexGrow: 1,
+  alignItems: "center",
+  justifyContent: "center",
+})
+
+const $viewerImage: ThemedStyle<ImageStyle> = () => ({
+  width: "100%",
+  height: "100%",
+})
+
+const $viewerWebview: ThemedStyle<ViewStyle> = () => ({
+  flex: 1,
 })
 
 const $errorText: ThemedStyle<TextStyle> = ({ colors }) => ({
