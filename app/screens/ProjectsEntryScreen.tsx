@@ -1,4 +1,4 @@
-import { useCallback } from "react"
+import { useCallback, useEffect } from "react"
 import { TextStyle, View, ViewStyle } from "react-native"
 import { useFocusEffect, useNavigation } from "@react-navigation/native"
 
@@ -14,17 +14,19 @@ export function ProjectsEntryScreen() {
   const navigation = useNavigation<ProjectsStackScreenProps<"ProjectsEntry">["navigation"]>()
   const { activeWorkspace, workspaces, isHydrated } = useWorkspaceStore()
 
-  useFocusEffect(
-    useCallback(() => {
-      if (!isHydrated) return
-      const targetWorkspaceId = activeWorkspace?.id ?? workspaces[0]?.id
-      if (targetWorkspaceId) {
-        navigation.replace("ProjectDetail", { workspaceId: targetWorkspaceId })
-        return
-      }
-      navigation.replace("ProjectsHome")
-    }, [activeWorkspace?.id, isHydrated, navigation, workspaces]),
-  )
+  useEffect(() => {
+  if (!isHydrated) return
+
+    const targetWorkspaceId = activeWorkspace?.id ?? workspaces[0]?.id
+
+    if (targetWorkspaceId) {
+      navigation.replace("ProjectDetail", { workspaceId: targetWorkspaceId })
+      return
+    }
+
+    navigation.replace("ProjectsHome")
+  }, [activeWorkspace?.id, isHydrated, navigation, workspaces])
+
 
   return (
     <Screen

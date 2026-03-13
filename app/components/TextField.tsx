@@ -135,7 +135,7 @@ export const TextField = forwardRef(function TextField(props: TextFieldProps, re
           width={120}
           height={120}
           color={theme.colors.glowSoft}
-          opacity={0.6}
+          opacity={0.3}
           style={themed($fieldWash)}
         />
 

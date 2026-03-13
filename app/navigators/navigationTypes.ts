@@ -28,11 +28,15 @@ export type HomeStackParamList = {
   Home: undefined
   TaskEditor: { taskId?: string; projectId?: string } | undefined
   TaskDetail: { taskId: string }
-  ConflictList: undefined
-  ConflictResolution: { conflictId?: string } | undefined
   Invites: undefined
   InviteAccept: { token?: string } | undefined
   Profile: undefined
+}
+
+export type SyncStackParamList = {
+  SyncConsole: undefined
+  ConflictList: undefined
+  ConflictResolution: { conflictId?: string } | undefined
 }
 
 export type ProjectsStackParamList = {
@@ -62,6 +66,11 @@ export type AuthStackScreenProps<T extends keyof AuthStackParamList> = NativeSta
 
 export type HomeStackScreenProps<T extends keyof HomeStackParamList> = NativeStackScreenProps<
   HomeStackParamList,
+  T
+>
+
+export type SyncStackScreenProps<T extends keyof SyncStackParamList> = NativeStackScreenProps<
+  SyncStackParamList,
   T
 >
 

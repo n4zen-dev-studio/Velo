@@ -259,7 +259,7 @@ export function SettingsScreen() {
             <Text preset="heading" text="Preferences" />
             <Text
               preset="caption"
-              text="Sync, theme, projects, and account controls in a tighter mobile layout."
+              text="Sync, theme, projects, and account controls."
               style={themed($muted)}
             />
           </View>

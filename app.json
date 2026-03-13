@@ -11,9 +11,7 @@
   },
   "newArchEnabled": true,
   "jsEngine": "hermes",
-  "assetBundlePatterns": [
-    "**/*"
-  ],
+  "assetBundlePatterns": ["**/*"],
   "android": {
     "icon": "./assets/images/app-icon-android-legacy.png",
     "package": "com.n4zen.velo",
@@ -21,9 +19,7 @@
       "foregroundImage": "./assets/images/app-icon-android-adaptive-foreground.png",
       "backgroundImage": "./assets/images/app-icon-android-adaptive-background.png"
     },
-    "permissions": [
-      "RECEIVE_BOOT_COMPLETED"
-    ],
+    "permissions": ["RECEIVE_BOOT_COMPLETED"],
     "splash": {
       "backgroundColor": "#090C18"
     },
@@ -39,9 +35,7 @@
       "backgroundColor": "#090C18"
     },
     "infoPlist": {
-      "UIBackgroundModes": [
-        "fetch"
-      ]
+      "UIBackgroundModes": ["fetch"]
     }
   },
   "web": {
@@ -51,6 +45,12 @@
   "plugins": [
     "expo-localization",
     "expo-font",
+    [
+      "expo-image-picker",
+      {
+        "photosPermission": "Velo uses your photo library so you can choose a profile image."
+      }
+    ],
     [
       "expo-splash-screen",
       {
