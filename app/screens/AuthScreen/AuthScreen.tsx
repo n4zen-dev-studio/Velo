@@ -1,51 +1,47 @@
-import { useEffect, useMemo, useState } from "react"
-import { Platform, View, ViewStyle, TextStyle, Image} from "react-native"
-import { useNavigation } from "@react-navigation/native"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { Image, Platform, View, ViewStyle, TextStyle } from "react-native"
 import * as AppleAuthentication from "expo-apple-authentication"
+import { useNavigation } from "@react-navigation/native"
 import * as Google from "expo-auth-session/providers/google"
 import LottieView from "lottie-react-native"
 
 import { Button } from "@/components/Button"
 import { ClaimOfflineDataModal } from "@/components/ClaimOfflineDataModal"
 import { GlassCard } from "@/components/GlassCard"
+import { RadialGlow } from "@/components/RadialGlow"
 import { Screen } from "@/components/Screen"
 import { Text } from "@/components/Text"
 import { TextField } from "@/components/TextField"
-import { useAppTheme } from "@/theme/context"
-import type { ThemedStyle } from "@/theme/types"
+import { googleOauth, isValidGoogleClientId } from "@/config/oauth"
+import { goToHome } from "@/navigation/navigationActions"
 import type { AuthStackScreenProps } from "@/navigators/navigationTypes"
+import {
+  claimPendingOfflineData,
+  finalizeRemoteLogin,
+  keepRemoteDataSeparate,
+  prepareRemoteLogin,
+} from "@/services/auth/completeRemoteLogin"
+import { refreshAuthSession } from "@/services/auth/session"
+import { GUEST_SCOPE_KEY } from "@/services/session/scope"
+import { logScopeAction, withScopeTransitionLock } from "@/services/session/scopeTransition"
+import { setOfflineMode } from "@/services/storage/session"
 import {
   deriveUserIdFromEmail,
   generateUuidV4,
   setCurrentUserId,
   setSessionMode,
 } from "@/services/sync/identity"
-import { setTokens } from "@/services/api/tokenStore"
-import { refreshAuthSession } from "@/services/auth/session"
-import {
-  claimOfflineData,
-  discardGuestData,
-  markOfflineClaimHandled,
-  shouldPromptOfflineClaim,
-} from "@/services/sync/offlineClaim"
 import { syncController } from "@/services/sync/SyncController"
-import { googleOauth, isValidGoogleClientId } from "@/config/oauth"
-import { goToHome } from "@/navigation/navigationActions"
-import { clearOfflineMode, setOfflineMode } from "@/services/storage/session"
-import {
-  personalWorkspaceId,
-  setActiveWorkspaceId,
-} from "@/services/db/repositories/workspacesRepository"
-import { ensureBootstrappedForScope } from "@/services/db/bootstrap"
-import { logScopeAction, withScopeTransitionLock } from "@/services/session/scopeTransition"
-import { GUEST_SCOPE_KEY, userScopeKey } from "@/services/session/scope"
 import { useWorkspaceStore } from "@/stores/workspaceStore"
+import { useAppTheme } from "@/theme/context"
+import type { ThemedStyle } from "@/theme/types"
 
 import { useAuthViewModel } from "./useAuthViewModel"
-import { RadialGlow } from "@/components/RadialGlow"
 
 const ROBOT_ANIM = require("@assets/animations/robot.json")
 const logo = require("@assets/images/logo.png")
+
+const SHOW_SOCIAL_AUTH_UI = false
 
 export function AuthScreen() {
   const { themed, theme } = useAppTheme()
@@ -75,14 +71,40 @@ export function AuthScreen() {
   const isGoogleConfigured = isValidGoogleClientId(
     Platform.OS === "ios" ? googleConfig.iosClientId : googleConfig.androidClientId,
   )
-  const showGoogleButton = isGoogleConfigured
-  const showAppleButton = Platform.OS === "ios"
+  const showGoogleButton = SHOW_SOCIAL_AUTH_UI && isGoogleConfigured
+  const showAppleButton = SHOW_SOCIAL_AUTH_UI && Platform.OS === "ios"
   const [request, response, promptAsync] = Google.useIdTokenAuthRequest(googleConfig)
 
   // UI: pick a subtle accent based on your theme if it exists
   const accent = useMemo(() => {
     return theme.colors.palette.primary600 ?? "#7C5CFF"
   }, [theme])
+
+  const finalizeRemoteAuth = useCallback(
+    async (userId: string) => {
+      await finalizeRemoteLogin(userId, "login_remote")
+      await bootstrapAfterLogin()
+      goToHome()
+    },
+    [bootstrapAfterLogin],
+  )
+
+  const completeRemoteAuth = useCallback(
+    async (accessToken: string, refreshToken: string) => {
+      const result = await prepareRemoteLogin(accessToken, refreshToken)
+      if (!result.userId) {
+        setError("Unable to read user session. Please try again.")
+        return
+      }
+      if (result.needsClaim) {
+        setPendingRemoteUserId(result.userId)
+        setShowClaimModal(true)
+        return
+      }
+      await finalizeRemoteAuth(result.userId)
+    },
+    [finalizeRemoteAuth],
+  )
 
   useEffect(() => {
     const handleGoogleResponse = async () => {
@@ -94,13 +116,13 @@ export function AuthScreen() {
       }
       try {
         const auth = await loginWithGoogle(idToken)
-        await completeRemoteLogin(auth.accessToken, auth.refreshToken)
+        await completeRemoteAuth(auth.accessToken, auth.refreshToken)
       } catch {
         setError("Google login failed. Please try again.")
       }
     }
     void handleGoogleResponse()
-  }, [response])
+  }, [completeRemoteAuth, loginWithGoogle, response])
 
   const handleLogin = async () => {
     setError(null)
@@ -111,7 +133,7 @@ export function AuthScreen() {
     }
     try {
       const auth = await loginWithEmail(normalizedEmail, password)
-      await completeRemoteLogin(auth.accessToken, auth.refreshToken)
+      await completeRemoteAuth(auth.accessToken, auth.refreshToken)
     } catch (err: any) {
       if (err?.type === "EMAIL_NOT_VERIFIED") {
         navigation.navigate("VerifyEmail", { email: normalizedEmail })
@@ -147,7 +169,14 @@ export function AuthScreen() {
     try {
       const result = await signupWithEmail(normalizedEmail, password, trimmedUsername || undefined)
       if (result.needsVerification) {
-        setSignupMessage("Check your email to verify your account.")
+        setSignupMessage(
+          result.previewToken
+            ? "Account created. Continue to verification."
+            : "Account created. Check your email to verify your account.",
+        )
+        if (result.previewToken) {
+          navigation.navigate("VerifyEmail", { email: normalizedEmail, token: result.previewToken })
+        }
       }
     } catch (e: any) {
       console.log("SIGNUP ERROR", {
@@ -164,13 +193,21 @@ export function AuthScreen() {
   }
 
   const handleResendVerification = async () => {
+    setError(null)
     const normalizedEmail = email.trim().toLowerCase()
     if (!normalizedEmail) {
       setError("Enter your email to resend verification.")
       return
     }
-    await resendVerificationEmail(normalizedEmail)
-    setSignupMessage("Verification email resent. Check the server console for the token.")
+    const result = await resendVerificationEmail(normalizedEmail)
+    setSignupMessage(
+      result.previewToken
+        ? "Verification details refreshed."
+        : "Verification email resent. Check your inbox.",
+    )
+    if (result.previewToken) {
+      navigation.navigate("VerifyEmail", { email: normalizedEmail, token: result.previewToken })
+    }
   }
 
   const handleGoogleLogin = async () => {
@@ -196,7 +233,7 @@ export function AuthScreen() {
         return
       }
       const auth = await loginWithApple(credential.identityToken)
-      await completeRemoteLogin(auth.accessToken, auth.refreshToken)
+      await completeRemoteAuth(auth.accessToken, auth.refreshToken)
     } catch (err: any) {
       if (err?.code === "ERR_CANCELED") return
       setError("Apple login failed. Please try again.")
@@ -221,80 +258,21 @@ export function AuthScreen() {
     }, "continue_offline")
   }
 
-  const completeRemoteLogin = async (accessToken: string, refreshToken: string) => {
-    await setTokens(accessToken, refreshToken)
-    const userId = parseUserIdFromJwt(accessToken)
-    if (!userId) {
-      setError("Unable to read user session. Please try again.")
-      return
-    }
-    const needsClaim = await shouldPromptOfflineClaim()
-    if (needsClaim) {
-      setPendingRemoteUserId(userId)
-      setShowClaimModal(true)
-      return
-    }
-    await finalizeRemoteLogin(userId)
-  }
-
-  const finalizeRemoteLogin = async (userId: string) => {
-    await withScopeTransitionLock(async () => {
-      syncController.pause()
-      const scopeKey = userScopeKey(userId)
-      logScopeAction("login_remote", scopeKey, userId)
-      await setCurrentUserId(userId)
-      await setSessionMode("remote")
-      await clearOfflineMode()
-      await refreshAuthSession()
-      await ensureBootstrappedForScope(scopeKey)
-      await setActiveWorkspaceId(personalWorkspaceId(scopeKey), scopeKey)
-      syncController.resume()
-      await bootstrapAfterLogin()
-      goToHome()
-    }, "login_remote")
-  }
-
   const handleClaimOfflineData = async () => {
     if (!pendingRemoteUserId) return
-    await withScopeTransitionLock(async () => {
-      syncController.pause()
-      const scopeKey = userScopeKey(pendingRemoteUserId)
-      await ensureBootstrappedForScope(scopeKey)
-      logScopeAction("claim_offline_data", scopeKey, pendingRemoteUserId)
-      await setCurrentUserId(pendingRemoteUserId)
-      await setSessionMode("remote")
-      await claimOfflineData(pendingRemoteUserId)
-      markOfflineClaimHandled()
-      setShowClaimModal(false)
-      await clearOfflineMode()
-      await refreshAuthSession()
-      await setActiveWorkspaceId(personalWorkspaceId(scopeKey), scopeKey)
-      syncController.resume()
-      await bootstrapAfterLogin()
-      goToHome()
-    }, "claim_offline_data")
+    await claimPendingOfflineData(pendingRemoteUserId, "claim_offline_data")
+    setShowClaimModal(false)
+    await bootstrapAfterLogin()
+    goToHome()
     void syncController.triggerSync("manual")
   }
 
   const handleKeepSeparate = async () => {
     if (!pendingRemoteUserId) return
-    await withScopeTransitionLock(async () => {
-      syncController.pause()
-      const scopeKey = userScopeKey(pendingRemoteUserId)
-      logScopeAction("discard_offline_data", scopeKey, pendingRemoteUserId)
-      await setCurrentUserId(pendingRemoteUserId)
-      await setSessionMode("remote")
-      await discardGuestData()
-      markOfflineClaimHandled()
-      setShowClaimModal(false)
-      await clearOfflineMode()
-      await refreshAuthSession()
-      await ensureBootstrappedForScope(scopeKey)
-      await setActiveWorkspaceId(personalWorkspaceId(scopeKey), scopeKey)
-      syncController.resume()
-      await bootstrapAfterLogin()
-      goToHome()
-    }, "discard_offline_data")
+    await keepRemoteDataSeparate(pendingRemoteUserId, "discard_offline_data")
+    setShowClaimModal(false)
+    await bootstrapAfterLogin()
+    goToHome()
   }
 
   return (
@@ -321,7 +299,7 @@ export function AuthScreen() {
         />
         <View style={themed($heroInner)}>
           <View style={themed($heroBadge)}>
-            <Image source={logo} style={{width: 55, height: 55}} resizeMode='contain' />
+            <Image source={logo} style={themed($heroBadgeLogo)} resizeMode="contain" />
           </View>
           <View style={themed($heroRow)}>
             <View style={themed($robotWrap)}>
@@ -416,15 +394,19 @@ export function AuthScreen() {
           <Button text="Continue offline" preset="reversed" onPress={handleContinueOffline} />
         </View>
 
-        <View style={themed($divider)} />
-        <View style={themed($buttonStackTight)}>
-          {showGoogleButton ? (
-            <Button text="Continue with Google" preset="filled" onPress={handleGoogleLogin} />
-          ) : null}
-          {showAppleButton ? (
-            <Button text="Continue with Apple" preset="filled" onPress={handleAppleLogin} />
-          ) : null}
-        </View>
+        {SHOW_SOCIAL_AUTH_UI ? (
+          <>
+            <View style={themed($divider)} />
+            <View style={themed($buttonStackTight)}>
+              {showGoogleButton ? (
+                <Button text="Continue with Google" preset="filled" onPress={handleGoogleLogin} />
+              ) : null}
+              {showAppleButton ? (
+                <Button text="Continue with Apple" preset="filled" onPress={handleAppleLogin} />
+              ) : null}
+            </View>
+          </>
+        ) : null}
       </GlassCard>
 
       <GlassCard>
@@ -439,20 +421,6 @@ export function AuthScreen() {
       />
     </Screen>
   )
-}
-
-function parseUserIdFromJwt(token: string) {
-  try {
-    const payload = token.split(".")[1]
-    const base64 = payload.replace(/-/g, "+").replace(/_/g, "/")
-    const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), "=")
-    const decoded =
-      typeof atob === "function" ? atob(padded) : Buffer.from(padded, "base64").toString("binary")
-    const data = JSON.parse(decoded)
-    return data.sub as string | undefined
-  } catch {
-    return undefined
-  }
 }
 
 const $screen: ThemedStyle<ViewStyle> = ({ spacing }) => ({
@@ -493,18 +461,17 @@ const $heroInner: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.lg,
 })
 
-const $heroBadge: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
+const $heroBadge: ThemedStyle<ViewStyle> = ({ colors }) => ({
   alignSelf: "flex-start",
-  // paddingHorizontal: spacing.sm,
-  // paddingVertical: spacing.xxs,
   borderRadius: 99,
   backgroundColor: colors.surfaceGlass,
   borderWidth: 1,
   borderColor: colors.borderSubtle,
 })
 
-const $heroBadgeText: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.primary,
+const $heroBadgeLogo: ThemedStyle<ViewStyle> = () => ({
+  width: 55,
+  height: 55,
 })
 
 const $heroRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({

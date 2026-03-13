@@ -22,21 +22,40 @@ export function PasswordResetRequestScreen() {
   const handleSubmit = async () => {
     const normalized = email.trim().toLowerCase()
     if (!normalized) return
-    await requestPasswordResetEmail(normalized)
-    setMessage("If this email exists, a reset link was sent.")
+    const result = await requestPasswordResetEmail(normalized)
+    setMessage(
+      result.previewToken
+        ? "Reset details are ready. Continue below to set a new password."
+        : "If this email exists, a reset link was sent.",
+    )
+    if (result.previewToken) {
+      navigation.navigate("PasswordResetConfirm", { token: result.previewToken })
+    }
   }
 
   return (
-    <Screen preset="scroll" safeAreaEdges={['top', 'bottom']} contentContainerStyle={themed($screen)}>
+    <Screen
+      preset="scroll"
+      safeAreaEdges={["top", "bottom"]}
+      contentContainerStyle={themed($screen)}
+    >
       <View style={themed($header)}>
         <Text preset="heading" text="Reset password" />
         <Text preset="formHelper" text="Enter your email to receive a reset link." />
-        <Text preset="formHelper" text="In development, the server prints the link in the console." />
+        <Text
+          preset="formHelper"
+          text="In development, you can continue with the preview reset token immediately."
+        />
       </View>
 
       <GlassCard>
         <Text preset="formLabel" text="Email" />
-        <TextField value={email} onChangeText={setEmail} placeholder="you@company.com" autoCapitalize="none" />
+        <TextField
+          value={email}
+          onChangeText={setEmail}
+          placeholder="you@company.com"
+          autoCapitalize="none"
+        />
         {message ? <Text preset="formHelper" text={message} /> : null}
         <View style={themed($buttonRow)}>
           <Button text="Send reset link" preset="default" onPress={handleSubmit} />
