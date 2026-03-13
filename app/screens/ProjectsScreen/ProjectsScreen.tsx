@@ -396,17 +396,17 @@ export function ProjectsScreen() {
         <View style={themed($headerCopy)}>
           <Text preset="overline" text="Projects" />
           <View style={{ flexDirection: "row", alignItems: "center" }}>
-                      <TouchableOpacity onPress={() => navigation.goBack()}>
-                        <Ionicons
-                          name={"arrow-back"}
-                          size={25}
-                          color={theme.colors.text}
-                          style={{ padding: 5 }}
-                        />
-                      </TouchableOpacity>
-          
-          <Text preset="heading" text="Manage projects" />
-                    </View>
+            <TouchableOpacity onPress={() => navigation.goBack()}>
+              <Ionicons
+                name={"arrow-back"}
+                size={25}
+                color={theme.colors.text}
+                style={{ padding: 5 }}
+              />
+            </TouchableOpacity>
+
+            <Text preset="heading" text="Manage projects" />
+          </View>
           <Text
             preset="caption"
             text="Open project workspaces fast, or expand a project card to manage its members, invites, and settings."

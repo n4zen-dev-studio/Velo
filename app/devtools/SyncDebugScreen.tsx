@@ -3,7 +3,9 @@ import { Pressable, ScrollView, View, ViewStyle, TextStyle } from "react-native"
 
 import { GlassCard } from "@/components/GlassCard"
 import { Screen } from "@/components/Screen"
+import { SyncBadge } from "@/components/SyncBadge"
 import { Text } from "@/components/Text"
+import { goToConflictList } from "@/navigation/navigationActions"
 import { useAuthSession } from "@/services/auth/session"
 import { getDb } from "@/services/db/db"
 import { queryAll } from "@/services/db/queries"
@@ -170,6 +172,33 @@ export function SyncDebugScreen() {
           </View>
         ) : null}
       </View>
+
+      <GlassCard>
+        <View style={themed($syncEntryRow)}>
+          <View style={themed($syncEntryCopy)}>
+            <Text preset="formLabel" text="Sync status" />
+            <Text
+              preset="caption"
+              text="Queue health, conflict review, and recovery tools now live here."
+              style={themed($muted)}
+            />
+          </View>
+          <SyncBadge />
+        </View>
+        {syncState.conflictCount > 0 ? (
+          <Pressable onPress={goToConflictList} style={themed($conflictEntryCard)}>
+            <View>
+              <Text preset="caption" text="Open conflicts" style={themed($rowTitle)} />
+              <Text
+                preset="caption"
+                text={`${syncState.conflictCount} items need resolution`}
+                style={themed($muted)}
+              />
+            </View>
+            <Text preset="caption" text="Review" style={themed($strongText)} />
+          </Pressable>
+        ) : null}
+      </GlassCard>
 
       <View style={themed($statsGrid)}>
         {topStats.map((stat) => (
@@ -659,6 +688,32 @@ const $errorBanner: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
 
 const $errorText: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.danger,
+})
+
+const $syncEntryRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: spacing.sm,
+})
+
+const $syncEntryCopy: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flex: 1,
+  gap: spacing.xxxs,
+})
+
+const $conflictEntryCard: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
+  marginTop: spacing.sm,
+  borderRadius: radius.medium,
+  borderWidth: 1,
+  borderColor: colors.borderSubtle,
+  backgroundColor: colors.surface,
+  paddingHorizontal: spacing.sm,
+  paddingVertical: spacing.sm,
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: spacing.sm,
 })
 
 const $actionGrid: ThemedStyle<ViewStyle> = ({ spacing }) => ({

@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react"
-import { Image, View, ViewStyle, TextStyle, ImageStyle, TouchableOpacity } from "react-native"
+import { Image, ImageStyle, Platform, Pressable, TextStyle, View, ViewStyle } from "react-native"
+import * as ImagePicker from "expo-image-picker"
+import { Ionicons } from "@expo/vector-icons"
 import { useNavigation } from "@react-navigation/native"
 
 import { Button } from "@/components/Button"
@@ -9,13 +11,13 @@ import { Text } from "@/components/Text"
 import { TextField } from "@/components/TextField"
 import type { HomeStackScreenProps } from "@/navigators/navigationTypes"
 import { getUserById, upsertUser } from "@/services/db/repositories/usersRepository"
-import { syncController } from "@/services/sync/SyncController"
-import { getCurrentUserId } from "@/services/sync/identity"
 import type { User } from "@/services/db/types"
+import { userScopeKey } from "@/services/session/scope"
+import { getCurrentUserId } from "@/services/sync/identity"
+import { syncController } from "@/services/sync/SyncController"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
-import { userScopeKey } from "@/services/session/scope"
-import { Ionicons } from "@expo/vector-icons"
+import { goToDashboardTab, goToHome } from "@/navigation/navigationActions"
 
 const fallbackAvatar = require("@assets/images/avatar_placeholder.jpg")
 
@@ -63,17 +65,31 @@ export function ProfileScreen() {
   const handlePickImage = async () => {
     setError(null)
     try {
-      const picker = await import("expo-image-picker")
-      const result = await picker.launchImageLibraryAsync({
-        mediaTypes: picker.MediaTypeOptions.Images,
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync()
+      if (!permission.granted) {
+        setError("Photo access is required to choose a profile image.")
+        return
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
         allowsEditing: true,
         quality: 0.7,
       })
       if (!result.canceled && result.assets?.[0]?.uri) {
         setAvatarUrl(result.assets[0].uri)
       }
-    } catch {
-      setError("Image picker not available on this device.")
+    } catch (err) {
+      const message = err instanceof Error ? err.message : ""
+      const unsupported =
+        Platform.OS === "web" ||
+        message.includes("native module") ||
+        message.includes("not available")
+      setError(
+        unsupported
+          ? "Photo picking is not supported in this environment. You can still paste an avatar URL below."
+          : "Could not open the photo library right now.",
+      )
     }
   }
 
@@ -123,15 +139,10 @@ export function ProfileScreen() {
       contentContainerStyle={themed($screen)}
     >
       <View style={themed($header)}>
-        <View style={{ flexDirection: "row", alignItems: "center" }}>
-          <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Ionicons
-              name={"arrow-back"}
-              size={25}
-              color={theme.colors.text}
-              style={{ padding: 5 }}
-            />
-          </TouchableOpacity>
+        <View style={themed($headerTopRow)}>
+          <Pressable onPress={() => goToHome()} style={themed($backButton)}>
+            <Ionicons name="arrow-back" size={20} color={theme.colors.text} />
+          </Pressable>
 
           <Text preset="heading" text="Profile" />
         </View>
@@ -198,6 +209,23 @@ const $screen: ThemedStyle<ViewStyle> = ({ spacing }) => ({
 
 const $header: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.xs,
+})
+
+const $headerTopRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  alignItems: "center",
+  gap: spacing.sm,
+})
+
+const $backButton: ThemedStyle<ViewStyle> = ({ colors, radius }) => ({
+  width: 36,
+  height: 36,
+  borderRadius: radius.pill,
+  borderWidth: 1,
+  borderColor: colors.borderSubtle,
+  backgroundColor: colors.surface,
+  alignItems: "center",
+  justifyContent: "center",
 })
 
 const $avatarRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({

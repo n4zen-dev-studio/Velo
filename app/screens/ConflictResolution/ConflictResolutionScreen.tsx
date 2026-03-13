@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react"
-import { Pressable, TouchableOpacity, View, ViewStyle } from "react-native"
+import { Pressable, View, ViewStyle } from "react-native"
+import { Ionicons } from "@expo/vector-icons"
 import { useNavigation, useRoute } from "@react-navigation/native"
 
 import { GlassCard } from "@/components/GlassCard"
 import { Screen } from "@/components/Screen"
 import { Text } from "@/components/Text"
 import { TextField } from "@/components/TextField"
-import type { HomeStackScreenProps } from "@/navigators/navigationTypes"
+import type { SyncStackScreenProps } from "@/navigators/navigationTypes"
 import {
   getConflict,
   resolveConflictKeepLocal,
@@ -18,12 +19,11 @@ import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
 import { formatDateTime } from "@/utils/dateFormat"
 import { resolveUserLabel } from "@/utils/userLabel"
-import { Ionicons } from "@expo/vector-icons"
 
 export function ConflictResolutionScreen() {
   const { themed, theme } = useAppTheme()
-  const navigation = useNavigation<HomeStackScreenProps<"ConflictResolution">["navigation"]>()
-  const route = useRoute<HomeStackScreenProps<"ConflictResolution">["route"]>()
+  const navigation = useNavigation<SyncStackScreenProps<"ConflictResolution">["navigation"]>()
+  const route = useRoute<SyncStackScreenProps<"ConflictResolution">["route"]>()
   const { conflictId } = route.params ?? {}
   const [entityType, entityId] = (conflictId ?? "").split(":") as [
     "task" | "comment" | "",
@@ -119,15 +119,10 @@ export function ConflictResolutionScreen() {
   return (
     <Screen preset="scroll" contentContainerStyle={themed($screen)}>
       <View style={themed($header)}>
-        <View style={{ flexDirection: "row", alignItems: "center" }}>
-          <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Ionicons
-              name={"arrow-back"}
-              size={25}
-              color={theme.colors.text}
-              style={{ padding: 5 }}
-            />
-          </TouchableOpacity>
+        <View style={themed($headerTopRow)}>
+          <Pressable onPress={() => navigation.goBack()} style={themed($backButton)}>
+            <Ionicons name="arrow-back" size={20} color={theme.colors.text} />
+          </Pressable>
 
           <Text preset="heading" text="Resolve Conflict" />
         </View>
@@ -219,6 +214,23 @@ const $screen: ThemedStyle<ViewStyle> = ({ spacing }) => ({
 
 const $header: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.xs,
+})
+
+const $headerTopRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  alignItems: "center",
+  gap: spacing.sm,
+})
+
+const $backButton: ThemedStyle<ViewStyle> = ({ colors, radius }) => ({
+  width: 36,
+  height: 36,
+  borderRadius: radius.pill,
+  borderWidth: 1,
+  borderColor: colors.borderSubtle,
+  backgroundColor: colors.surface,
+  alignItems: "center",
+  justifyContent: "center",
 })
 
 const $grid: ThemedStyle<ViewStyle> = ({ spacing }) => ({

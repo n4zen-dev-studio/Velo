@@ -7,15 +7,14 @@ import { GlassCard } from "@/components/GlassCard"
 import { HeaderAvatar } from "@/components/HeaderAvatar"
 import { PriorityDot } from "@/components/PriorityDot"
 import { Screen } from "@/components/Screen"
-import { SyncBadge } from "@/components/SyncBadge"
 import { Text } from "@/components/Text"
+import { BASE_URL } from "@/config/api"
 import { goToInvites, goToProfile, goToProjectsTab } from "@/navigation/navigationActions"
 import type { HomeStackScreenProps } from "@/navigators/navigationTypes"
 import { createHttpClient } from "@/services/api/httpClient"
 import { listMyInvites } from "@/services/api/invitesApi"
 import { listProjects } from "@/services/db/repositories/projectsRepository"
 import type { Project, Task } from "@/services/db/types"
-import { BASE_URL } from "@/config/api"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
 import { formatDateTime } from "@/utils/dateFormat"
@@ -282,23 +281,6 @@ export function HomeScreen() {
               />
             </View>
           </View>
-          <SyncBadge />
-        </View>
-
-        <View style={themed($headerMetaRow)}>
-          {/* <Pressable onPress={goToProjectsTab} style={themed($workspacePill)}>
-            <Text
-              preset="caption"
-              text={activeWorkspace?.label ?? "Personal"}
-              numberOfLines={1}
-              style={themed($workspacePillText)}
-            />
-          </Pressable> */}
-
-          {/* <View style={themed($statusPill)}>
-            <View style={themed($statusDot)} />
-            <Text preset="caption" text={isRefreshing ? "Refreshing" : "Idle"} />
-          </View> */}
         </View>
 
         <View style={themed($switcherRow)}>
@@ -622,7 +604,7 @@ const $headerLead: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flex: 1,
 })
 
-const $headerTitleWrap: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+const $headerTitleWrap: ThemedStyle<ViewStyle> = () => ({
   gap: 2,
   flex: 1,
 })
@@ -633,45 +615,6 @@ const $headerTitle: ThemedStyle<TextStyle> = () => ({
 
 const $headerCaption: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.textDim,
-})
-
-const $headerMetaRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  flexDirection: "row",
-  alignItems: "center",
-  gap: spacing.sm,
-})
-
-const $workspacePill: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
-  flex: 1,
-  borderRadius: radius.pill,
-  borderWidth: 1,
-  borderColor: colors.borderSubtle,
-  backgroundColor: colors.surface,
-  paddingHorizontal: spacing.sm,
-  paddingVertical: spacing.xs,
-})
-
-const $workspacePillText: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.textMuted,
-})
-
-const $statusPill: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
-  flexDirection: "row",
-  alignItems: "center",
-  gap: spacing.xs,
-  borderRadius: radius.pill,
-  borderWidth: 1,
-  borderColor: colors.borderSubtle,
-  backgroundColor: colors.surface,
-  paddingHorizontal: spacing.sm,
-  paddingVertical: spacing.xs,
-})
-
-const $statusDot: ThemedStyle<ViewStyle> = ({ colors, radius }) => ({
-  width: 6,
-  height: 6,
-  borderRadius: radius.pill,
-  backgroundColor: colors.success,
 })
 
 const $switcherRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
@@ -760,7 +703,7 @@ const $distributionBar: ThemedStyle<ViewStyle> = ({ colors, radius }) => ({
 
 const $distributionSlice =
   (backgroundColor: string): ThemedStyle<ViewStyle> =>
-  ({}) => ({
+  () => ({
     backgroundColor,
     height: "100%",
   })
@@ -829,9 +772,8 @@ const $miniBarLabel: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.textDim,
 })
 
-const $actionsCard: ThemedStyle<ViewStyle> = ({ spacing ,colors}) => ({
+const $actionsCard: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.sm,
-  
 })
 
 const $quickActionsRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({

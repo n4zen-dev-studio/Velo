@@ -2,9 +2,9 @@
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs"
 
 import { GlassTabBar } from "@/components/navigation/GlassTabBar"
-import { SyncDebugScreen } from "@/devtools/SyncDebugScreen"
 import { HomeStack } from "@/navigation/HomeStack"
 import { ProjectsStack } from "@/navigation/ProjectsStack"
+import { SyncStack } from "@/navigation/SyncStack"
 import { getDeepestFocusedRouteName, shouldHideFloatingTabs } from "@/navigation/tabBarVisibility"
 import type { MainTabParamList } from "@/navigators/navigationTypes"
 import { SettingsScreen } from "@/screens/SettingsScreen"
@@ -43,7 +43,7 @@ export function MainTabs() {
           },
         })}
       />
-      <Tab.Screen name="DebugTab" component={SyncDebugScreen} options={{ title: "Sync" }} />
+      <Tab.Screen name="DebugTab" component={SyncStack} options={{ title: "Sync" }} />
       <Tab.Screen name="SettingsTab" component={SettingsScreen} options={{ title: "Settings" }} />
     </Tab.Navigator>
   )

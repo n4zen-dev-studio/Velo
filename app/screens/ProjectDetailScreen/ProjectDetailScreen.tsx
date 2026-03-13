@@ -627,14 +627,14 @@ function TaskMoveControls({
         disabled={disableBack}
         style={[themed($moveButton), disableBack && themed($moveButtonDisabled)]}
       >
-        <Text preset="caption" text="Back" style={themed($moveButtonText)} />
+        <Text preset="caption" text="Move Back" style={themed($moveButtonText)} />
       </Pressable>
       <Pressable
         onPress={onForward}
         disabled={disableForward}
         style={[themed($moveButtonPrimary), disableForward && themed($moveButtonDisabled)]}
       >
-        <Text preset="caption" text="Forward" style={themed($moveButtonTextPrimary)} />
+        <Text preset="caption" text="Move Forward" style={themed($moveButtonTextPrimary)} />
       </Pressable>
     </View>
   )

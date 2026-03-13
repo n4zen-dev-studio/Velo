@@ -69,8 +69,6 @@ const config = {
                 Home: "home",
                 TaskEditor: "task-editor/:taskId?",
                 TaskDetail: "task/:taskId",
-                ConflictList: "conflicts",
-                ConflictResolution: "conflicts/:conflictId",
                 InviteAccept: "invite/:token?",
                 Invites: "invites",
                 Profile: "profile",
@@ -85,7 +83,13 @@ const config = {
               },
             },
             SettingsTab: "settings",
-            DebugTab: "sync-debug",
+            DebugTab: {
+              screens: {
+                SyncConsole: "sync-debug",
+                ConflictList: "sync/conflicts",
+                ConflictResolution: "sync/conflicts/:conflictId",
+              },
+            },
           },
         },
       },

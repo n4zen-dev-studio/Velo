@@ -1,15 +1,13 @@
 import { createNativeStackNavigator } from "@react-navigation/native-stack"
 
-import { HomeScreen } from "@/screens/HomeScreen"
-import { TaskEditorScreen } from "@/screens/TaskEditorScreen"
-import { TaskDetailScreen } from "@/screens/TaskDetailScreen"
-import { ConflictListScreen } from "@/screens/ConflictListScreen"
-import { ConflictResolutionScreen } from "@/screens/ConflictResolution"
-import { InvitesScreen } from "@/screens/InvitesScreen"
-import { InviteAcceptScreen } from "@/screens/InviteAcceptScreen"
-import { ProfileScreen } from "@/screens/ProfileScreen"
-import { useAppTheme } from "@/theme/context"
 import type { HomeStackParamList } from "@/navigators/navigationTypes"
+import { HomeScreen } from "@/screens/HomeScreen"
+import { InviteAcceptScreen } from "@/screens/InviteAcceptScreen"
+import { InvitesScreen } from "@/screens/InvitesScreen"
+import { ProfileScreen } from "@/screens/ProfileScreen"
+import { TaskDetailScreen } from "@/screens/TaskDetailScreen"
+import { TaskEditorScreen } from "@/screens/TaskEditorScreen"
+import { useAppTheme } from "@/theme/context"
 
 const Stack = createNativeStackNavigator<HomeStackParamList>()
 
@@ -30,8 +28,6 @@ export function HomeStack() {
       <Stack.Screen name="Home" component={HomeScreen} />
       <Stack.Screen name="TaskEditor" component={TaskEditorScreen} />
       <Stack.Screen name="TaskDetail" component={TaskDetailScreen} />
-      <Stack.Screen name="ConflictList" component={ConflictListScreen} />
-      <Stack.Screen name="ConflictResolution" component={ConflictResolutionScreen} />
       <Stack.Screen name="Invites" component={InvitesScreen} />
       <Stack.Screen name="InviteAccept" component={InviteAcceptScreen} />
       <Stack.Screen name="Profile" component={ProfileScreen} />

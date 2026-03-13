@@ -110,7 +110,7 @@ export function goToConflictList() {
     {
       screen: "MainTabs",
       params: {
-        screen: "DashboardTab",
+        screen: "DebugTab",
         params: { screen: "ConflictList" },
       },
     } as never,
@@ -124,7 +124,7 @@ export function goToConflictResolution(params?: { conflictId?: string }) {
     {
       screen: "MainTabs",
       params: {
-        screen: "DashboardTab",
+        screen: "DebugTab",
         params: { screen: "ConflictResolution", params },
       },
     } as never,
