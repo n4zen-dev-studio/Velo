@@ -37,11 +37,11 @@ export function MainTabs() {
         name="ProjectsTab"
         component={ProjectsStack}
         options={{ title: "Projects" }}
-        listeners={({ navigation }) => ({
-          tabPress: () => {
-            navigation.navigate("ProjectsTab" as never, { screen: "ProjectsEntry" } as never)
-          },
-        })}
+        // listeners={({ navigation }) => ({
+        //   tabPress: () => {
+        //     navigation.navigate("ProjectsTab" as never, { screen: "ProjectsEntry" } as never)
+        //   },
+        // })}
       />
       <Tab.Screen name="DebugTab" component={SyncStack} options={{ title: "Sync" }} />
       <Tab.Screen name="SettingsTab" component={SettingsScreen} options={{ title: "Settings" }} />
