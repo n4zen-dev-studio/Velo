@@ -412,16 +412,6 @@ export function HomeScreen() {
       </View>
 
       <View style={themed($content)}>
-        <View style={themed($statsGrid)}>
-          {statCards.map((card) => (
-            <DashboardStatCard
-              key={card.label}
-              label={card.label}
-              value={card.value}
-              tone={card.tone}
-            />
-          ))}
-        </View>
 
         <GlassCard style={themed($chartCard)}>
           <View style={themed($compactSectionHeader)}>
@@ -483,6 +473,18 @@ export function HomeScreen() {
           />
         </GlassCard>
 
+        <View style={themed($statsGrid)}>
+          {statCards.map((card) => (
+            <DashboardStatCard
+              key={card.label}
+              label={card.label}
+              value={card.value}
+              tone={card.tone}
+            />
+          ))}
+        </View>
+
+        
         <GlassCard style={themed($actionsCard)}>
           <View style={themed($compactSectionHeader)}>
             <Text preset="formLabel" text="Quick actions" />
