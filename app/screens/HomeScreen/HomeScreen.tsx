@@ -3,6 +3,8 @@ import { Pressable, RefreshControl, TextStyle, View, ViewStyle } from "react-nat
 import { useNavigation } from "@react-navigation/native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
+import { DashboardTaskStatusChart } from "@/components/charts/DashboardTaskStatusChart"
+import { DashboardTimelineGraph } from "@/components/charts/DashboardTimelineGraph"
 import { GlassCard } from "@/components/GlassCard"
 import { HeaderAvatar } from "@/components/HeaderAvatar"
 import { PriorityDot } from "@/components/PriorityDot"
@@ -17,9 +19,10 @@ import { listProjects } from "@/services/db/repositories/projectsRepository"
 import type { Project, Task } from "@/services/db/types"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
-import { formatDateTime } from "@/utils/dateFormat"
+import { formatDateRange, formatDateTime } from "@/utils/dateFormat"
 
 import { useHomeViewModel } from "./useHomeViewModel"
+import { useAuthSession } from "@/services/auth/session"
 
 type ActivityItem = {
   id: string
@@ -52,6 +55,8 @@ export function HomeScreen() {
 
   const [pendingInvitesCount, setPendingInvitesCount] = useState(0)
   const [projectStreams, setProjectStreams] = useState<Project[]>([])
+  const authSession = useAuthSession()
+  
 
   useEffect(() => {
     let mounted = true
@@ -163,12 +168,6 @@ export function HomeScreen() {
     ],
   )
 
-  const totalBreakdown = Math.max(
-    statusBreakdown.reduce((sum, item) => sum + item.value, 0),
-    1,
-  )
-  const maxBar = Math.max(...statusBreakdown.map((item) => item.value), 1)
-
   const completionTrend = useMemo(() => {
     const now = new Date()
     return Array.from({ length: 7 }).map((_, index) => {
@@ -185,6 +184,78 @@ export function HomeScreen() {
   }, [allTasks])
 
   const maxCompletionValue = Math.max(...completionTrend.map((item) => item.value), 1)
+  const statusCategoryById = useMemo(
+    () => Object.fromEntries(uiTasksByStatus.map((lane) => [lane.status.id, lane.status.category])),
+    [uiTasksByStatus],
+  )
+  const timelineDays = useMemo(() => {
+    const now = new Date()
+    return Array.from({ length: 7 }).map((_, index) => {
+      const day = new Date(now)
+      day.setDate(now.getDate() - 1 + index)
+      return {
+        key: day.toISOString().slice(0, 10),
+        label: day.toLocaleDateString(undefined, { weekday: "short" }).slice(0, 3),
+      }
+    })
+  }, [])
+  const dashboardTimelineItems = useMemo(() => {
+    const firstDay = new Date(timelineDays[0].key)
+    const lastDay = new Date(timelineDays[timelineDays.length - 1].key)
+    return [...allTasks]
+      .filter((task) => task.startDate || task.endDate)
+      .sort((a, b) => {
+        const aDate = a.startDate ?? a.endDate ?? a.updatedAt
+        const bDate = b.startDate ?? b.endDate ?? b.updatedAt
+        return new Date(aDate).getTime() - new Date(bDate).getTime()
+      })
+      .slice(0, 4)
+      .map((task) => {
+        const startSource = task.startDate ?? task.endDate ?? task.updatedAt
+        const endSource = task.endDate ?? task.startDate ?? task.updatedAt
+        const start = new Date(startSource)
+        const end = new Date(endSource)
+        const clampedStart = start < firstDay ? firstDay : start
+        const clampedEnd = end > lastDay ? lastDay : end
+        const startIndex = Math.max(
+          0,
+          Math.min(
+            timelineDays.length - 1,
+            Math.floor((clampedStart.getTime() - firstDay.getTime()) / 86400000),
+          ),
+        )
+        const endIndex = Math.max(
+          startIndex,
+          Math.min(
+            timelineDays.length - 1,
+            Math.floor((clampedEnd.getTime() - firstDay.getTime()) / 86400000),
+          ),
+        )
+        const category = statusCategoryById[task.statusId]
+        const tone =
+          category === "done"
+            ? theme.colors.success
+            : category === "in_progress"
+              ? theme.colors.primary
+              : theme.colors.warning
+
+        return {
+          id: task.id,
+          title: task.title,
+          subtitle: formatDateRange(task.startDate, task.endDate),
+          tone,
+          startIndex,
+          span: Math.max(1, endIndex - startIndex + 1),
+        }
+      })
+  }, [
+    allTasks,
+    statusCategoryById,
+    theme.colors.primary,
+    theme.colors.success,
+    theme.colors.warning,
+    timelineDays,
+  ])
 
   const activityItems = useMemo<ActivityItem[]>(
     () =>
@@ -312,11 +383,11 @@ export function HomeScreen() {
       <View style={themed($header)}>
         <View style={themed($headerTopRow)}>
           <View style={themed($headerLead)}>
-            <HeaderAvatar onPress={goToProfile} size={40} />
+            <HeaderAvatar onPress={() => authSession.isAuthenticated && goToProfile()} size={40} />
             <View style={themed($headerTitleWrap)}>
-              <Text preset="sectionTitle" text="Dashboard" style={themed($headerTitle)} />
+              <Text preset="heading" text="Dashboard" style={themed($headerTitle)} />
               <Text
-                preset="caption"
+                preset="overline"
                 text={activeWorkspace?.kind === "personal" ? "Personal project" : "Project view"}
                 style={themed($headerCaption)}
               />
@@ -361,52 +432,11 @@ export function HomeScreen() {
               style={themed($mutedText)}
             />
           </View>
-
-          <View style={themed($distributionBar)}>
-            {statusBreakdown.map((item) => (
-              <View
-                key={item.label}
-                style={[
-                  themed($distributionSlice(item.tone)),
-                  { flex: Math.max(item.value, item.value === 0 ? 0.5 : item.value) },
-                ]}
-              />
-            ))}
-          </View>
-
-          <View style={themed($chartLegend)}>
-            {statusBreakdown.map((item) => (
-              <MiniChartLegend
-                key={item.label}
-                label={item.label}
-                value={item.value}
-                tone={item.tone}
-                percent={Math.round((item.value / totalBreakdown) * 100)}
-              />
-            ))}
-          </View>
-
-          <View style={themed($miniBarsRow)}>
-            {statusBreakdown.map((item) => (
-              <View key={item.label} style={themed($miniBarColumn)}>
-                <View style={themed($miniBarTrack)}>
-                  <View
-                    style={[
-                      themed($miniBarFill(item.tone)),
-                      {
-                        height: `${Math.max((item.value / maxBar) * 100, item.value > 0 ? 14 : 0)}%`,
-                      },
-                    ]}
-                  />
-                </View>
-                <Text
-                  preset="caption"
-                  text={item.label.split(" ")[0]}
-                  style={themed($miniBarLabel)}
-                />
-              </View>
-            ))}
-          </View>
+          <DashboardTaskStatusChart
+            items={statusBreakdown}
+            total={allTasks.length}
+            completionLabel={`${Math.round((doneCount / Math.max(allTasks.length, 1)) * 100)}% completed`}
+          />
 
           <View style={themed($trendRow)}>
             <View>
@@ -435,6 +465,22 @@ export function HomeScreen() {
               ))}
             </View>
           </View>
+        </GlassCard>
+
+        <GlassCard style={themed($chartCard)}>
+          <View style={themed($compactSectionHeader)}>
+            <Text preset="formLabel" text="Near timeline" />
+            <Text
+              preset="caption"
+              text={dashboardTimelineItems.length > 0 ? "Next 7 days" : "No dated tasks yet"}
+              style={themed($mutedText)}
+            />
+          </View>
+          <DashboardTimelineGraph
+            days={timelineDays}
+            items={dashboardTimelineItems}
+            emptyLabel="Add start or end dates to tasks to visualize active work across the week."
+          />
         </GlassCard>
 
         <GlassCard style={themed($actionsCard)}>
@@ -524,30 +570,6 @@ function DashboardStatCard({ label, value, tone }: { label: string; value: strin
         <Text preset="caption" text={label} style={themed($statLabel)} />
       </View>
       <Text preset="subheading" text={value} style={themed($statValue)} />
-    </View>
-  )
-}
-
-function MiniChartLegend({
-  label,
-  value,
-  tone,
-  percent,
-}: {
-  label: string
-  value: number
-  tone: string
-  percent: number
-}) {
-  const { themed } = useAppTheme()
-
-  return (
-    <View style={themed($legendItem)}>
-      <View style={[themed($legendDot), { backgroundColor: tone }]} />
-      <View style={themed($legendCopy)}>
-        <Text preset="caption" text={label} style={themed($legendLabel)} />
-        <Text preset="caption" text={`${value} · ${percent}%`} style={themed($legendValue)} />
-      </View>
     </View>
   )
 }
@@ -645,7 +667,7 @@ function CompactAction({ label, onPress }: { label: string; onPress: () => void 
 
 const $screen: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   paddingTop: spacing.md,
-  paddingBottom: spacing.xxl,
+  paddingBottom: spacing.lg,
 })
 
 const $content: ThemedStyle<ViewStyle> = ({ spacing }) => ({
@@ -674,12 +696,14 @@ const $headerLead: ThemedStyle<ViewStyle> = ({ spacing }) => ({
 })
 
 const $headerTitleWrap: ThemedStyle<ViewStyle> = () => ({
+  paddingTop: 10,
   gap: 2,
   flex: 1,
 })
 
 const $headerTitle: ThemedStyle<TextStyle> = () => ({
   lineHeight: 22,
+    paddingBottom: 5,
 })
 
 const $headerCaption: ThemedStyle<TextStyle> = ({ colors }) => ({
@@ -762,80 +786,9 @@ const $mutedText: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.textDim,
 })
 
-const $distributionBar: ThemedStyle<ViewStyle> = ({ colors, radius }) => ({
-  flexDirection: "row",
-  height: 12,
-  borderRadius: radius.pill,
-  backgroundColor: colors.backgroundSecondary,
-  overflow: "hidden",
-})
-
-const $distributionSlice =
-  (backgroundColor: string): ThemedStyle<ViewStyle> =>
-  () => ({
-    backgroundColor,
-    height: "100%",
-  })
-
-const $chartLegend: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  flexDirection: "row",
-  flexWrap: "wrap",
-  gap: spacing.sm,
-})
-
-const $legendItem: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  width: "47%",
-  flexDirection: "row",
-  alignItems: "center",
-  gap: spacing.xs,
-})
-
-const $legendDot: ThemedStyle<ViewStyle> = ({ radius }) => ({
-  width: 8,
-  height: 8,
-  borderRadius: radius.pill,
-})
-
-const $legendCopy: ThemedStyle<ViewStyle> = () => ({
-  flex: 1,
-})
-
-const $legendLabel: ThemedStyle<TextStyle> = ({ colors }) => ({
-  color: colors.textMuted,
-})
-
 const $legendValue: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.textDim,
 })
-
-const $miniBarsRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  flexDirection: "row",
-  justifyContent: "space-between",
-  gap: spacing.sm,
-})
-
-const $miniBarColumn: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  flex: 1,
-  alignItems: "center",
-  gap: spacing.xs,
-})
-
-const $miniBarTrack: ThemedStyle<ViewStyle> = ({ colors, radius }) => ({
-  width: "100%",
-  height: 44,
-  borderRadius: radius.medium,
-  backgroundColor: colors.backgroundSecondary,
-  justifyContent: "flex-end",
-  overflow: "hidden",
-})
-
-const $miniBarFill =
-  (backgroundColor: string): ThemedStyle<ViewStyle> =>
-  ({ radius }) => ({
-    width: "100%",
-    borderRadius: radius.medium,
-    backgroundColor,
-  })
 
 const $miniBarLabel: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.textDim,
