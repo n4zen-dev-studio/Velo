@@ -42,6 +42,14 @@ type OperationViewModel = {
   attempts?: number
 }
 
+type SyncMetrics = {
+  pending: number
+  failed: number
+  sent: number
+  total: number
+  healthPercent: number
+}
+
 export function SyncDebugScreen() {
   const { themed } = useAppTheme()
   const syncState = useSyncStatus()
@@ -56,20 +64,29 @@ export function SyncDebugScreen() {
   const [statusNameById, setStatusNameById] = useState<Record<string, string>>({})
   const [userLabelById, setUserLabelById] = useState<Record<string, string>>({})
   const [expandedOps, setExpandedOps] = useState<Set<string>>(new Set())
+  const [syncMetrics, setSyncMetrics] = useState<SyncMetrics>({
+    pending: 0,
+    failed: 0,
+    sent: 0,
+    total: 0,
+    healthPercent: 100,
+  })
 
   const load = async () => {
-    const [pending, failed, failedTotal, syncStateRow, statusRows] = await Promise.all([
+    const [pending, failed, failedTotal, syncStateRow, statusRows, metrics] = await Promise.all([
       listPendingOps(50),
       listFailedOps(50),
       countFailedOps(),
       getSyncStateRow(),
       loadStatusLookup(),
+      getSyncMetrics(),
     ])
     setPendingOps(pending)
     setFailedOps(failed)
     setFailedCount(failedTotal)
     setCursor(syncStateRow?.lastCursor ?? null)
     setStatusNameById(Object.fromEntries(statusRows.map((row) => [row.id, row.name])))
+    setSyncMetrics(metrics)
 
     const userIds = extractQueuedUserIds([...pending, ...failed])
     if (userIds.length > 0) {
@@ -111,6 +128,14 @@ export function SyncDebugScreen() {
       { label: "Conflicts", value: `${syncState.conflictCount} open` },
     ],
     [syncState.pendingCount, syncState.conflictCount, failedCount],
+  )
+  const metricSegments = useMemo(
+    () => [
+      { label: "Sent", value: syncMetrics.sent, tone: "#44D39B" },
+      { label: "Pending", value: syncMetrics.pending, tone: "#7AA2FF" },
+      { label: "Failed", value: syncMetrics.failed, tone: "#FF6C8F" },
+    ],
+    [syncMetrics.failed, syncMetrics.pending, syncMetrics.sent],
   )
 
   const pendingViewModels = useMemo(
@@ -205,6 +230,43 @@ export function SyncDebugScreen() {
           <CompactStatTile key={stat.label} label={stat.label} value={stat.value} />
         ))}
       </View>
+
+      <GlassCard>
+        <View style={themed($cardHeaderRow)}>
+          <View>
+            <Text preset="formLabel" text="Sync health" />
+            <Text
+              preset="caption"
+              text={`${syncMetrics.sent} delivered · ${syncMetrics.pending} queued`}
+              style={themed($muted)}
+            />
+          </View>
+          <Text preset="subheading" text={`${syncMetrics.healthPercent}%`} />
+        </View>
+        <View style={themed($healthBar)}>
+          {metricSegments.map((segment) => (
+            <View
+              key={segment.label}
+              style={[
+                themed($healthSlice(segment.tone)),
+                { flex: Math.max(segment.value, segment.value === 0 ? 0.35 : segment.value) },
+              ]}
+            />
+          ))}
+        </View>
+        <View style={themed($healthLegend)}>
+          {metricSegments.map((segment) => (
+            <View key={segment.label} style={themed($healthLegendItem)}>
+              <View style={[themed($healthLegendDot), { backgroundColor: segment.tone }]} />
+              <Text
+                preset="caption"
+                text={`${segment.label} ${segment.value}`}
+                style={themed($muted)}
+              />
+            </View>
+          ))}
+        </View>
+      </GlassCard>
 
       {isGuestMode ? (
         <GlassCard>
@@ -763,6 +825,41 @@ const $guestNoticeHeader: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.xs,
 })
 
+const $healthBar: ThemedStyle<ViewStyle> = ({ colors, radius, spacing }) => ({
+  flexDirection: "row",
+  height: 14,
+  borderRadius: radius.pill,
+  backgroundColor: colors.backgroundSecondary,
+  overflow: "hidden",
+  marginTop: spacing.sm,
+})
+
+const $healthSlice =
+  (backgroundColor: string): ThemedStyle<ViewStyle> =>
+  () => ({
+    backgroundColor,
+    height: "100%",
+  })
+
+const $healthLegend: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  flexWrap: "wrap",
+  gap: spacing.sm,
+  marginTop: spacing.sm,
+})
+
+const $healthLegendItem: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  alignItems: "center",
+  gap: spacing.xs,
+})
+
+const $healthLegendDot: ThemedStyle<ViewStyle> = ({ radius }) => ({
+  width: 8,
+  height: 8,
+  borderRadius: radius.pill,
+})
+
 async function getSyncStateRow() {
   const { queryFirst } = await import("@/services/db/queries")
   const { getActiveScopeKey } = await import("@/services/session/scope")
@@ -773,6 +870,44 @@ async function getSyncStateRow() {
     "SELECT lastCursor FROM sync_state WHERE scopeKey = ?",
     [scopeKey],
   )
+}
+
+async function getSyncMetrics(): Promise<SyncMetrics> {
+  const { queryFirst } = await import("@/services/db/queries")
+  const { getActiveScopeKey } = await import("@/services/session/scope")
+  const db = await getDb()
+  const scopeKey = await getActiveScopeKey()
+  const [pending, failed, sent] = await Promise.all([
+    queryFirst<{ count: number }>(
+      db,
+      "SELECT COUNT(1) as count FROM change_log WHERE scopeKey = ? AND status = 'PENDING'",
+      [scopeKey],
+    ),
+    queryFirst<{ count: number }>(
+      db,
+      "SELECT COUNT(1) as count FROM change_log WHERE scopeKey = ? AND status = 'FAILED'",
+      [scopeKey],
+    ),
+    queryFirst<{ count: number }>(
+      db,
+      "SELECT COUNT(1) as count FROM change_log WHERE scopeKey = ? AND status = 'SENT'",
+      [scopeKey],
+    ),
+  ])
+
+  const pendingCount = pending?.count ?? 0
+  const failedCount = failed?.count ?? 0
+  const sentCount = sent?.count ?? 0
+  const total = pendingCount + failedCount + sentCount
+  const healthPercent = total === 0 ? 100 : Math.round((sentCount / total) * 100)
+
+  return {
+    pending: pendingCount,
+    failed: failedCount,
+    sent: sentCount,
+    total,
+    healthPercent,
+  }
 }
 
 async function loadStatusLookup() {

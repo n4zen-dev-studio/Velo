@@ -16,3 +16,23 @@ export function formatDateTime(input: DateInput): string {
   const year = date.getFullYear()
   return `${hours}:${minutes} ${day}/${month}/${year}`
 }
+
+export function formatShortDate(input: DateInput): string {
+  if (!input) return "—"
+  const date = input instanceof Date ? input : new Date(input)
+  if (Number.isNaN(date.getTime())) return "—"
+
+  return date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  })
+}
+
+export function formatDateRange(start?: DateInput, end?: DateInput): string {
+  if (start && end) {
+    return `${formatShortDate(start)} - ${formatShortDate(end)}`
+  }
+  if (start) return `Started ${formatShortDate(start)}`
+  if (end) return `Completed ${formatShortDate(end)}`
+  return "No dates"
+}

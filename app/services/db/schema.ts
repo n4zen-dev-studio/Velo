@@ -1,4 +1,4 @@
-export const schemaVersion = 7
+export const schemaVersion = 8
 
 export const createTablesSql = `
 CREATE TABLE IF NOT EXISTS users (
@@ -70,8 +70,25 @@ CREATE TABLE IF NOT EXISTS tasks (
   priority TEXT NOT NULL,
   assigneeUserId TEXT,
   createdByUserId TEXT NOT NULL,
+  startDate TEXT,
+  endDate TEXT,
   updatedAt TEXT NOT NULL,
   revision TEXT NOT NULL,
+  deletedAt TEXT,
+  scopeKey TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS task_attachments (
+  id TEXT PRIMARY KEY,
+  taskId TEXT NOT NULL,
+  workspaceId TEXT NOT NULL,
+  fileName TEXT NOT NULL,
+  mimeType TEXT NOT NULL,
+  localUri TEXT NOT NULL,
+  remoteUri TEXT,
+  fileSize INTEGER,
+  createdAt TEXT NOT NULL,
+  updatedAt TEXT NOT NULL,
   deletedAt TEXT,
   scopeKey TEXT NOT NULL
 );
@@ -162,8 +179,13 @@ CREATE INDEX IF NOT EXISTS idx_tasks_workspace ON tasks (workspaceId);
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks (statusId);
 CREATE INDEX IF NOT EXISTS idx_tasks_updated ON tasks (updatedAt);
 CREATE INDEX IF NOT EXISTS idx_tasks_scope ON tasks (scopeKey);
+CREATE INDEX IF NOT EXISTS idx_tasks_start_date ON tasks (startDate);
+CREATE INDEX IF NOT EXISTS idx_tasks_end_date ON tasks (endDate);
 CREATE INDEX IF NOT EXISTS idx_statuses_workspace ON statuses (workspaceId, projectId);
 CREATE INDEX IF NOT EXISTS idx_statuses_scope ON statuses (scopeKey);
+CREATE INDEX IF NOT EXISTS idx_task_attachments_task ON task_attachments (taskId);
+CREATE INDEX IF NOT EXISTS idx_task_attachments_workspace ON task_attachments (workspaceId);
+CREATE INDEX IF NOT EXISTS idx_task_attachments_scope ON task_attachments (scopeKey);
 CREATE INDEX IF NOT EXISTS idx_comments_task ON comments (taskId);
 CREATE INDEX IF NOT EXISTS idx_comments_scope ON comments (scopeKey);
 CREATE INDEX IF NOT EXISTS idx_workspace_members_workspace ON workspace_members (workspaceId);

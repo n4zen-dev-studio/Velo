@@ -280,12 +280,7 @@ export async function migrate(db: SQLiteDatabase) {
     await rebuildWorkspaceStateTable(txDb)
     await rebuildSyncStateTable(txDb)
 
-    await ensureColumn(
-      txDb,
-      "users",
-      "username",
-      "ALTER TABLE users ADD COLUMN username TEXT",
-    )
+    await ensureColumn(txDb, "users", "username", "ALTER TABLE users ADD COLUMN username TEXT")
     await ensureColumn(
       txDb,
       "users",
@@ -299,12 +294,7 @@ export async function migrate(db: SQLiteDatabase) {
       "revision",
       "ALTER TABLE users ADD COLUMN revision TEXT NOT NULL DEFAULT ''",
     )
-    await ensureColumn(
-      txDb,
-      "users",
-      "deletedAt",
-      "ALTER TABLE users ADD COLUMN deletedAt TEXT",
-    )
+    await ensureColumn(txDb, "users", "deletedAt", "ALTER TABLE users ADD COLUMN deletedAt TEXT")
     await ensureColumn(
       txDb,
       "users",
@@ -341,6 +331,8 @@ export async function migrate(db: SQLiteDatabase) {
       "ALTER TABLE tasks ADD COLUMN scopeKey TEXT NOT NULL DEFAULT 'guest'",
       "UPDATE tasks SET scopeKey = CASE WHEN createdByUserId IS NOT NULL AND createdByUserId != '' THEN 'user:' || createdByUserId ELSE 'guest' END WHERE scopeKey IS NULL OR scopeKey = ''",
     )
+    await ensureColumn(txDb, "tasks", "startDate", "ALTER TABLE tasks ADD COLUMN startDate TEXT")
+    await ensureColumn(txDb, "tasks", "endDate", "ALTER TABLE tasks ADD COLUMN endDate TEXT")
     await ensureColumn(
       txDb,
       "change_log",

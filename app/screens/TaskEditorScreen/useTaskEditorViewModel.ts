@@ -1,18 +1,25 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 
-import { getProjectById, getTaskById, listStatuses, upsertTask } from "@/services/db"
-import type { Priority, Status, Task } from "@/services/db/types"
+import { BASE_URL } from "@/config/api"
+import { createHttpClient } from "@/services/api/httpClient"
+import { listWorkspaceMembers as listWorkspaceMembersApi } from "@/services/api/workspacesApi"
+import {
+  getProjectById,
+  getTaskById,
+  listStatuses,
+  listTaskAttachments,
+  replaceTaskAttachments,
+  upsertTask,
+} from "@/services/db"
+import { upsertUserFromSync } from "@/services/db/repositories/usersRepository"
+import { listByWorkspaceId as listWorkspaceMembers } from "@/services/db/repositories/workspaceMembersRepository"
+import { resolveWorkspaceScopeKey } from "@/services/db/scopeKey"
+import type { Priority, Status, Task, TaskAttachment } from "@/services/db/types"
+import { getActiveScopeKey } from "@/services/session/scope"
 import { generateUuidV4, getCurrentUserId } from "@/services/sync/identity"
 import { refreshLocalCounts } from "@/services/sync/syncStore"
 import { useWorkspaceStore } from "@/stores/workspaceStore"
-import { getActiveScopeKey } from "@/services/session/scope"
-import { listByWorkspaceId as listWorkspaceMembers } from "@/services/db/repositories/workspaceMembersRepository"
 import { resolveUserMeta } from "@/utils/userLabel"
-import { createHttpClient } from "@/services/api/httpClient"
-import { BASE_URL } from "@/config/api"
-import { listWorkspaceMembers as listWorkspaceMembersApi } from "@/services/api/workspacesApi"
-import { upsertUserFromSync } from "@/services/db/repositories/usersRepository"
-import { resolveWorkspaceScopeKey } from "@/services/db/scopeKey"
 
 export const useTaskEditorViewModel = (taskId?: string, projectId?: string) => {
   const { activeWorkspaceId } = useWorkspaceStore()
@@ -24,6 +31,7 @@ export const useTaskEditorViewModel = (taskId?: string, projectId?: string) => {
     Array<{ userId: string | null; label: string }>
   >([])
   const [assigneeUserId, setAssigneeUserId] = useState<string | null>(null)
+  const [attachments, setAttachments] = useState<TaskAttachment[]>([])
 
   const effectiveProjectId = task?.projectId ?? projectId ?? null
 
@@ -51,10 +59,7 @@ export const useTaskEditorViewModel = (taskId?: string, projectId?: string) => {
         const options = remoteMembers.map((member) => {
           const user = member.user
           const label =
-            user?.username?.trim() ||
-            user?.email?.trim() ||
-            user?.displayName?.trim() ||
-            "Member"
+            user?.username?.trim() || user?.email?.trim() || user?.displayName?.trim() || "Member"
           return { userId: member.userId, label }
         })
         setAssigneeOptions([{ userId: null, label: "Unassigned" }, ...options])
@@ -93,6 +98,12 @@ export const useTaskEditorViewModel = (taskId?: string, projectId?: string) => {
         resolvedWorkspaceId = existing.workspaceId
       }
       setAssigneeUserId(existing?.assigneeUserId ?? currentUserId)
+      if (existing) {
+        setAttachments(await listTaskAttachments(existing.id))
+      }
+    }
+    if (!taskId) {
+      setAttachments([])
     }
     if (!taskId && projectId) {
       const project = await getProjectById(projectId)
@@ -116,14 +127,19 @@ export const useTaskEditorViewModel = (taskId?: string, projectId?: string) => {
   const priorityOptions: Priority[] = ["low", "medium", "high"]
 
   const saveTask = useCallback(
-    async (values: { title: string; description: string; statusId: string; priority: Priority }) => {
+    async (values: {
+      title: string
+      description: string
+      statusId: string
+      priority: Priority
+      startDate: string | null
+      endDate: string | null
+    }) => {
       setIsSaving(true)
       const now = new Date().toISOString()
       const currentUserId = await getCurrentUserId()
       const scopeKey = await resolveWorkspaceScopeKey(workspaceId)
-      const nextRevision = task?.revision
-        ? `${task.revision}-${Date.now()}`
-        : `rev-${Date.now()}`
+      const nextRevision = task?.revision ? `${task.revision}-${Date.now()}` : `rev-${Date.now()}`
 
       const payload: Task = {
         id: task?.id ?? (await generateUuidV4()),
@@ -133,8 +149,10 @@ export const useTaskEditorViewModel = (taskId?: string, projectId?: string) => {
         description: values.description,
         statusId: values.statusId,
         priority: values.priority,
-        assigneeUserId: assigneeUserId === null ? null : assigneeUserId ?? currentUserId,
+        assigneeUserId: assigneeUserId === null ? null : (assigneeUserId ?? currentUserId),
         createdByUserId: task?.createdByUserId ?? currentUserId,
+        startDate: values.startDate,
+        endDate: values.endDate,
         updatedAt: now,
         revision: nextRevision,
         deletedAt: null,
@@ -142,11 +160,22 @@ export const useTaskEditorViewModel = (taskId?: string, projectId?: string) => {
       }
 
       await upsertTask(payload)
+      await replaceTaskAttachments(
+        payload.id,
+        workspaceId,
+        attachments.map((attachment) => ({
+          ...attachment,
+          taskId: payload.id,
+          workspaceId,
+          updatedAt: now,
+          scopeKey,
+        })),
+      )
       await refreshLocalCounts()
       setIsSaving(false)
       return payload
     },
-    [assigneeUserId, effectiveProjectId, task, workspaceId],
+    [assigneeUserId, attachments, effectiveProjectId, task, workspaceId],
   )
 
   const defaultValues = useMemo(() => {
@@ -155,6 +184,8 @@ export const useTaskEditorViewModel = (taskId?: string, projectId?: string) => {
       description: task?.description ?? "",
       statusId: task?.statusId ?? statuses[0]?.id ?? "",
       priority: task?.priority ?? "medium",
+      startDate: task?.startDate ?? null,
+      endDate: task?.endDate ?? null,
     }
   }, [task, statuses])
 
@@ -168,5 +199,7 @@ export const useTaskEditorViewModel = (taskId?: string, projectId?: string) => {
     assigneeOptions,
     assigneeUserId,
     setAssigneeUserId,
+    attachments,
+    setAttachments,
   }
 }

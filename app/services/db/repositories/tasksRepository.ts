@@ -9,11 +9,15 @@ import {
   queryFirst,
   queryFirstTx,
 } from "@/services/db/queries"
-import type { Priority, Task } from "@/services/db/types"
-import { decryptText, encryptText } from "@/utils/crypto"
 import { enqueueOp } from "@/services/db/repositories/changeLogRepository"
+import {
+  listAllDataScopeKeys,
+  resolveScopeKeyForTaskId,
+  resolveWorkspaceScopeKey,
+} from "@/services/db/scopeKey"
+import type { Priority, Task } from "@/services/db/types"
 import { generateUuidV4, getCurrentUserId } from "@/services/sync/identity"
-import { listAllDataScopeKeys, resolveScopeKeyForTaskId, resolveWorkspaceScopeKey } from "@/services/db/scopeKey"
+import { decryptText, encryptText } from "@/utils/crypto"
 
 interface TaskRow {
   id: string
@@ -25,6 +29,8 @@ interface TaskRow {
   priority: Priority
   assigneeUserId: string | null
   createdByUserId: string
+  startDate: string | null
+  endDate: string | null
   updatedAt: string
   revision: string
   deletedAt: string | null
@@ -40,7 +46,12 @@ export async function upsertTaskFromSync(task: Task, db?: SQLiteDatabase) {
 }
 
 export async function markTaskDeleted(taskId: string, deletedAt: string) {
-  return markTaskDeletedInternal(taskId, deletedAt, { enqueue: true, useTransaction: true }, undefined)
+  return markTaskDeletedInternal(
+    taskId,
+    deletedAt,
+    { enqueue: true, useTransaction: true },
+    undefined,
+  )
 }
 
 export async function markTaskDeletedFromSync(
@@ -61,7 +72,8 @@ async function upsertTaskInternal(
   const runner = async (txDb: SQLiteDatabase, useTxRunner: boolean) => {
     const exec = useTxRunner ? executeTx : execute
     const queryFirstFn = useTxRunner ? queryFirstTx : queryFirst
-    const scopeKey = task.scopeKey ?? (await resolveWorkspaceScopeKey(task.workspaceId, undefined, txDb))
+    const scopeKey =
+      task.scopeKey ?? (await resolveWorkspaceScopeKey(task.workspaceId, undefined, txDb))
     const existing = await queryFirstFn<TaskRow>(
       txDb,
       "SELECT * FROM tasks WHERE id = ? AND scopeKey = ?",
@@ -81,11 +93,13 @@ async function upsertTaskInternal(
           priority,
           assigneeUserId,
           createdByUserId,
+          startDate,
+          endDate,
           updatedAt,
           revision,
           deletedAt,
           scopeKey
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           projectId = excluded.projectId,
           workspaceId = excluded.workspaceId,
@@ -95,6 +109,8 @@ async function upsertTaskInternal(
           priority = excluded.priority,
           assigneeUserId = excluded.assigneeUserId,
           createdByUserId = excluded.createdByUserId,
+          startDate = excluded.startDate,
+          endDate = excluded.endDate,
           updatedAt = excluded.updatedAt,
           revision = excluded.revision,
           deletedAt = excluded.deletedAt,
@@ -109,6 +125,8 @@ async function upsertTaskInternal(
         task.priority,
         task.assigneeUserId,
         task.createdByUserId,
+        task.startDate,
+        task.endDate,
         task.updatedAt,
         task.revision,
         task.deletedAt,
@@ -142,6 +160,8 @@ async function upsertTaskInternal(
             statusId: task.statusId,
             priority: task.priority,
             assigneeUserId: task.assigneeUserId,
+            startDate: task.startDate,
+            endDate: task.endDate,
             updatedAt: task.updatedAt,
             revision: task.revision,
             deletedAt: task.deletedAt,
@@ -167,7 +187,15 @@ async function upsertTaskInternal(
         txDb,
         `INSERT INTO task_events (id, taskId, type, payload, createdAt, createdByUserId, scopeKey)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [await generateUuidV4(), task.id, "STATUS_CHANGED", eventPayload, task.updatedAt, userId, scopeKey],
+        [
+          await generateUuidV4(),
+          task.id,
+          "STATUS_CHANGED",
+          eventPayload,
+          task.updatedAt,
+          userId,
+          scopeKey,
+        ],
       )
     }
   }
@@ -259,6 +287,8 @@ async function markTaskDeletedInternal(
             statusId: existing.statusId,
             priority: existing.priority,
             assigneeUserId: existing.assigneeUserId,
+            startDate: existing.startDate,
+            endDate: existing.endDate,
             updatedAt: deletedAt,
             revision: nextRevision,
             deletedAt,
