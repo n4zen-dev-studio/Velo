@@ -80,6 +80,9 @@ async function upsertTaskInternal(
       [task.id, scopeKey],
     )
     const encryptedDescription = await encryptText(task.description)
+    const nextStartDate =
+      task.startDate === undefined ? (existing?.startDate ?? null) : task.startDate
+    const nextEndDate = task.endDate === undefined ? (existing?.endDate ?? null) : task.endDate
 
     await exec(
       txDb,
@@ -125,8 +128,8 @@ async function upsertTaskInternal(
         task.priority,
         task.assigneeUserId,
         task.createdByUserId,
-        task.startDate,
-        task.endDate,
+        nextStartDate,
+        nextEndDate,
         task.updatedAt,
         task.revision,
         task.deletedAt,
@@ -160,8 +163,8 @@ async function upsertTaskInternal(
             statusId: task.statusId,
             priority: task.priority,
             assigneeUserId: task.assigneeUserId,
-            startDate: task.startDate,
-            endDate: task.endDate,
+            startDate: nextStartDate,
+            endDate: nextEndDate,
             updatedAt: task.updatedAt,
             revision: task.revision,
             deletedAt: task.deletedAt,

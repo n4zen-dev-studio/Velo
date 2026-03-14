@@ -54,6 +54,8 @@ model Task {
   priority       String
   assigneeUserId String?  @map("assigneeuserid") @db.Uuid
   createdByUserId String  @map("createdbyuserid") @db.Uuid
+  startDate      DateTime? @map("startdate")
+  endDate        DateTime? @map("enddate")
   updatedAt      DateTime @map("updatedat")
   revision       String
   deletedAt      DateTime? @map("deletedat")
