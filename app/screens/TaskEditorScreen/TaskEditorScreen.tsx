@@ -25,7 +25,7 @@ import { GlassCard } from "@/components/GlassCard"
 import { Screen } from "@/components/Screen"
 import { Text } from "@/components/Text"
 import { TextField } from "@/components/TextField"
-import { goToConflictResolution } from "@/navigation/navigationActions"
+import { goToConflictResolution, goToProjectsTab } from "@/navigation/navigationActions"
 import type { HomeStackScreenProps } from "@/navigators/navigationTypes"
 import { hasOpenConflict } from "@/services/db/repositories/conflictsRepository"
 import type { TaskAttachment } from "@/services/db/types"
@@ -37,6 +37,7 @@ import type { ThemedStyle } from "@/theme/types"
 import { formatDateTime } from "@/utils/dateFormat"
 
 import { useTaskEditorViewModel } from "./useTaskEditorViewModel"
+import { goBack } from "@/navigators/navigationUtilities"
 
 export function TaskEditorScreen() {
   const { themed, theme } = useAppTheme()
@@ -102,7 +103,7 @@ export function TaskEditorScreen() {
     }
   }
 
-  const { control, handleSubmit, setValue, watch, reset } = useForm<{
+  const { control, handleSubmit, setValue, watch, reset, register } = useForm<{
     title: string
     description: string
     statusId: string
@@ -117,6 +118,11 @@ export function TaskEditorScreen() {
   useEffect(() => {
     reset(defaultValues)
   }, [defaultValues, reset])
+
+  useEffect(() => {
+    register("startDate")
+    register("endDate")
+  }, [register])
 
   const priorityValue = watch("priority")
   const statusValue = watch("statusId")
@@ -190,7 +196,9 @@ export function TaskEditorScreen() {
   const onSubmit = handleSubmit(async (values) => {
     const saved = await saveTask(values)
     if (task) {
-      navigation.replace("TaskDetail", { taskId: saved.id })
+      // navigation.replace("TaskDetail", { taskId: saved.id })
+      navigation.replace("ProjectDetail", { workspaceId : saved.workspaceId })
+      // goBack()
       return
     }
     navigation.goBack()

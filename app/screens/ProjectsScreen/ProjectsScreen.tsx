@@ -972,8 +972,15 @@ const $cardActionRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.xs,
 })
 
-const $inlineAction: ThemedStyle<ViewStyle> = () => ({
+const $inlineAction: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexGrow: 1,
+  minHeight: 38,
+  justifyContent: "center",
+  alignItems: "center",
+  paddingVertical: spacing.xs,
+  paddingHorizontal: spacing.md,
+  overflow: "hidden",
+  position: "relative",
 })
 
 const $expandedContent: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({

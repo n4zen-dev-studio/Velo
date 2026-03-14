@@ -24,7 +24,7 @@ export function SyncHealthCard(props: {
 
   return (
     <LinearGradient
-      colors={["rgba(71, 28, 92, 0.98)", "rgba(19, 8, 25, 0.94)"]}
+      colors={["rgba(71, 28, 92, 0.42)", "rgba(19, 8, 25, 0.69)"]}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
       style={themed($gradientCard)}

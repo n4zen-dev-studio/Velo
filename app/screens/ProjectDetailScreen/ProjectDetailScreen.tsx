@@ -1,6 +1,8 @@
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useMemo, useRef, useState } from "react"
 import {
   Modal,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   Pressable,
   ScrollView,
   TextStyle,
@@ -59,7 +61,36 @@ export function ProjectDetailScreen() {
   const [members, setMembers] = useState<MemberSummary[]>([])
   const [movingTaskId, setMovingTaskId] = useState<string | null>(null)
   const [isWorkspacePickerOpen, setIsWorkspacePickerOpen] = useState(false)
+  const boardScrollRef = useRef<ScrollView>(null)
+  const [activeLaneIndex, setActiveLaneIndex] = useState(0)
+  const [laneOffsets, setLaneOffsets] = useState<number[]>([])
 
+  const onBoardScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const x = event.nativeEvent.contentOffset.x
+
+    if (!laneOffsets.length) return
+
+    let closestIndex = 0
+    let closestDistance = Math.abs(laneOffsets[0] - x)
+
+    for (let i = 1; i < laneOffsets.length; i++) {
+      const distance = Math.abs(laneOffsets[i] - x)
+      if (distance < closestDistance) {
+        closestDistance = distance
+        closestIndex = i
+      }
+    }
+
+    if (closestIndex !== activeLaneIndex) {
+      setActiveLaneIndex(closestIndex)
+    }
+  }
+
+  const scrollToLane = (index: number) => {
+    const x = laneOffsets[index] ?? 0
+    boardScrollRef.current?.scrollTo({ x, animated: true })
+    setActiveLaneIndex(index)
+  }
   const workspace = useMemo(
     () => workspaces.find((item) => item.id === workspaceId) ?? null,
     [workspaceId, workspaces],
@@ -232,7 +263,7 @@ export function ProjectDetailScreen() {
   )
 
   const fabBottom = Math.max(insets.bottom, 14) + 78
-  const boardHeight = Math.max((height*0.55) - fabBottom, 320)
+  const boardHeight = Math.max(height * 0.5 - fabBottom, 320)
 
   const handleWorkspaceSwitch = useCallback(
     async (nextWorkspaceId: string) => {
@@ -269,7 +300,7 @@ export function ProjectDetailScreen() {
         </View>
         <Button
           text="Projects"
-          preset="glass"
+          preset="glassSmall"
           onPress={() => navigation.navigate("ProjectsHome")}
         />
       </View>
@@ -295,7 +326,11 @@ export function ProjectDetailScreen() {
       <View style={themed($statPillsRow)}>
         <ProjectStatPill label="Open" value={`${openCount}`} tone="#dfd91e" />
         <ProjectStatPill label="Done" value={`${doneCount}`} tone="#57b396" />
-        <ProjectStatPill label="Team" value={`${members.length || workspace?.membersCount || 1}`} tone="#4443ad" />
+        <ProjectStatPill
+          label="Team"
+          value={`${members.length || workspace?.membersCount || 1}`}
+          tone="#4443ad"
+        />
         <ProjectStatPill label="At risk" value={`${highPriorityTasks.length}`} tone="#cb5d1d" />
         <ProjectStatPill label="Complete" value={`${Math.round(progress * 100)}%`} tone="#14f326" />
       </View>
@@ -318,6 +353,146 @@ export function ProjectDetailScreen() {
       </View>
 
       {segment === "board" ? (
+        <View style={[themed($boardRegion), { minHeight: boardHeight }]}>
+          <View style={themed($laneJumpSection)}>
+            {/* <View style={themed($laneJumpHintRow)}>
+              <Text
+                preset="caption"
+                text="Tap a lane below to jump there, or swipe across the board"
+                style={themed($laneJumpHint)}
+              />
+            </View> */}
+
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={themed($laneJumpScroll)}
+            >
+              {lanes.map((lane, laneIndex) => {
+                const isActive = laneIndex === activeLaneIndex
+
+                return (
+                  <Pressable
+                    key={lane.status.id}
+                    onPress={() => scrollToLane(laneIndex)}
+                    style={({ pressed }) => [
+                      themed($laneJumpChip),
+                      isActive && themed($laneJumpChipActive),
+                      pressed && themed($laneJumpChipPressed),
+                    ]}
+                  >
+                    <View style={themed($laneJumpChipContent)}>
+                      <Text
+                        preset="caption"
+                        text={lane.status.name}
+                        style={[themed($laneJumpTitle), isActive && themed($laneJumpTitleActive)]}
+                      />
+                      <Text
+                        preset="caption"
+                        text={`${lane.tasks.length} tasks`}
+                        style={[themed($laneJumpCount), isActive && themed($laneJumpCountActive)]}
+                      />
+                    </View>
+                  </Pressable>
+                )
+              })}
+            </ScrollView>
+
+            <View style={themed($laneDots)}>
+              {lanes.map((lane, laneIndex) => (
+                <View
+                  key={lane.status.id}
+                  style={[
+                    themed($laneDot),
+                    laneIndex === activeLaneIndex && themed($laneDotActive),
+                  ]}
+                />
+              ))}
+            </View>
+          </View>
+          <ScrollView
+            ref={boardScrollRef}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={themed($boardScroll)}
+            onScroll={onBoardScroll}
+            scrollEventThrottle={16}
+          >
+            {lanes.map((lane, laneIndex) => (
+              <View
+                key={lane.status.id}
+                onLayout={(event) => {
+                  const x = event.nativeEvent.layout.x
+                  setLaneOffsets((prev) => {
+                    const next = [...prev]
+                    next[laneIndex] = x
+                    return next
+                  })
+                }}
+              >
+                <GlassCard style={[themed($laneCard), { height: boardHeight }]}>
+                  <View style={themed($laneHeader)}>
+                    <View>
+                      <Text preset="formLabel" text={lane.status.name} />
+                      <Text
+                        preset="caption"
+                        text={`${lane.tasks.length} tasks`}
+                        style={themed($subtitle)}
+                      />
+                    </View>
+                    <Text
+                      preset="caption"
+                      text={`${laneIndex + 1}/${lanes.length}`}
+                      style={themed($subtitle)}
+                    />
+                  </View>
+
+                  <ScrollView
+                    nestedScrollEnabled
+                    showsVerticalScrollIndicator={false}
+                    style={themed($laneTasksScroll)}
+                    contentContainerStyle={themed($stack)}
+                  >
+                    {lane.tasks.length === 0 ? (
+                      <Text
+                        preset="caption"
+                        text="No tasks in this lane."
+                        style={themed($subtitle)}
+                      />
+                    ) : (
+                      lane.tasks.map((task) => (
+                        <BoardTaskCard
+                          key={task.id}
+                          task={task}
+                          statusLabel={lane.status.name}
+                          assigneeLabel={
+                            task.assigneeUserId
+                              ? (members.find((member) => member.id === task.assigneeUserId)
+                                  ?.label ?? "Assigned")
+                              : "Unassigned"
+                          }
+                          disableBack={laneIndex === 0 || movingTaskId === task.id}
+                          disableForward={
+                            laneIndex === lanes.length - 1 || movingTaskId === task.id
+                          }
+                          onBack={() => void moveTask(task, "back")}
+                          onForward={() => void moveTask(task, "forward")}
+                          onOpen={() => navigation.navigate("TaskDetail", { taskId: task.id })}
+                        />
+                      ))
+                    )}
+                    <View style={{ height: fabBottom }} />
+                  </ScrollView>
+                </GlassCard>
+              </View>
+            ))}
+          </ScrollView>
+
+          
+        </View>
+      ) : null}
+
+      {/* {segment === "board" ? (
         <View style={[themed($boardRegion), { minHeight: boardHeight }]}>
           <ScrollView
             horizontal
@@ -380,7 +555,7 @@ export function ProjectDetailScreen() {
             ))}
           </ScrollView>
         </View>
-      ) : null}
+      ) : null} */}
 
       {segment !== "board" ? (
         <ScrollView
@@ -604,7 +779,7 @@ export function ProjectDetailScreen() {
               </View>
               <Button
                 text="Manage"
-                preset="glass"
+                preset="glassSmall"
                 onPress={() => {
                   setIsWorkspacePickerOpen(false)
                   navigation.navigate("ProjectsHome")
@@ -650,7 +825,7 @@ export function ProjectDetailScreen() {
   )
 }
 
-function ProjectStatPill({ label, value, tone }: { label: string; value: string, tone: string }) {
+function ProjectStatPill({ label, value, tone }: { label: string; value: string; tone: string }) {
   const { themed } = useAppTheme()
   return (
     <View style={themed($statPill)}>
@@ -801,6 +976,7 @@ const $screen: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   paddingHorizontal: spacing.screenHorizontal,
   paddingTop: spacing.md,
   gap: spacing.md,
+  paddingBottom: spacing.xxxl + 55,
 })
 
 const $header: ThemedStyle<ViewStyle> = ({ spacing }) => ({
@@ -1158,4 +1334,94 @@ const $fab: ThemedStyle<ViewStyle> = ({ colors, elevation }) => ({
 
 const $fabText: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.textInverse,
+})
+
+const $laneJumpSection: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  // marginTop: spacing.sm,
+  // gap: spacing.xs,
+})
+
+const $laneJumpHintRow: ThemedStyle<ViewStyle> = () => ({
+  alignItems: "center",
+  justifyContent: "center",
+})
+
+const $laneJumpHint: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.textDim,
+  opacity: 0.8,
+  textAlign: "center",
+})
+
+const $laneJumpScroll: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  paddingTop: spacing.xs,
+  paddingBottom: spacing.xs,
+  paddingRight: spacing.md,
+  gap: spacing.sm,
+})
+
+const $laneJumpChip: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+  // minWidth: 104,
+  paddingHorizontal: spacing.xs,
+  paddingVertical: spacing.sm,
+  borderRadius: 16,
+  borderWidth: 1,
+  borderColor: colors.border,
+  backgroundColor: colors.card,
+  opacity: 0.92,
+})
+
+const $laneJumpChipActive: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  borderColor: colors.tint,
+  backgroundColor: colors.palette?.primary500 + "18" || colors.tint + "18",
+})
+
+const $laneJumpChipPressed: ThemedStyle<ViewStyle> = () => ({
+  opacity: 0.75,
+})
+
+const $laneJumpChipContent: ThemedStyle<ViewStyle> = () => ({
+  alignItems: "center",
+  justifyContent: "center",
+})
+
+const $laneJumpTitle: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.text,
+  textAlign: "center",
+})
+
+const $laneJumpTitleActive: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.tint,
+})
+
+const $laneJumpCount: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.textDim,
+  marginTop: 2,
+  textAlign: "center",
+})
+
+const $laneJumpCountActive: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.text,
+  opacity: 0.9,
+})
+
+const $laneDots: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  justifyContent: "center",
+  alignItems: "center",
+  gap: spacing.xs,
+  marginVertical: spacing.xs,
+})
+
+const $laneDot: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  width: 6,
+  height: 6,
+  borderRadius: 999,
+  backgroundColor: colors.border,
+  opacity: 0.45,
+})
+
+const $laneDotActive: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  width: 18,
+  backgroundColor: colors.tint,
+  opacity: 1,
 })

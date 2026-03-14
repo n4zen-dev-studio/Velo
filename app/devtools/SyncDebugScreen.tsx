@@ -196,11 +196,11 @@ export function SyncDebugScreen() {
         <View style={themed($syncEntryRow)}>
           <View style={themed($syncEntryCopy)}>
             <Text preset="formLabel" text="Sync status" />
-            <Text
+            {/* <Text
               preset="caption"
               text="Queue health, conflict review, and recovery tools now live here."
               style={themed($muted)}
-            />
+            /> */}
           </View>
           <SyncBadge />
         </View>
@@ -219,12 +219,6 @@ export function SyncDebugScreen() {
         ) : null}
       </View>
 
-      <View style={themed($statsGrid)}>
-        {topStats.map((stat) => (
-          <CompactStatTile key={stat.label} label={stat.label} value={stat.value} />
-        ))}
-      </View>
-
       <SyncHealthCard
         healthPercent={syncMetrics.healthPercent}
         sent={syncMetrics.sent}
@@ -232,6 +226,12 @@ export function SyncDebugScreen() {
         failed={syncMetrics.failed}
         trend={syncMetrics.trend}
       />
+
+      <View style={themed($statsGrid)}>
+        {topStats.map((stat) => (
+          <CompactStatTile key={stat.label} label={stat.label} value={stat.value} />
+        ))}
+      </View>
 
       {isGuestMode ? (
         <GlassCard>
@@ -556,8 +556,8 @@ const $statsCell: ThemedStyle<ViewStyle> = () => ({
 })
 
 const $statTile: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
-  minHeight: 72,
-  borderRadius: radius.medium,
+  minHeight: 52,
+  borderRadius: radius.pill,
   borderWidth: 1,
   borderColor: colors.borderSubtle,
   backgroundColor: colors.surface,
