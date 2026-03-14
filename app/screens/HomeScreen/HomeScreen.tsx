@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useState } from "react"
-import { Pressable, RefreshControl, TextStyle, View, ViewStyle } from "react-native"
+import {
+  Dimensions,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  TextStyle,
+  View,
+  ViewStyle,
+} from "react-native"
 import { useNavigation } from "@react-navigation/native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
@@ -38,6 +46,10 @@ type AlertItem = {
   tone: string
 }
 
+const { width: SCREEN_WIDTH } = Dimensions.get("window")
+const CARD_WIDTH = SCREEN_WIDTH * 0.86
+const CARD_GAP = 12
+
 export function HomeScreen() {
   const { themed, theme } = useAppTheme()
   const insets = useSafeAreaInsets()
@@ -56,7 +68,13 @@ export function HomeScreen() {
   const [pendingInvitesCount, setPendingInvitesCount] = useState(0)
   const [projectStreams, setProjectStreams] = useState<Project[]>([])
   const authSession = useAuthSession()
-  
+  const [activeChartIndex, setActiveChartIndex] = useState(0)
+
+  const onChartsScroll = (event: any) => {
+    const x = event.nativeEvent.contentOffset.x
+    const index = Math.round(x / (CARD_WIDTH + CARD_GAP))
+    setActiveChartIndex(index)
+  }
 
   useEffect(() => {
     let mounted = true
@@ -154,7 +172,7 @@ export function HomeScreen() {
 
   const statusBreakdown = useMemo(
     () => [
-      { label: "To do", value: todoCount, tone: theme.colors.warning },
+      { label: "To do", value: todoCount, tone: theme.colors.glowStrong },
       { label: "In progress", value: inProgressCount, tone: theme.colors.primary },
       { label: "Done", value: doneCount, tone: theme.colors.success },
     ],
@@ -412,8 +430,101 @@ export function HomeScreen() {
       </View>
 
       <View style={themed($content)}>
+        <View style={themed($chartsCarouselWrap)}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            decelerationRate="fast"
+            snapToInterval={CARD_WIDTH + CARD_GAP}
+            snapToAlignment="start"
+            contentContainerStyle={themed($chartsCarouselContent)}
+            onScroll={onChartsScroll}
+            scrollEventThrottle={16}
+          >
+            <GlassCard style={[themed($chartCard), themed($chartCarouselCard)]}>
+              <View style={themed($compactSectionHeader)}>
+                <Text preset="formLabel" text="Task status" />
+                <Text
+                  preset="caption"
+                  text={`${doneCount}/${Math.max(allTasks.length, 1)} complete`}
+                  style={themed($mutedText)}
+                />
+              </View>
 
-        <GlassCard style={themed($chartCard)}>
+              <DashboardTaskStatusChart
+                items={statusBreakdown}
+                total={allTasks.length}
+                completionLabel={`${Math.round((doneCount / Math.max(allTasks.length, 1)) * 100)}% completed`}
+              />
+
+              <View style={themed($trendRow)}>
+                <View>
+                  <Text preset="caption" text="Completion trend" style={themed($mutedText)} />
+                  <Text
+                    preset="caption"
+                    text={`${doneCount}/${Math.max(allTasks.length, 1)} tasks finished`}
+                    style={themed($legendValue)}
+                  />
+                </View>
+
+                <View style={themed($sparkRow)}>
+                  {completionTrend.map((point) => (
+                    <View key={point.key} style={themed($sparkColumn)}>
+                      <View style={themed($sparkTrack)}>
+                        <View
+                          style={[
+                            themed($sparkFill),
+                            {
+                              height: `${Math.max(
+                                (point.value / maxCompletionValue) * 100,
+                                point.value > 0 ? 20 : 0,
+                              )}%`,
+                            },
+                          ]}
+                        />
+                      </View>
+                      <Text preset="caption" text={point.label} style={themed($miniBarLabel)} />
+                    </View>
+                  ))}
+                </View>
+              </View>
+            </GlassCard>
+
+            <GlassCard style={[themed($chartCard), themed($chartCarouselCard)]}>
+              <View style={themed($compactSectionHeader)}>
+                <Text preset="formLabel" text="Near timeline" />
+                <Text
+                  preset="caption"
+                  text={dashboardTimelineItems.length > 0 ? "Next 7 days" : "No dated tasks yet"}
+                  style={themed($mutedText)}
+                />
+              </View>
+
+              <DashboardTimelineGraph
+                days={timelineDays}
+                items={dashboardTimelineItems}
+                emptyLabel="Add start or end dates to tasks to visualize active work across the week."
+              />
+            </GlassCard>
+          </ScrollView>
+
+          <View style={themed($carouselHintRow)}>
+            <Text preset="caption" text="Swipe for more" style={themed($carouselHintText)} />
+          </View>
+
+          <View style={themed($carouselDots)}>
+            {[0, 1].map((index) => (
+              <View
+                key={index}
+                style={[
+                  themed($carouselDot),
+                  activeChartIndex === index && themed($carouselDotActive),
+                ]}
+              />
+            ))}
+          </View>
+        </View>
+        {/* <GlassCard style={themed($chartCard)}>
           <View style={themed($compactSectionHeader)}>
             <Text preset="formLabel" text="Task status" />
             <Text
@@ -471,7 +582,7 @@ export function HomeScreen() {
             items={dashboardTimelineItems}
             emptyLabel="Add start or end dates to tasks to visualize active work across the week."
           />
-        </GlassCard>
+        </GlassCard> */}
 
         <View style={themed($statsGrid)}>
           {statCards.map((card) => (
@@ -484,7 +595,6 @@ export function HomeScreen() {
           ))}
         </View>
 
-        
         <GlassCard style={themed($actionsCard)}>
           <View style={themed($compactSectionHeader)}>
             <Text preset="formLabel" text="Quick actions" />
@@ -705,7 +815,7 @@ const $headerTitleWrap: ThemedStyle<ViewStyle> = () => ({
 
 const $headerTitle: ThemedStyle<TextStyle> = () => ({
   lineHeight: 22,
-    paddingBottom: 5,
+  paddingBottom: 5,
 })
 
 const $headerCaption: ThemedStyle<TextStyle> = ({ colors }) => ({
@@ -946,4 +1056,50 @@ const $agendaTitleRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexDirection: "row",
   alignItems: "center",
   gap: spacing.xs,
+})
+
+const $chartsCarouselWrap: ThemedStyle<ViewStyle> = () => ({
+  marginTop: 4,
+})
+
+const $chartsCarouselContent: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  paddingRight: spacing.md,
+})
+
+const $chartCarouselCard: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  width: CARD_WIDTH,
+  marginRight: CARD_GAP,
+  flexShrink: 0,
+})
+
+const $carouselHintRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  alignItems: "center",
+  marginTop: spacing.xs,
+})
+
+const $carouselHintText = ({ colors }: any): TextStyle => ({
+  color: colors.textDim,
+  opacity: 0.75,
+})
+
+const $carouselDots: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  justifyContent: "center",
+  alignItems: "center",
+  gap: spacing.xs,
+  marginTop: spacing.xs,
+})
+
+const $carouselDot: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  width: 6,
+  height: 6,
+  borderRadius: 999,
+  backgroundColor: colors.border,
+  opacity: 0.5,
+})
+
+const $carouselDotActive: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  width: 18,
+  backgroundColor: colors.tint,
+  opacity: 1,
 })

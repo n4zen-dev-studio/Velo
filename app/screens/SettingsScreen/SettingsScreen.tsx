@@ -359,7 +359,7 @@ export function SettingsScreen() {
         </View>
       </GlassCard>
 
-      <GlassCard>
+      {/* <GlassCard>
         <View style={themed($cardHeaderRow)}>
           <View style={themed($titleBlock)}>
             <Text preset="subheading" text="Projects" />
@@ -381,10 +381,10 @@ export function SettingsScreen() {
             <Text preset="formLabel" text="Manage Projects" />
           </View>
           <View style={themed($inlineActions)}>
-            <Button text="Open projects" preset="glass" onPress={goToProjectsTab} />
+            <Button text="Open projects" preset="glassSmall" onPress={goToProjectsTab} />
           </View>
         </View>
-      </GlassCard>
+      </GlassCard> */}
 
       <GlassCard>
         <CompactSectionHeader title="Theme" subtitle="Appearance" />
@@ -394,7 +394,7 @@ export function SettingsScreen() {
             <Text preset="formLabel" text="Switch light or dark theme" />
           </View>
           <View style={themed($inlineActions)}>
-            <Button text="Switch theme" onPress={toggleTheme} preset="glass" />
+            <Button text="Switch theme" onPress={toggleTheme} preset="glassSmall" />
           </View>
         </View>
         <CompactSectionHeader title="Security" subtitle={`${options.length} controls`} />
@@ -422,7 +422,7 @@ export function SettingsScreen() {
             <Text preset="formLabel" text="Sign out or clear local session state" />
           </View>
           <View style={themed($inlineActions)}>
-            <Button text="Logout" preset="glass" onPress={handleLogout} />
+            <Button text="Logout" preset="glassSmall" onPress={handleLogout} />
           </View>
         </View>
       </GlassCard>
@@ -638,7 +638,7 @@ const $toggleLeft: ThemedStyle<ViewStyle> = ({ spacing }) => ({
 
 const $groupedList: ThemedStyle<ViewStyle> = ({ radius }) => ({
   borderWidth: 0,
-  borderRadius: radius.large,
+  // borderRadius: radius.large,
   overflow: "hidden",
 })
 

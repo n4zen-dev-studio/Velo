@@ -15,8 +15,7 @@ import type { ThemedStyle, ThemedStyleArray } from "@/theme/types"
 import { LinearGradient } from "expo-linear-gradient"
 import { Text, TextProps } from "./Text"
 
-type Presets = "default" | "filled" | "reversed" | "glass"
-
+type Presets = "default" | "filled" | "reversed" | "glass" | "glassSmall"
 export interface ButtonAccessoryProps {
   style: StyleProp<any>
   pressableState: PressableStateCallbackType
@@ -109,8 +108,9 @@ export function Button(props: ButtonProps) {
               />
             </>
           ) : null}
-          {preset === "glass" ? <View pointerEvents="none" style={themed($glassSheen)} /> : null}
-
+          {(preset === "glass" || preset === "glassSmall") ? (
+            <View pointerEvents="none" style={themed($glassSheen)} />
+          ) : null}
           {!!LeftAccessory && (
             <LeftAccessory style={$leftAccessoryStyle} pressableState={state} disabled={disabled} />
           )}
@@ -145,6 +145,24 @@ const $baseViewStyle: ThemedStyle<ViewStyle> = ({ spacing, radius }) => ({
 
 const $baseTextStyle: ThemedStyle<TextStyle> = ({ typography }) => ({
   ...typography.roles.button,
+  textAlign: "center",
+  flexShrink: 1,
+  zIndex: 2,
+})
+
+const $smallViewStyle: ThemedStyle<ViewStyle> = ({ spacing, radius }) => ({
+  minHeight: 38,
+  borderRadius: radius.pill,
+  justifyContent: "center",
+  alignItems: "center",
+  paddingVertical: spacing.xs,
+  paddingHorizontal: spacing.md,
+  overflow: "hidden",
+  position: "relative",
+})
+
+const $smallTextStyle: ThemedStyle<TextStyle> = ({ typography }) => ({
+  ...typography.roles.label,
   textAlign: "center",
   flexShrink: 1,
   zIndex: 2,
@@ -231,6 +249,15 @@ const $viewPresets: Record<Presets, ThemedStyleArray<ViewStyle>> = {
       borderColor: colors.borderStrong,
     }),
   ],
+  glassSmall: [
+    $styles.row,
+    $smallViewStyle,
+    ({ colors }) => ({
+      backgroundColor: colors.surfaceGlass,
+      borderWidth: 1,
+      borderColor: colors.borderStrong,
+    }),
+  ],
 }
 
 const $textPresets: Record<Presets, ThemedStyleArray<TextStyle>> = {
@@ -238,6 +265,7 @@ const $textPresets: Record<Presets, ThemedStyleArray<TextStyle>> = {
   filled: [$baseTextStyle, ({ colors }) => ({ color: colors.text })],
   reversed: [$baseTextStyle, ({ colors }) => ({ color: colors.text })],
   glass: [$baseTextStyle, ({ colors }) => ({ color: colors.text })],
+  glassSmall: [$smallTextStyle, ({ colors }) => ({ color: colors.text })],
 }
 
 const $pressedViewPresets: Record<Presets, ThemedStyle<ViewStyle>> = {
@@ -245,6 +273,7 @@ const $pressedViewPresets: Record<Presets, ThemedStyle<ViewStyle>> = {
   filled: () => ({ transform: [{ scale: 0.985 }], opacity: 0.94 }),
   reversed: () => ({ transform: [{ scale: 0.985 }], opacity: 0.92 }),
   glass: () => ({ transform: [{ scale: 0.985 }], opacity: 0.92 }),
+  glassSmall: () => ({ transform: [{ scale: 0.97 }], opacity: 0.92 }),
 }
 
 const $pressedTextPresets: Record<Presets, ThemedStyle<TextStyle>> = {
@@ -252,6 +281,7 @@ const $pressedTextPresets: Record<Presets, ThemedStyle<TextStyle>> = {
   filled: () => ({ opacity: 0.96 }),
   reversed: () => ({ opacity: 0.96 }),
   glass: () => ({ opacity: 0.96 }),
+  glassSmall: () => ({ opacity: 0.96 }),
 }
 
 const $disabledViewPreset: ThemedStyle<ViewStyle> = () => ({

@@ -103,6 +103,21 @@ export function goToTaskEditor(params?: { taskId?: string; projectId?: string })
   )
 }
 
+
+export function goToProjectsTabMain() {
+  if (!navigationRef.isReady()) return
+  navigationRef.navigate(
+    "AuthGate" as never,
+    {
+      screen: "MainTabs",
+      params: { 
+        screen: "ProjectsTab",
+        params: { screen: "ProjectDetail"},
+      },
+    } as never,
+  )
+}
+
 export function goToConflictList() {
   if (!navigationRef.isReady()) return
   navigationRef.navigate(

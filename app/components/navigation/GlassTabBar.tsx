@@ -58,8 +58,8 @@ export function GlassTabBar({
                 ? "settings"
                 : "settings-outline"
               : focused
-                ? "analytics"
-                : "analytics-outline"
+                ? "sync"
+                : "sync-outline"
 
       return { route, index, focused, label, iconName }
     })
