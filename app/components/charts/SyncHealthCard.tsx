@@ -19,12 +19,16 @@ export function SyncHealthCard(props: {
   failed: number
   trend: TrendPoint[]
 }) {
-  const { themed } = useAppTheme()
+  const { themed, theme } = useAppTheme()
   const maxTotal = Math.max(...props.trend.map((point) => point.total), 1)
 
   return (
     <LinearGradient
-      colors={["rgba(71, 28, 92, 0.42)", "rgba(19, 8, 25, 0.69)"]}
+      colors={
+        theme.isDark
+          ? ["rgba(71, 28, 92, 0.42)", "rgba(19, 8, 25, 0.69)"]
+          : ["rgba(186, 120, 255, 0.16)", "rgba(255, 255, 255, 0.96)"]
+      }
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
       style={themed($gradientCard)}
@@ -104,17 +108,17 @@ const $copy: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.xxxs,
 })
 
-const $eyebrow: ThemedStyle<TextStyle> = () => ({
-  color: "rgba(226, 214, 255, 0.76)",
+const $eyebrow: ThemedStyle<TextStyle> = ({ colors, isDark }) => ({
+  color: isDark ? "rgba(226, 214, 255, 0.76)" : "rgba(109, 40, 217, 0.78)",
   textTransform: "uppercase",
 })
 
-const $heroValue: ThemedStyle<TextStyle> = () => ({
-  color: "#FFFFFF",
+const $heroValue: ThemedStyle<TextStyle> = ({  isDark }) => ({
+  color: isDark ? "#FFFFFF" : "#1F1230",
 })
 
-const $heroMeta: ThemedStyle<TextStyle> = () => ({
-  color: "rgba(237, 221, 255, 0.72)",
+const $heroMeta: ThemedStyle<TextStyle> = ({ colors, isDark }) => ({
+  color: isDark ? "rgba(237, 221, 255, 0.72)" : "rgba(76, 29, 149, 0.72)",
 })
 
 const $ringWrap: ThemedStyle<ViewStyle> = () => ({
@@ -122,18 +126,18 @@ const $ringWrap: ThemedStyle<ViewStyle> = () => ({
   alignItems: "flex-end",
 })
 
-const $ringTrack: ThemedStyle<ViewStyle> = () => ({
+const $ringTrack: ThemedStyle<ViewStyle> = ({ isDark }) => ({
   width: "100%",
   height: 10,
   borderRadius: 999,
-  backgroundColor: "rgba(255,255,255,0.14)",
+  backgroundColor: isDark ? "rgba(255,255,255,0.14)" : "rgba(109, 40, 217, 0.12)",
   overflow: "hidden",
 })
 
-const $ringFill: ThemedStyle<ViewStyle> = () => ({
+const $ringFill: ThemedStyle<ViewStyle> = ({ isDark }) => ({
   height: "100%",
   borderRadius: 999,
-  backgroundColor: "#bd66ff",
+  backgroundColor: isDark ? "#bd66ff" : "#a855f7",
 })
 
 const $trendRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
@@ -149,23 +153,23 @@ const $trendColumn: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.xxxs,
 })
 
-const $trendTrack: ThemedStyle<ViewStyle> = () => ({
+const $trendTrack: ThemedStyle<ViewStyle> = ({ isDark }) => ({
   width: "100%",
   height: 64,
   borderRadius: 16,
-  backgroundColor: "rgba(255,255,255,0.08)",
+  backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(109, 40, 217, 0.08)",
   justifyContent: "flex-end",
   overflow: "hidden",
 })
 
-const $trendFill: ThemedStyle<ViewStyle> = () => ({
+const $trendFill: ThemedStyle<ViewStyle> = ({ isDark }) => ({
   width: "100%",
-  backgroundColor: "#d064ff",
+  backgroundColor: isDark ? "#d064ff" : "#c084fc",
   borderRadius: 16,
 })
 
-const $trendRate: ThemedStyle<TextStyle> = () => ({
-  color: "#FFFFFF",
+const $trendRate: ThemedStyle<TextStyle> = ({ isDark }) => ({
+  color: isDark ? "#FFFFFF" : "#2E1065",
   fontWeight: "700",
 })
 
@@ -174,15 +178,15 @@ const $metricRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   gap: spacing.xs,
 })
 
-const $metricPill: ThemedStyle<ViewStyle> = () => ({
+const $metricPill: ThemedStyle<ViewStyle> = ({ isDark }) => ({
   flex: 1,
   borderRadius: 18,
-  backgroundColor: "rgba(255,255,255,0.08)",
+  backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.72)",
   paddingHorizontal: 12,
   paddingVertical: 10,
 })
 
-const $metricValue: ThemedStyle<TextStyle> = () => ({
-  color: "#FFFFFF",
+const $metricValue: ThemedStyle<TextStyle> = ({ isDark }) => ({
+  color: isDark ? "#FFFFFF" : "#2E1065",
   fontWeight: "700",
 })
