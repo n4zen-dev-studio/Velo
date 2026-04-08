@@ -1,0 +1,31 @@
+version: "3.9"
+
+services:
+  velo-db:
+    image: postgres:15
+    container_name: velo-db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: tasktrak
+    volumes:
+      - velo-db-data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+
+  velo-api:
+    build: ./backend
+    container_name: velo-api
+    restart: always
+    depends_on:
+      - velo-db
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@velo-db:5432/tasktrak
+      PORT: 8080
+      JWT_SECRET: your_super_secret_here
+    ports:
+      - "8081:8080"
+
+volumes:
+  velo-db-data:
