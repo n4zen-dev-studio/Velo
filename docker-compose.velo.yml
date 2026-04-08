@@ -9,6 +9,8 @@ services:
       POSTGRES_DB: tasktrak
     volumes:
       - velo-db-data:/var/lib/postgresql/data
+    networks:
+      - default
 
   velo-api:
     build:
@@ -21,6 +23,13 @@ services:
       - ./backend/.env.production
     expose:
       - "8080"
+    networks:
+      - shared-net
+      - default
+
+networks:
+  shared-net:
+    external: true
 
 volumes:
   velo-db-data:
