@@ -7,7 +7,7 @@ const extra = (Constants.expoConfig?.extra ?? {}) as { apiBaseUrl?: string }
 
 function resolveBaseUrl() {
   if (extra.apiBaseUrl) return extra.apiBaseUrl
-  if (Platform.OS === "android") return "http://10.0.2.2:8080"
+  if (__DEV__ && Platform.OS === "android") return "https://velo-api.n4zen.dev"
   return Config.apiUrl
 }
 

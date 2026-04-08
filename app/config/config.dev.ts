@@ -6,5 +6,5 @@
  * https://reactnative.dev/docs/security#storing-sensitive-info
  */
 export default {
-  apiUrl: "http://localhost:8080",
+  apiUrl: "https://velo-api.n4zen.dev",
 }
