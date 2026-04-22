@@ -4,6 +4,7 @@ import { StyleProp, View, ViewStyle } from "react-native"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
 import { RadialGlow } from "./RadialGlow"
+// import { Theme } from '../theme/types';
 
 interface GlassCardProps {
   style?: StyleProp<ViewStyle>
@@ -26,15 +27,15 @@ export function GlassCard({ children, style }: PropsWithChildren<GlassCardProps>
   )
 }
 
-const $card: ThemedStyle<ViewStyle> = ({ colors, spacing, radius, elevation }) => ({
-  backgroundColor: colors.card,
+const $card: ThemedStyle<ViewStyle> = ({ colors, spacing, radius, elevation, isDark }) => ({
+  backgroundColor: isDark ? "rgba(18, 22, 40, 0.612)" : "rgba(255, 255, 255, 0.555)",
   borderColor: colors.borderSubtle,
   borderRadius: radius.large,
   borderWidth: 1,
   padding: spacing.cardPadding,
   overflow: "hidden",
   position: "relative",
-  ...elevation.card,
+  // ...elevation.card,
 })
 
 const $wash: ThemedStyle<ViewStyle> = () => ({

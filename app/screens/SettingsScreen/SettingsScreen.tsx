@@ -1,6 +1,8 @@
 import { useEffect, useState, type ReactNode } from "react"
 import { Alert, Modal, Pressable, View, ViewStyle, TextStyle } from "react-native"
+import { useSafeAreaInsets } from "react-native-safe-area-context"
 
+import { AnimatedBackground } from "@/components/AnimatedBackground"
 import { Button } from "@/components/Button"
 import { GlassCard } from "@/components/GlassCard"
 import { HeaderAvatar } from "@/components/HeaderAvatar"
@@ -266,100 +268,110 @@ export function SettingsScreen() {
   }
 
   return (
-    <Screen
-      preset="scroll"
-      safeAreaEdges={["top", "bottom"]}
-      contentContainerStyle={themed($screen)}
-    >
-      <View style={themed($header)}>
-        <View style={themed($headerRow)}>
-          <View style={themed($headerText)}>
-            <Text preset="overline" text="Settings" />
-            <Text preset="heading" text="Preferences" />
-            <Text
-              preset="caption"
-              text="Sync, theme, projects, and account controls."
-              style={themed($muted)}
-            />
-          </View>
-          <HeaderAvatar onPress={() => authSession.isAuthenticated && goToProfile()} />
-        </View>
-        <View style={themed($headerMetaRow)}>
-          <CompactMetaPill
-            label={syncStatus.isOnline ? "Online" : "Offline"}
-            value={syncStatus.pendingCount > 0 ? `${syncStatus.pendingCount} queued` : "Ready"}
-          />
-          <CompactMetaPill label="Projects" value={`${workspaces.length}`} />
-          <CompactMetaPill label="Current" value={activeWorkspace?.label ?? "Personal"} />
-        </View>
-      </View>
-
-      <GlassCard>
-        <CompactSectionHeader
-          title="Sync"
-          subtitle={syncPreferences.syncMode === "manual" ? "Manual mode" : "Automatic mode"}
-        />
-        <View style={themed($syncStack)}>
-          <View style={themed($syncBlock)}>
-            <Text preset="caption" text="Sync mode" style={themed($subsectionLabel)} />
-            <View style={themed($segmentedRow)}>
-              <SegmentOption
-                label="Manual"
-                selected={syncPreferences.syncMode === "manual"}
-                onPress={() => void setSyncMode("manual")}
-              />
-              <SegmentOption
-                label="Automatic"
-                selected={syncPreferences.syncMode === "automatic"}
-                onPress={() => void setSyncMode("automatic")}
-              />
-            </View>
-          </View>
-
-          <View
-            style={[
-              themed($syncBlock),
-              syncPreferences.syncMode === "manual" ? themed($disabledSection) : null,
-            ]}
-          >
-            <Text preset="caption" text="Connection preference" style={themed($subsectionLabel)} />
-            <View style={themed($segmentedRow)}>
-              <SegmentOption
-                label="Wi-Fi only"
-                selected={syncPreferences.syncNetworkPolicy === "wifi_only"}
-                onPress={() => void setSyncNetworkPolicy("wifi_only")}
-                disabled={syncPreferences.syncMode === "manual"}
-              />
-              <SegmentOption
-                label="Any internet"
-                selected={syncPreferences.syncNetworkPolicy === "any"}
-                onPress={() => void setSyncNetworkPolicy("any")}
-                disabled={syncPreferences.syncMode === "manual"}
-              />
-            </View>
-          </View>
-
-          <View style={themed($syncHintCard)}>
-            <Text preset="caption" text={syncBehaviorText} style={themed($muted)} />
-            <View style={themed($syncMetaRow)}>
+    <AnimatedBackground>
+      <Screen
+        preset="scroll"
+        backgroundColor="transparent"
+        contentContainerStyle={themed([
+          $screen,
+          { paddingTop: useSafeAreaInsets().top, paddingBottom: useSafeAreaInsets().bottom },
+        ])}
+      >
+        <View style={themed($header)}>
+          <View style={themed($headerRow)}>
+            <View style={themed($headerText)}>
+              <Text preset="overline" text="Settings" />
+              <Text preset="heading" text="Preferences" />
               <Text
                 preset="caption"
-                text={`Connection: ${formatConnectionLabel(syncStatus.networkType)}`}
+                text="Sync, theme, projects, and account controls."
                 style={themed($muted)}
               />
-              <Text
-                preset="caption"
-                text={
-                  syncStatus.pendingCount > 0 ? `${syncStatus.pendingCount} queued` : "Queue clear"
-                }
-                style={themed($strongText)}
-              />
             </View>
+            <HeaderAvatar onPress={() => authSession.isAuthenticated && goToProfile()} />
+          </View>
+          <View style={themed($headerMetaRow)}>
+            <CompactMetaPill
+              label={syncStatus.isOnline ? "Online" : "Offline"}
+              value={syncStatus.pendingCount > 0 ? `${syncStatus.pendingCount} queued` : "Ready"}
+            />
+            <CompactMetaPill label="Projects" value={`${workspaces.length}`} />
+            <CompactMetaPill label="Current" value={activeWorkspace?.label ?? "Personal"} />
           </View>
         </View>
-      </GlassCard>
 
-      {/* <GlassCard>
+        <GlassCard>
+          <CompactSectionHeader
+            title="Sync"
+            subtitle={syncPreferences.syncMode === "manual" ? "Manual mode" : "Automatic mode"}
+          />
+          <View style={themed($syncStack)}>
+            <View style={themed($syncBlock)}>
+              <Text preset="caption" text="Sync mode" style={themed($subsectionLabel)} />
+              <View style={themed($segmentedRow)}>
+                <SegmentOption
+                  label="Manual"
+                  selected={syncPreferences.syncMode === "manual"}
+                  onPress={() => void setSyncMode("manual")}
+                />
+                <SegmentOption
+                  label="Automatic"
+                  selected={syncPreferences.syncMode === "automatic"}
+                  onPress={() => void setSyncMode("automatic")}
+                />
+              </View>
+            </View>
+
+            <View
+              style={[
+                themed($syncBlock),
+                syncPreferences.syncMode === "manual" ? themed($disabledSection) : null,
+              ]}
+            >
+              <Text
+                preset="caption"
+                text="Connection preference"
+                style={themed($subsectionLabel)}
+              />
+              <View style={themed($segmentedRow)}>
+                <SegmentOption
+                  label="Wi-Fi only"
+                  selected={syncPreferences.syncNetworkPolicy === "wifi_only"}
+                  onPress={() => void setSyncNetworkPolicy("wifi_only")}
+                  disabled={syncPreferences.syncMode === "manual"}
+                />
+                <SegmentOption
+                  label="Any internet"
+                  selected={syncPreferences.syncNetworkPolicy === "any"}
+                  onPress={() => void setSyncNetworkPolicy("any")}
+                  disabled={syncPreferences.syncMode === "manual"}
+                />
+              </View>
+            </View>
+
+            <View style={themed($syncHintCard)}>
+              <Text preset="caption" text={syncBehaviorText} style={themed($muted)} />
+              <View style={themed($syncMetaRow)}>
+                <Text
+                  preset="caption"
+                  text={`Connection: ${formatConnectionLabel(syncStatus.networkType)}`}
+                  style={themed($muted)}
+                />
+                <Text
+                  preset="caption"
+                  text={
+                    syncStatus.pendingCount > 0
+                      ? `${syncStatus.pendingCount} queued`
+                      : "Queue clear"
+                  }
+                  style={themed($strongText)}
+                />
+              </View>
+            </View>
+          </View>
+        </GlassCard>
+
+        {/* <GlassCard>
         <View style={themed($cardHeaderRow)}>
           <View style={themed($titleBlock)}>
             <Text preset="subheading" text="Projects" />
@@ -386,111 +398,112 @@ export function SettingsScreen() {
         </View>
       </GlassCard> */}
 
-      <GlassCard>
-        <CompactSectionHeader title="Theme" subtitle="Appearance" />
-        <View style={themed($compactActionRow)}>
-          <View style={themed($compactActionCopy)}>
-            <Text preset="caption" text="Current mode" style={themed($muted)} />
-            <Text preset="formLabel" text="Switch light or dark theme" />
-          </View>
-          <View style={themed($inlineActions)}>
-            <Button text="Switch theme" onPress={toggleTheme} preset="glassSmall" />
-          </View>
-        </View>
-        <CompactSectionHeader title="Security" subtitle={`${options.length} controls`} />
-        <View style={themed($groupedList)}>
-          {options.map((option: any, index: number) => (
-            <CompactSettingRow
-              key={option.id}
-              label={option.label}
-              helperText={option.helperText}
-              withDivider={index < options.length - 1}
-              control={
-                <Switch
-                  value={!!option.value}
-                  onValueChange={handleBiometricToggle}
-                  disabled={isUpdatingBiometric}
-                />
-              }
-            />
-          ))}
-        </View>
-        <CompactSectionHeader title="Account" subtitle="Session actions" />
-        <View style={themed($compactActionRow)}>
-          <View style={themed($compactActionCopy)}>
-            <Text preset="caption" text="Session" style={themed($muted)} />
-            <Text preset="formLabel" text="Sign out or clear local session state" />
-          </View>
-          <View style={themed($inlineActions)}>
-            <Button text="Logout" preset="glassSmall" onPress={handleLogout} />
-          </View>
-        </View>
-      </GlassCard>
-
-      {/* Logout modal */}
-      <Modal visible={showLogoutModal} transparent animationType="fade">
-        <View style={themed($backdrop)}>
-          <GlassCard style={themed($modalCard)}>
-            <Text preset="heading" text="Sign out" />
-            <Text
-              preset="formHelper"
-              text={
-                authSession.isAuthenticated
-                  ? syncStatus.isOnline
-                    ? syncStatus.pendingCount > 0
-                      ? `You have ${syncStatus.pendingCount} pending changes. Syncing will push them before logout.`
-                      : "No pending changes. You can logout safely."
-                    : "You are offline. Sync can’t run right now."
-                  : "You’re not signed in. Keeping local data lets you continue offline."
-              }
-            />
-            {logoutError ? (
-              <Text preset="formHelper" text={logoutError} style={themed($errorText)} />
-            ) : null}
-
-            <View style={themed($modalButtons)}>
-              {authSession.isAuthenticated ? (
-                <>
-                  <Button
-                    text={isLoggingOut ? "Syncing..." : "Sync & logout"}
-                    preset="glass"
-                    onPress={handleOnlineSyncAndWipe}
-                    disabled={isLoggingOut || !syncStatus.isOnline}
-                  />
-                  <Button
-                    text={isLoggingOut ? "Signing out..." : "Wipe unsynced ops & logout"}
-                    preset="glass"
-                    onPress={handleOnlineWipe}
-                    disabled={isLoggingOut}
-                  />
-                </>
-              ) : (
-                <>
-                  <Button
-                    text={isLoggingOut ? "Signing out..." : "Keep local data & continue"}
-                    preset="glass"
-                    onPress={handleOfflineKeepLocal}
-                    disabled={isLoggingOut}
-                  />
-                  <Button
-                    text={isLoggingOut ? "Signing out..." : "Wipe local data & continue"}
-                    preset="glass"
-                    onPress={handleOfflineWipe}
-                    disabled={isLoggingOut}
-                  />
-                </>
-              )}
-              <Button
-                text="Cancel"
-                preset="glass"
-                onPress={() => setShowLogoutModal(false)}
-                disabled={isLoggingOut}
-              />
+        <GlassCard>
+          <CompactSectionHeader title="Theme" subtitle="Appearance" />
+          <View style={themed($compactActionRow)}>
+            <View style={themed($compactActionCopy)}>
+              <Text preset="caption" text="Current mode" style={themed($muted)} />
+              <Text preset="formLabel" text="Switch light or dark theme" />
             </View>
-          </GlassCard>
-        </View>
-      </Modal>
-    </Screen>
+            <View style={themed($inlineActions)}>
+              <Button text="Switch theme" onPress={toggleTheme} preset="glassSmall" />
+            </View>
+          </View>
+          <CompactSectionHeader title="Security" subtitle={`${options.length} controls`} />
+          <View style={themed($groupedList)}>
+            {options.map((option: any, index: number) => (
+              <CompactSettingRow
+                key={option.id}
+                label={option.label}
+                helperText={option.helperText}
+                withDivider={index < options.length - 1}
+                control={
+                  <Switch
+                    value={!!option.value}
+                    onValueChange={handleBiometricToggle}
+                    disabled={isUpdatingBiometric}
+                  />
+                }
+              />
+            ))}
+          </View>
+          <CompactSectionHeader title="Account" subtitle="Session actions" />
+          <View style={themed($compactActionRow)}>
+            <View style={themed($compactActionCopy)}>
+              <Text preset="caption" text="Session" style={themed($muted)} />
+              <Text preset="formLabel" text="Sign out or clear local session state" />
+            </View>
+            <View style={themed($inlineActions)}>
+              <Button text="Logout" preset="glassSmall" onPress={handleLogout} />
+            </View>
+          </View>
+        </GlassCard>
+
+        {/* Logout modal */}
+        <Modal visible={showLogoutModal} transparent animationType="fade">
+          <View style={themed($backdrop)}>
+            <GlassCard style={themed($modalCard)}>
+              <Text preset="heading" text="Sign out" />
+              <Text
+                preset="formHelper"
+                text={
+                  authSession.isAuthenticated
+                    ? syncStatus.isOnline
+                      ? syncStatus.pendingCount > 0
+                        ? `You have ${syncStatus.pendingCount} pending changes. Syncing will push them before logout.`
+                        : "No pending changes. You can logout safely."
+                      : "You are offline. Sync can’t run right now."
+                    : "You’re not signed in. Keeping local data lets you continue offline."
+                }
+              />
+              {logoutError ? (
+                <Text preset="formHelper" text={logoutError} style={themed($errorText)} />
+              ) : null}
+
+              <View style={themed($modalButtons)}>
+                {authSession.isAuthenticated ? (
+                  <>
+                    <Button
+                      text={isLoggingOut ? "Syncing..." : "Sync & logout"}
+                      preset="glass"
+                      onPress={handleOnlineSyncAndWipe}
+                      disabled={isLoggingOut || !syncStatus.isOnline}
+                    />
+                    <Button
+                      text={isLoggingOut ? "Signing out..." : "Wipe unsynced ops & logout"}
+                      preset="glass"
+                      onPress={handleOnlineWipe}
+                      disabled={isLoggingOut}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      text={isLoggingOut ? "Signing out..." : "Keep local data & continue"}
+                      preset="glass"
+                      onPress={handleOfflineKeepLocal}
+                      disabled={isLoggingOut}
+                    />
+                    <Button
+                      text={isLoggingOut ? "Signing out..." : "Wipe local data & continue"}
+                      preset="glass"
+                      onPress={handleOfflineWipe}
+                      disabled={isLoggingOut}
+                    />
+                  </>
+                )}
+                <Button
+                  text="Cancel"
+                  preset="glass"
+                  onPress={() => setShowLogoutModal(false)}
+                  disabled={isLoggingOut}
+                />
+              </View>
+            </GlassCard>
+          </View>
+        </Modal>
+      </Screen>
+    </AnimatedBackground>
   )
 }
 

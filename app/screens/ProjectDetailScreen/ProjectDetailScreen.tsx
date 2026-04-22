@@ -13,6 +13,7 @@ import {
 import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
+import { AnimatedBackground } from "@/components/AnimatedBackground"
 import { Button } from "@/components/Button"
 import { GlassCard } from "@/components/GlassCard"
 import { PriorityDot } from "@/components/PriorityDot"
@@ -279,83 +280,91 @@ export function ProjectDetailScreen() {
   )
 
   return (
-    <Screen
-      preset="fixed"
-      safeAreaEdges={["top", "bottom"]}
-      contentContainerStyle={themed($screen)}
-    >
-      <View style={themed($header)}>
-        <View style={themed($headerCopy)}>
-          <Text preset="overline" text="Project" />
-          <Text preset="heading" text={workspace?.label ?? "Project"} />
-          <Text
-            preset="caption"
-            text={
-              workspace?.kind === "personal"
-                ? "Personal execution flow"
-                : `${workspace?.membersCount ?? members.length} collaborators active`
-            }
-            style={themed($subtitle)}
+    <AnimatedBackground>
+      <Screen
+        preset="fixed"
+        backgroundColor="transparent"
+        contentContainerStyle={themed([
+          $screen,
+          { paddingTop: useSafeAreaInsets().top, paddingBottom: useSafeAreaInsets().bottom },
+        ])}
+      >
+        <View style={themed($header)}>
+          <View style={themed($headerCopy)}>
+            <Text preset="overline" text="Project" />
+            <Text preset="heading" text={workspace?.label ?? "Project"} />
+            <Text
+              preset="caption"
+              text={
+                workspace?.kind === "personal"
+                  ? "Personal execution flow"
+                  : `${workspace?.membersCount ?? members.length} collaborators active`
+              }
+              style={themed($subtitle)}
+            />
+          </View>
+          <Button
+            text="Projects"
+            preset="glassSmall"
+            onPress={() => navigation.navigate("ProjectsHome")}
           />
         </View>
-        <Button
-          text="Projects"
-          preset="glassSmall"
-          onPress={() => navigation.navigate("ProjectsHome")}
-        />
-      </View>
 
-      <Pressable
-        onPress={() => workspaces.length > 1 && setIsWorkspacePickerOpen(true)}
-        style={[
-          themed($workspaceSelector),
-          workspaces.length <= 1 && themed($workspaceSelectorDisabled),
-        ]}
-      >
-        <View style={themed($workspaceSelectorCopy)}>
-          <Text preset="caption" text="Workspace" style={themed($subtitle)} />
-          <Text preset="formLabel" text={workspace?.label ?? "Personal"} numberOfLines={1} />
+        <Pressable
+          onPress={() => workspaces.length > 1 && setIsWorkspacePickerOpen(true)}
+          style={[
+            themed($workspaceSelector),
+            workspaces.length <= 1 && themed($workspaceSelectorDisabled),
+          ]}
+        >
+          <View style={themed($workspaceSelectorCopy)}>
+            <Text preset="caption" text="Workspace" style={themed($subtitle)} />
+            <Text preset="formLabel" text={workspace?.label ?? "Personal"} numberOfLines={1} />
+          </View>
+          <Text
+            preset="caption"
+            text={workspaces.length > 1 ? "Switch" : "Current"}
+            style={themed($workspaceSelectorAction)}
+          />
+        </Pressable>
+
+        <View style={themed($statPillsRow)}>
+          <ProjectStatPill label="Open" value={`${openCount}`} tone="#dfd91e" />
+          <ProjectStatPill label="Done" value={`${doneCount}`} tone="#57b396" />
+          <ProjectStatPill
+            label="Team"
+            value={`${members.length || workspace?.membersCount || 1}`}
+            tone="#4443ad"
+          />
+          <ProjectStatPill label="At risk" value={`${highPriorityTasks.length}`} tone="#cb5d1d" />
+          <ProjectStatPill
+            label="Complete"
+            value={`${Math.round(progress * 100)}%`}
+            tone="#14f326"
+          />
         </View>
-        <Text
-          preset="caption"
-          text={workspaces.length > 1 ? "Switch" : "Current"}
-          style={themed($workspaceSelectorAction)}
-        />
-      </Pressable>
 
-      <View style={themed($statPillsRow)}>
-        <ProjectStatPill label="Open" value={`${openCount}`} tone="#dfd91e" />
-        <ProjectStatPill label="Done" value={`${doneCount}`} tone="#57b396" />
-        <ProjectStatPill
-          label="Team"
-          value={`${members.length || workspace?.membersCount || 1}`}
-          tone="#4443ad"
-        />
-        <ProjectStatPill label="At risk" value={`${highPriorityTasks.length}`} tone="#cb5d1d" />
-        <ProjectStatPill label="Complete" value={`${Math.round(progress * 100)}%`} tone="#14f326" />
-      </View>
+        <View style={themed($segmentRow)}>
+          {[
+            { id: "board", label: "Board" },
+            { id: "timeline", label: "Timeline" },
+            { id: "team", label: "Team" },
+            { id: "overview", label: "Overview" },
+          ].map((item) => (
+            <Pressable
+              key={item.id}
+              onPress={() => setSegment(item.id as Segment)}
+              style={[themed($segmentChip), segment === item.id && themed($segmentChipActive)]}
+            >
+              <Text preset="caption" text={item.label} />
+            </Pressable>
+          ))}
+        </View>
 
-      <View style={themed($segmentRow)}>
-        {[
-          { id: "board", label: "Board" },
-          { id: "timeline", label: "Timeline" },
-          { id: "team", label: "Team" },
-          { id: "overview", label: "Overview" },
-        ].map((item) => (
-          <Pressable
-            key={item.id}
-            onPress={() => setSegment(item.id as Segment)}
-            style={[themed($segmentChip), segment === item.id && themed($segmentChipActive)]}
-          >
-            <Text preset="caption" text={item.label} />
-          </Pressable>
-        ))}
-      </View>
-
-      {segment === "board" ? (
-        <View style={[themed($boardRegion), { minHeight: boardHeight }]}>
-          <View style={themed($laneJumpSection)}>
-            {/* <View style={themed($laneJumpHintRow)}>
+        {segment === "board" ? (
+          <View style={[themed($boardRegion), { minHeight: boardHeight }]}>
+            <View style={themed($laneJumpSection)}>
+              {/* <View style={themed($laneJumpHintRow)}>
               <Text
                 preset="caption"
                 text="Tap a lane below to jump there, or swipe across the board"
@@ -363,136 +372,134 @@ export function ProjectDetailScreen() {
               />
             </View> */}
 
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={themed($laneJumpScroll)}
+              >
+                {lanes.map((lane, laneIndex) => {
+                  const isActive = laneIndex === activeLaneIndex
+
+                  return (
+                    <Pressable
+                      key={lane.status.id}
+                      onPress={() => scrollToLane(laneIndex)}
+                      style={({ pressed }) => [
+                        themed($laneJumpChip),
+                        isActive && themed($laneJumpChipActive),
+                        pressed && themed($laneJumpChipPressed),
+                      ]}
+                    >
+                      <View style={themed($laneJumpChipContent)}>
+                        <Text
+                          preset="caption"
+                          text={lane.status.name}
+                          style={[themed($laneJumpTitle), isActive && themed($laneJumpTitleActive)]}
+                        />
+                        <Text
+                          preset="caption"
+                          text={`${lane.tasks.length} tasks`}
+                          style={[themed($laneJumpCount), isActive && themed($laneJumpCountActive)]}
+                        />
+                      </View>
+                    </Pressable>
+                  )
+                })}
+              </ScrollView>
+
+              <View style={themed($laneDots)}>
+                {lanes.map((lane, laneIndex) => (
+                  <View
+                    key={lane.status.id}
+                    style={[
+                      themed($laneDot),
+                      laneIndex === activeLaneIndex && themed($laneDotActive),
+                    ]}
+                  />
+                ))}
+              </View>
+            </View>
             <ScrollView
+              ref={boardScrollRef}
               horizontal
               showsHorizontalScrollIndicator={false}
-              contentContainerStyle={themed($laneJumpScroll)}
+              contentContainerStyle={themed($boardScroll)}
+              onScroll={onBoardScroll}
+              scrollEventThrottle={16}
             >
-              {lanes.map((lane, laneIndex) => {
-                const isActive = laneIndex === activeLaneIndex
-
-                return (
-                  <Pressable
-                    key={lane.status.id}
-                    onPress={() => scrollToLane(laneIndex)}
-                    style={({ pressed }) => [
-                      themed($laneJumpChip),
-                      isActive && themed($laneJumpChipActive),
-                      pressed && themed($laneJumpChipPressed),
-                    ]}
-                  >
-                    <View style={themed($laneJumpChipContent)}>
-                      <Text
-                        preset="caption"
-                        text={lane.status.name}
-                        style={[themed($laneJumpTitle), isActive && themed($laneJumpTitleActive)]}
-                      />
-                      <Text
-                        preset="caption"
-                        text={`${lane.tasks.length} tasks`}
-                        style={[themed($laneJumpCount), isActive && themed($laneJumpCountActive)]}
-                      />
-                    </View>
-                  </Pressable>
-                )
-              })}
-            </ScrollView>
-
-            <View style={themed($laneDots)}>
               {lanes.map((lane, laneIndex) => (
                 <View
                   key={lane.status.id}
-                  style={[
-                    themed($laneDot),
-                    laneIndex === activeLaneIndex && themed($laneDotActive),
-                  ]}
-                />
-              ))}
-            </View>
-          </View>
-          <ScrollView
-            ref={boardScrollRef}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={themed($boardScroll)}
-            onScroll={onBoardScroll}
-            scrollEventThrottle={16}
-          >
-            {lanes.map((lane, laneIndex) => (
-              <View
-                key={lane.status.id}
-                onLayout={(event) => {
-                  const x = event.nativeEvent.layout.x
-                  setLaneOffsets((prev) => {
-                    const next = [...prev]
-                    next[laneIndex] = x
-                    return next
-                  })
-                }}
-              >
-                <GlassCard style={[themed($laneCard), { height: boardHeight }]}>
-                  <View style={themed($laneHeader)}>
-                    <View>
-                      <Text preset="formLabel" text={lane.status.name} />
+                  onLayout={(event) => {
+                    const x = event.nativeEvent.layout.x
+                    setLaneOffsets((prev) => {
+                      const next = [...prev]
+                      next[laneIndex] = x
+                      return next
+                    })
+                  }}
+                >
+                  <GlassCard style={[themed($laneCard), { height: boardHeight }]}>
+                    <View style={themed($laneHeader)}>
+                      <View>
+                        <Text preset="formLabel" text={lane.status.name} />
+                        <Text
+                          preset="caption"
+                          text={`${lane.tasks.length} tasks`}
+                          style={themed($subtitle)}
+                        />
+                      </View>
                       <Text
                         preset="caption"
-                        text={`${lane.tasks.length} tasks`}
+                        text={`${laneIndex + 1}/${lanes.length}`}
                         style={themed($subtitle)}
                       />
                     </View>
-                    <Text
-                      preset="caption"
-                      text={`${laneIndex + 1}/${lanes.length}`}
-                      style={themed($subtitle)}
-                    />
-                  </View>
 
-                  <ScrollView
-                    nestedScrollEnabled
-                    showsVerticalScrollIndicator={false}
-                    style={themed($laneTasksScroll)}
-                    contentContainerStyle={themed($stack)}
-                  >
-                    {lane.tasks.length === 0 ? (
-                      <Text
-                        preset="caption"
-                        text="No tasks in this lane."
-                        style={themed($subtitle)}
-                      />
-                    ) : (
-                      lane.tasks.map((task) => (
-                        <BoardTaskCard
-                          key={task.id}
-                          task={task}
-                          statusLabel={lane.status.name}
-                          assigneeLabel={
-                            task.assigneeUserId
-                              ? (members.find((member) => member.id === task.assigneeUserId)
-                                  ?.label ?? "Assigned")
-                              : "Unassigned"
-                          }
-                          disableBack={laneIndex === 0 || movingTaskId === task.id}
-                          disableForward={
-                            laneIndex === lanes.length - 1 || movingTaskId === task.id
-                          }
-                          onBack={() => void moveTask(task, "back")}
-                          onForward={() => void moveTask(task, "forward")}
-                          onOpen={() => navigation.navigate("TaskDetail", { taskId: task.id })}
+                    <ScrollView
+                      nestedScrollEnabled
+                      showsVerticalScrollIndicator={false}
+                      style={themed($laneTasksScroll)}
+                      contentContainerStyle={themed($stack)}
+                    >
+                      {lane.tasks.length === 0 ? (
+                        <Text
+                          preset="caption"
+                          text="No tasks in this lane."
+                          style={themed($subtitle)}
                         />
-                      ))
-                    )}
-                    <View style={{ height: fabBottom }} />
-                  </ScrollView>
-                </GlassCard>
-              </View>
-            ))}
-          </ScrollView>
+                      ) : (
+                        lane.tasks.map((task) => (
+                          <BoardTaskCard
+                            key={task.id}
+                            task={task}
+                            statusLabel={lane.status.name}
+                            assigneeLabel={
+                              task.assigneeUserId
+                                ? (members.find((member) => member.id === task.assigneeUserId)
+                                    ?.label ?? "Assigned")
+                                : "Unassigned"
+                            }
+                            disableBack={laneIndex === 0 || movingTaskId === task.id}
+                            disableForward={
+                              laneIndex === lanes.length - 1 || movingTaskId === task.id
+                            }
+                            onBack={() => void moveTask(task, "back")}
+                            onForward={() => void moveTask(task, "forward")}
+                            onOpen={() => navigation.navigate("TaskDetail", { taskId: task.id })}
+                          />
+                        ))
+                      )}
+                      <View style={{ height: fabBottom }} />
+                    </ScrollView>
+                  </GlassCard>
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+        ) : null}
 
-          
-        </View>
-      ) : null}
-
-      {/* {segment === "board" ? (
+        {/* {segment === "board" ? (
         <View style={[themed($boardRegion), { minHeight: boardHeight }]}>
           <ScrollView
             horizontal
@@ -557,271 +564,276 @@ export function ProjectDetailScreen() {
         </View>
       ) : null} */}
 
-      {segment !== "board" ? (
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={themed($secondaryContent)}
-        >
-          {segment === "timeline" ? (
-            <>
-              <GlassCard>
-                <View style={themed($sectionHeader)}>
-                  <View>
-                    <Text preset="formLabel" text="Weekly rhythm" />
-                    <Text
-                      preset="caption"
-                      text="Tasks placed by start and completion dates."
-                      style={themed($subtitle)}
-                    />
-                  </View>
-                </View>
-                <View style={themed($timelineBars)}>
-                  {timelineDays.map((day) => (
-                    <View key={day.key} style={themed($timelineDay)}>
-                      <View style={themed($timelineBarTrack)}>
-                        <View
-                          style={[
-                            themed($timelineBarFill),
-                            {
-                              height: `${Math.max((day.count / maxTimelineCount) * 100, day.count > 0 ? 12 : 0)}%`,
-                            },
-                          ]}
-                        />
-                      </View>
-                      <Text preset="caption" text={day.label} />
-                      <Text preset="caption" text={`${day.count}`} style={themed($subtitle)} />
-                    </View>
-                  ))}
-                </View>
-              </GlassCard>
-
-              <GlassCard>
-                <View style={themed($sectionHeader)}>
-                  <View>
-                    <Text preset="formLabel" text="Activity agenda" />
-                    <Text
-                      preset="caption"
-                      text="Upcoming and completed work grouped by task dates."
-                      style={themed($subtitle)}
-                    />
-                  </View>
-                </View>
-                <View style={themed($stack)}>
-                  {timelineAgenda.map((group) => (
-                    <View key={group.label} style={themed($agendaGroup)}>
-                      <Text preset="overline" text={group.label} />
-                      <View style={themed($stack)}>
-                        {group.items.map((task) => (
-                          <CompactTaskItem
-                            key={task.id}
-                            task={task}
-                            statusLabel={statusById[task.statusId]?.name ?? "Task"}
-                            timelineLabel={formatDateRange(task.startDate, task.endDate)}
-                            onPress={() => navigation.navigate("TaskDetail", { taskId: task.id })}
-                          />
-                        ))}
-                      </View>
-                    </View>
-                  ))}
-                  {timelineUndated.length > 0 ? (
-                    <View style={themed($agendaGroup)}>
-                      <Text preset="overline" text="No date yet" />
-                      <View style={themed($stack)}>
-                        {timelineUndated.map((task) => (
-                          <CompactTaskItem
-                            key={task.id}
-                            task={task}
-                            statusLabel={statusById[task.statusId]?.name ?? "Task"}
-                            timelineLabel="No start or end date"
-                            onPress={() => navigation.navigate("TaskDetail", { taskId: task.id })}
-                          />
-                        ))}
-                      </View>
-                    </View>
-                  ) : null}
-                </View>
-              </GlassCard>
-            </>
-          ) : null}
-
-          {segment === "team" ? (
-            <>
-              <GlassCard>
-                <View style={themed($sectionHeader)}>
-                  <View>
-                    <Text preset="formLabel" text="Team overview" />
-                    <Text
-                      preset="caption"
-                      text="Assignment load and collaboration roles."
-                      style={themed($subtitle)}
-                    />
-                  </View>
-                </View>
-                <View style={themed($stack)}>
-                  {members.length === 0 ? (
-                    <Text
-                      preset="caption"
-                      text="No team members synced for this project yet."
-                      style={themed($subtitle)}
-                    />
-                  ) : (
-                    members.map((member) => (
-                      <View key={member.id} style={themed($memberCard)}>
-                        <View style={themed($memberHeader)}>
-                          <View>
-                            <Text
-                              preset="caption"
-                              text={member.label}
-                              style={themed($memberName)}
-                            />
-                            <Text preset="caption" text={member.role} style={themed($subtitle)} />
-                          </View>
-                          <Text
-                            preset="caption"
-                            text={`${member.assignments} assigned`}
-                            style={themed($memberLoad)}
-                          />
-                        </View>
-                      </View>
-                    ))
-                  )}
-                </View>
-              </GlassCard>
-            </>
-          ) : null}
-
-          {segment === "overview" ? (
-            <>
-              <GlassCard>
-                <View style={themed($sectionHeader)}>
-                  <View>
-                    <Text preset="formLabel" text="Priority queue" />
-                    <Text
-                      preset="caption"
-                      text="Items to unblock or move first."
-                      style={themed($subtitle)}
-                    />
-                  </View>
-                </View>
-                {highPriorityTasks.length === 0 ? (
-                  <Text
-                    preset="caption"
-                    text="No high-priority tasks are currently stalled."
-                    style={themed($subtitle)}
-                  />
-                ) : (
-                  <View style={themed($stack)}>
-                    {highPriorityTasks.slice(0, 4).map((task) => (
-                      <CompactTaskItem
-                        key={task.id}
-                        task={task}
-                        statusLabel={statusById[task.statusId]?.name ?? "Task"}
-                        timelineLabel={formatDateRange(task.startDate, task.endDate)}
-                        onPress={() => navigation.navigate("TaskDetail", { taskId: task.id })}
-                      />
-                    ))}
-                  </View>
-                )}
-              </GlassCard>
-
-              <GlassCard>
-                <View style={themed($sectionHeader)}>
-                  <View>
-                    <Text preset="formLabel" text="Tracks" />
-                    <Text
-                      preset="caption"
-                      text="Nested streams inside this project."
-                      style={themed($subtitle)}
-                    />
-                  </View>
-                </View>
-                {streams.length === 0 ? (
-                  <Text
-                    preset="caption"
-                    text="No additional tracks yet. Tasks are running on the primary board."
-                    style={themed($subtitle)}
-                  />
-                ) : (
-                  <View style={themed($stack)}>
-                    {streams.map((stream) => (
-                      <View key={stream.id} style={themed($streamCard)}>
-                        <Text preset="caption" text={stream.name} style={themed($memberName)} />
-                        <Text
-                          preset="caption"
-                          text={`Updated ${formatDateTime(stream.updatedAt)}`}
-                          style={themed($subtitle)}
-                        />
-                      </View>
-                    ))}
-                  </View>
-                )}
-              </GlassCard>
-            </>
-          ) : null}
-
-          <View style={{ height: fabBottom }} />
-        </ScrollView>
-      ) : null}
-
-      <ProjectFab bottom={fabBottom} onPress={() => navigation.navigate("TaskEditor")} />
-
-      <Modal visible={isWorkspacePickerOpen} transparent animationType="fade">
-        <Pressable style={themed($sheetBackdrop)} onPress={() => setIsWorkspacePickerOpen(false)}>
-          <Pressable style={themed($workspaceSheet)} onPress={() => undefined}>
-            <View style={themed($workspaceSheetHeader)}>
-              <View style={themed($workspaceSheetHeaderCopy)}>
-                <Text preset="subheading" text="Switch workspace" />
-                <Text
-                  preset="caption"
-                  text="Jump between workspaces without leaving the current work surface."
-                  style={themed($subtitle)}
-                />
-              </View>
-              <Button
-                text="Manage"
-                preset="glassSmall"
-                onPress={() => {
-                  setIsWorkspacePickerOpen(false)
-                  navigation.navigate("ProjectsHome")
-                }}
-              />
-            </View>
-
-            <View style={themed($workspaceSheetList)}>
-              {workspaces.map((item) => {
-                const isCurrent = item.id === workspaceId
-                return (
-                  <Pressable
-                    key={item.id}
-                    onPress={() => void handleWorkspaceSwitch(item.id)}
-                    style={[
-                      themed($workspaceSheetItem),
-                      isCurrent && themed($workspaceSheetItemActive),
-                    ]}
-                  >
-                    <View style={themed($workspaceSheetCopy)}>
-                      <Text preset="formLabel" text={item.label} />
+        {segment !== "board" ? (
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={themed($secondaryContent)}
+          >
+            {segment === "timeline" ? (
+              <>
+                <GlassCard>
+                  <View style={themed($sectionHeader)}>
+                    <View>
+                      <Text preset="formLabel" text="Weekly rhythm" />
                       <Text
                         preset="caption"
-                        text={item.kind === "personal" ? "Personal workspace" : "Shared workspace"}
+                        text="Tasks placed by start and completion dates."
                         style={themed($subtitle)}
                       />
                     </View>
+                  </View>
+                  <View style={themed($timelineBars)}>
+                    {timelineDays.map((day) => (
+                      <View key={day.key} style={themed($timelineDay)}>
+                        <View style={themed($timelineBarTrack)}>
+                          <View
+                            style={[
+                              themed($timelineBarFill),
+                              {
+                                height: `${Math.max((day.count / maxTimelineCount) * 100, day.count > 0 ? 12 : 0)}%`,
+                              },
+                            ]}
+                          />
+                        </View>
+                        <Text preset="caption" text={day.label} />
+                        <Text preset="caption" text={`${day.count}`} style={themed($subtitle)} />
+                      </View>
+                    ))}
+                  </View>
+                </GlassCard>
+
+                <GlassCard>
+                  <View style={themed($sectionHeader)}>
+                    <View>
+                      <Text preset="formLabel" text="Activity agenda" />
+                      <Text
+                        preset="caption"
+                        text="Upcoming and completed work grouped by task dates."
+                        style={themed($subtitle)}
+                      />
+                    </View>
+                  </View>
+                  <View style={themed($stack)}>
+                    {timelineAgenda.map((group) => (
+                      <View key={group.label} style={themed($agendaGroup)}>
+                        <Text preset="overline" text={group.label} />
+                        <View style={themed($stack)}>
+                          {group.items.map((task) => (
+                            <CompactTaskItem
+                              key={task.id}
+                              task={task}
+                              statusLabel={statusById[task.statusId]?.name ?? "Task"}
+                              timelineLabel={formatDateRange(task.startDate, task.endDate)}
+                              onPress={() => navigation.navigate("TaskDetail", { taskId: task.id })}
+                            />
+                          ))}
+                        </View>
+                      </View>
+                    ))}
+                    {timelineUndated.length > 0 ? (
+                      <View style={themed($agendaGroup)}>
+                        <Text preset="overline" text="No date yet" />
+                        <View style={themed($stack)}>
+                          {timelineUndated.map((task) => (
+                            <CompactTaskItem
+                              key={task.id}
+                              task={task}
+                              statusLabel={statusById[task.statusId]?.name ?? "Task"}
+                              timelineLabel="No start or end date"
+                              onPress={() => navigation.navigate("TaskDetail", { taskId: task.id })}
+                            />
+                          ))}
+                        </View>
+                      </View>
+                    ) : null}
+                  </View>
+                </GlassCard>
+              </>
+            ) : null}
+
+            {segment === "team" ? (
+              <>
+                <GlassCard>
+                  <View style={themed($sectionHeader)}>
+                    <View>
+                      <Text preset="formLabel" text="Team overview" />
+                      <Text
+                        preset="caption"
+                        text="Assignment load and collaboration roles."
+                        style={themed($subtitle)}
+                      />
+                    </View>
+                  </View>
+                  <View style={themed($stack)}>
+                    {members.length === 0 ? (
+                      <Text
+                        preset="caption"
+                        text="No team members synced for this project yet."
+                        style={themed($subtitle)}
+                      />
+                    ) : (
+                      members.map((member) => (
+                        <View key={member.id} style={themed($memberCard)}>
+                          <View style={themed($memberHeader)}>
+                            <View>
+                              <Text
+                                preset="caption"
+                                text={member.label}
+                                style={themed($memberName)}
+                              />
+                              <Text preset="caption" text={member.role} style={themed($subtitle)} />
+                            </View>
+                            <Text
+                              preset="caption"
+                              text={`${member.assignments} assigned`}
+                              style={themed($memberLoad)}
+                            />
+                          </View>
+                        </View>
+                      ))
+                    )}
+                  </View>
+                </GlassCard>
+              </>
+            ) : null}
+
+            {segment === "overview" ? (
+              <>
+                <GlassCard>
+                  <View style={themed($sectionHeader)}>
+                    <View>
+                      <Text preset="formLabel" text="Priority queue" />
+                      <Text
+                        preset="caption"
+                        text="Items to unblock or move first."
+                        style={themed($subtitle)}
+                      />
+                    </View>
+                  </View>
+                  {highPriorityTasks.length === 0 ? (
                     <Text
                       preset="caption"
-                      text={isCurrent ? "Current" : "Select"}
-                      style={
-                        isCurrent ? themed($workspaceSheetBadge) : themed($workspaceSelectorAction)
-                      }
+                      text="No high-priority tasks are currently stalled."
+                      style={themed($subtitle)}
                     />
-                  </Pressable>
-                )
-              })}
-            </View>
+                  ) : (
+                    <View style={themed($stack)}>
+                      {highPriorityTasks.slice(0, 4).map((task) => (
+                        <CompactTaskItem
+                          key={task.id}
+                          task={task}
+                          statusLabel={statusById[task.statusId]?.name ?? "Task"}
+                          timelineLabel={formatDateRange(task.startDate, task.endDate)}
+                          onPress={() => navigation.navigate("TaskDetail", { taskId: task.id })}
+                        />
+                      ))}
+                    </View>
+                  )}
+                </GlassCard>
+
+                <GlassCard>
+                  <View style={themed($sectionHeader)}>
+                    <View>
+                      <Text preset="formLabel" text="Tracks" />
+                      <Text
+                        preset="caption"
+                        text="Nested streams inside this project."
+                        style={themed($subtitle)}
+                      />
+                    </View>
+                  </View>
+                  {streams.length === 0 ? (
+                    <Text
+                      preset="caption"
+                      text="No additional tracks yet. Tasks are running on the primary board."
+                      style={themed($subtitle)}
+                    />
+                  ) : (
+                    <View style={themed($stack)}>
+                      {streams.map((stream) => (
+                        <View key={stream.id} style={themed($streamCard)}>
+                          <Text preset="caption" text={stream.name} style={themed($memberName)} />
+                          <Text
+                            preset="caption"
+                            text={`Updated ${formatDateTime(stream.updatedAt)}`}
+                            style={themed($subtitle)}
+                          />
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </GlassCard>
+              </>
+            ) : null}
+
+            <View style={{ height: fabBottom }} />
+          </ScrollView>
+        ) : null}
+
+        <ProjectFab bottom={fabBottom} onPress={() => navigation.navigate("TaskEditor")} />
+
+        <Modal visible={isWorkspacePickerOpen} transparent animationType="fade">
+          <Pressable style={themed($sheetBackdrop)} onPress={() => setIsWorkspacePickerOpen(false)}>
+            <Pressable style={themed($workspaceSheet)} onPress={() => undefined}>
+              <View style={themed($workspaceSheetHeader)}>
+                <View style={themed($workspaceSheetHeaderCopy)}>
+                  <Text preset="subheading" text="Switch workspace" />
+                  <Text
+                    preset="caption"
+                    text="Jump between workspaces without leaving the current work surface."
+                    style={themed($subtitle)}
+                  />
+                </View>
+                <Button
+                  text="Manage"
+                  preset="glassSmall"
+                  onPress={() => {
+                    setIsWorkspacePickerOpen(false)
+                    navigation.navigate("ProjectsHome")
+                  }}
+                />
+              </View>
+
+              <View style={themed($workspaceSheetList)}>
+                {workspaces.map((item) => {
+                  const isCurrent = item.id === workspaceId
+                  return (
+                    <Pressable
+                      key={item.id}
+                      onPress={() => void handleWorkspaceSwitch(item.id)}
+                      style={[
+                        themed($workspaceSheetItem),
+                        isCurrent && themed($workspaceSheetItemActive),
+                      ]}
+                    >
+                      <View style={themed($workspaceSheetCopy)}>
+                        <Text preset="formLabel" text={item.label} />
+                        <Text
+                          preset="caption"
+                          text={
+                            item.kind === "personal" ? "Personal workspace" : "Shared workspace"
+                          }
+                          style={themed($subtitle)}
+                        />
+                      </View>
+                      <Text
+                        preset="caption"
+                        text={isCurrent ? "Current" : "Select"}
+                        style={
+                          isCurrent
+                            ? themed($workspaceSheetBadge)
+                            : themed($workspaceSelectorAction)
+                        }
+                      />
+                    </Pressable>
+                  )
+                })}
+              </View>
+            </Pressable>
           </Pressable>
-        </Pressable>
-      </Modal>
-    </Screen>
+        </Modal>
+      </Screen>
+    </AnimatedBackground>
   )
 }
 
@@ -977,6 +989,7 @@ const $screen: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   paddingTop: spacing.md,
   gap: spacing.md,
   paddingBottom: spacing.xxxl + 55,
+  backgroundColor: "transparent",
 })
 
 const $header: ThemedStyle<ViewStyle> = ({ spacing }) => ({

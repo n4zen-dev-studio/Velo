@@ -11,6 +11,7 @@ import {
 import { useNavigation } from "@react-navigation/native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
+import { AnimatedBackground } from "@/components/AnimatedBackground"
 import { DashboardTaskStatusChart } from "@/components/charts/DashboardTaskStatusChart"
 import { DashboardTimelineGraph } from "@/components/charts/DashboardTimelineGraph"
 import { GlassCard } from "@/components/GlassCard"
@@ -23,6 +24,7 @@ import { goToInvites, goToProfile, goToProjectsTab } from "@/navigation/navigati
 import type { HomeStackScreenProps } from "@/navigators/navigationTypes"
 import { createHttpClient } from "@/services/api/httpClient"
 import { listMyInvites } from "@/services/api/invitesApi"
+import { useAuthSession } from "@/services/auth/session"
 import { listProjects } from "@/services/db/repositories/projectsRepository"
 import type { Project, Task } from "@/services/db/types"
 import { useAppTheme } from "@/theme/context"
@@ -30,7 +32,6 @@ import type { ThemedStyle } from "@/theme/types"
 import { formatDateRange, formatDateTime } from "@/utils/dateFormat"
 
 import { useHomeViewModel } from "./useHomeViewModel"
-import { useAuthSession } from "@/services/auth/session"
 
 type ActivityItem = {
   id: string
@@ -384,147 +385,152 @@ export function HomeScreen() {
   ]
 
   return (
-    <Screen
-      preset="scroll"
-      safeAreaEdges={["top", "bottom"]}
-      contentContainerStyle={themed($screen)}
-      ScrollViewProps={{
-        refreshControl: (
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={() => refreshAll({ mode: "hard" })}
-            tintColor={theme.colors.primary}
-          />
-        ),
-      }}
-    >
-      <View style={themed($header)}>
-        <View style={themed($headerTopRow)}>
-          <View style={themed($headerLead)}>
-            <HeaderAvatar onPress={() => authSession.isAuthenticated && goToProfile()} size={40} />
-            <View style={themed($headerTitleWrap)}>
-              <Text preset="heading" text="Dashboard" style={themed($headerTitle)} />
-              <Text
-                preset="overline"
-                text={activeWorkspace?.kind === "personal" ? "Personal project" : "Project view"}
-                style={themed($headerCaption)}
+    <AnimatedBackground>
+      <Screen
+        preset="scroll"
+        // safeAreaEdges={["top", "bottom"]}
+        backgroundColor="transparent"
+        contentContainerStyle={themed([$screen, { paddingTop: useSafeAreaInsets().top, paddingBottom: useSafeAreaInsets().bottom },])}
+        ScrollViewProps={{
+          refreshControl: (
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={() => refreshAll({ mode: "hard" })}
+              tintColor={theme.colors.primary}
+            />
+          ),
+        }}
+      >
+        <View style={themed($header)}>
+          <View style={themed($headerTopRow)}>
+            <View style={themed($headerLead)}>
+              <HeaderAvatar
+                onPress={() => authSession.isAuthenticated && goToProfile()}
+                size={40}
               />
+              <View style={themed($headerTitleWrap)}>
+                <Text preset="heading" text="Dashboard" style={themed($headerTitle)} />
+                <Text
+                  preset="overline"
+                  text={activeWorkspace?.kind === "personal" ? "Personal project" : "Project view"}
+                  style={themed($headerCaption)}
+                />
+              </View>
             </View>
+          </View>
+
+          <View style={themed($switcherRow)}>
+            {workspaces.slice(0, 4).map((workspace) => {
+              const isActive = workspace.id === activeWorkspaceId
+              return (
+                <Pressable
+                  key={workspace.id}
+                  onPress={() => void setActiveWorkspaceId(workspace.id)}
+                  style={[themed($switchChip), isActive && themed($switchChipActive)]}
+                >
+                  <Text preset="caption" text={workspace.label} numberOfLines={1} />
+                </Pressable>
+              )
+            })}
           </View>
         </View>
 
-        <View style={themed($switcherRow)}>
-          {workspaces.slice(0, 4).map((workspace) => {
-            const isActive = workspace.id === activeWorkspaceId
-            return (
-              <Pressable
-                key={workspace.id}
-                onPress={() => void setActiveWorkspaceId(workspace.id)}
-                style={[themed($switchChip), isActive && themed($switchChipActive)]}
-              >
-                <Text preset="caption" text={workspace.label} numberOfLines={1} />
-              </Pressable>
-            )
-          })}
-        </View>
-      </View>
-
-      <View style={themed($content)}>
-        <View style={themed($chartsCarouselWrap)}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            decelerationRate="fast"
-            snapToInterval={CARD_WIDTH + CARD_GAP}
-            snapToAlignment="start"
-            contentContainerStyle={themed($chartsCarouselContent)}
-            onScroll={onChartsScroll}
-            scrollEventThrottle={16}
-          >
-            <GlassCard style={[themed($chartCard), themed($chartCarouselCard)]}>
-              <View style={themed($compactSectionHeader)}>
-                <Text preset="formLabel" text="Task status" />
-                <Text
-                  preset="caption"
-                  text={`${doneCount}/${Math.max(allTasks.length, 1)} complete`}
-                  style={themed($mutedText)}
-                />
-              </View>
-
-              <DashboardTaskStatusChart
-                items={statusBreakdown}
-                total={allTasks.length}
-                completionLabel={`${Math.round((doneCount / Math.max(allTasks.length, 1)) * 100)}% completed`}
-              />
-
-              <View style={themed($trendRow)}>
-                <View>
-                  <Text preset="caption" text="Completion trend" style={themed($mutedText)} />
+        <View style={themed($content)}>
+          <View style={themed($chartsCarouselWrap)}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              decelerationRate="fast"
+              snapToInterval={CARD_WIDTH + CARD_GAP}
+              snapToAlignment="start"
+              contentContainerStyle={themed($chartsCarouselContent)}
+              onScroll={onChartsScroll}
+              scrollEventThrottle={16}
+            >
+              <GlassCard style={[themed($chartCard), themed($chartCarouselCard)]}>
+                <View style={themed($compactSectionHeader)}>
+                  <Text preset="formLabel" text="Task status" />
                   <Text
                     preset="caption"
-                    text={`${doneCount}/${Math.max(allTasks.length, 1)} tasks finished`}
-                    style={themed($legendValue)}
+                    text={`${doneCount}/${Math.max(allTasks.length, 1)} complete`}
+                    style={themed($mutedText)}
                   />
                 </View>
 
-                <View style={themed($sparkRow)}>
-                  {completionTrend.map((point) => (
-                    <View key={point.key} style={themed($sparkColumn)}>
-                      <View style={themed($sparkTrack)}>
-                        <View
-                          style={[
-                            themed($sparkFill),
-                            {
-                              height: `${Math.max(
-                                (point.value / maxCompletionValue) * 100,
-                                point.value > 0 ? 20 : 0,
-                              )}%`,
-                            },
-                          ]}
-                        />
-                      </View>
-                      <Text preset="caption" text={point.label} style={themed($miniBarLabel)} />
-                    </View>
-                  ))}
-                </View>
-              </View>
-            </GlassCard>
-
-            <GlassCard style={[themed($chartCard), themed($chartCarouselCard)]}>
-              <View style={themed($compactSectionHeader)}>
-                <Text preset="formLabel" text="Near timeline" />
-                <Text
-                  preset="caption"
-                  text={dashboardTimelineItems.length > 0 ? "Next 7 days" : "No dated tasks yet"}
-                  style={themed($mutedText)}
+                <DashboardTaskStatusChart
+                  items={statusBreakdown}
+                  total={allTasks.length}
+                  completionLabel={`${Math.round((doneCount / Math.max(allTasks.length, 1)) * 100)}% completed`}
                 />
-              </View>
 
-              <DashboardTimelineGraph
-                days={timelineDays}
-                items={dashboardTimelineItems}
-                emptyLabel="Add start or end dates to tasks to visualize active work across the week."
-              />
-            </GlassCard>
-          </ScrollView>
+                <View style={themed($trendRow)}>
+                  <View>
+                    <Text preset="caption" text="Completion trend" style={themed($mutedText)} />
+                    <Text
+                      preset="caption"
+                      text={`${doneCount}/${Math.max(allTasks.length, 1)} tasks finished`}
+                      style={themed($legendValue)}
+                    />
+                  </View>
 
-          <View style={themed($carouselHintRow)}>
-            <Text preset="caption" text="Swipe for more" style={themed($carouselHintText)} />
+                  <View style={themed($sparkRow)}>
+                    {completionTrend.map((point) => (
+                      <View key={point.key} style={themed($sparkColumn)}>
+                        <View style={themed($sparkTrack)}>
+                          <View
+                            style={[
+                              themed($sparkFill),
+                              {
+                                height: `${Math.max(
+                                  (point.value / maxCompletionValue) * 100,
+                                  point.value > 0 ? 20 : 0,
+                                )}%`,
+                              },
+                            ]}
+                          />
+                        </View>
+                        <Text preset="caption" text={point.label} style={themed($miniBarLabel)} />
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              </GlassCard>
+
+              <GlassCard style={[themed($chartCard), themed($chartCarouselCard)]}>
+                <View style={themed($compactSectionHeader)}>
+                  <Text preset="formLabel" text="Near timeline" />
+                  <Text
+                    preset="caption"
+                    text={dashboardTimelineItems.length > 0 ? "Next 7 days" : "No dated tasks yet"}
+                    style={themed($mutedText)}
+                  />
+                </View>
+
+                <DashboardTimelineGraph
+                  days={timelineDays}
+                  items={dashboardTimelineItems}
+                  emptyLabel="Add start or end dates to tasks to visualize active work across the week."
+                />
+              </GlassCard>
+            </ScrollView>
+
+            <View style={themed($carouselHintRow)}>
+              <Text preset="caption" text="Swipe for more" style={themed($carouselHintText)} />
+            </View>
+
+            <View style={themed($carouselDots)}>
+              {[0, 1].map((index) => (
+                <View
+                  key={index}
+                  style={[
+                    themed($carouselDot),
+                    activeChartIndex === index && themed($carouselDotActive),
+                  ]}
+                />
+              ))}
+            </View>
           </View>
-
-          <View style={themed($carouselDots)}>
-            {[0, 1].map((index) => (
-              <View
-                key={index}
-                style={[
-                  themed($carouselDot),
-                  activeChartIndex === index && themed($carouselDotActive),
-                ]}
-              />
-            ))}
-          </View>
-        </View>
-        {/* <GlassCard style={themed($chartCard)}>
+          {/* <GlassCard style={themed($chartCard)}>
           <View style={themed($compactSectionHeader)}>
             <Text preset="formLabel" text="Task status" />
             <Text
@@ -584,91 +590,99 @@ export function HomeScreen() {
           />
         </GlassCard> */}
 
-        <View style={themed($statsGrid)}>
-          {statCards.map((card) => (
-            <DashboardStatCard
-              key={card.label}
-              label={card.label}
-              value={card.value}
-              tone={card.tone}
-            />
-          ))}
-        </View>
-
-        <GlassCard style={themed($actionsCard)}>
-          <View style={themed($compactSectionHeader)}>
-            <Text preset="formLabel" text="Quick actions" />
-            {pendingInvitesCount > 0 ? (
-              <Text
-                preset="caption"
-                text={`${pendingInvitesCount} invites`}
-                style={themed($mutedText)}
-              />
-            ) : null}
-          </View>
-          <View style={themed($quickActionsRow)}>
-            <CompactAction label="Create task" onPress={() => navigation.navigate("TaskEditor")} />
-            <CompactAction label="Create project" onPress={goToProjectsTab} />
-            <CompactAction label="Assign task" onPress={goToProjectsTab} />
-            {pendingInvitesCount > 0 ? (
-              <CompactAction label="Invites" onPress={goToInvites} />
-            ) : null}
-          </View>
-        </GlassCard>
-
-        <View style={themed($twoColumnRow)}>
-          <GlassCard style={themed($halfCard)}>
-            <View style={themed($compactSectionHeader)}>
-              <Text preset="formLabel" text="Recent activity" />
-              <Text preset="caption" text={`${activityItems.length}`} style={themed($mutedText)} />
-            </View>
-            <View style={themed($tightStack)}>
-              {activityItems.length === 0 ? (
-                <Text preset="caption" text="No recent activity." style={themed($mutedText)} />
-              ) : (
-                activityItems.slice(0, 4).map((item) => <ActivityRow key={item.id} item={item} />)
-              )}
-            </View>
-          </GlassCard>
-
-          <GlassCard style={themed($halfCard)}>
-            <View style={themed($compactSectionHeader)}>
-              <Text preset="formLabel" text="Attention" />
-              <Text
-                preset="caption"
-                text={`${projectStreams.length} tracks`}
-                style={themed($mutedText)}
-              />
-            </View>
-            <View style={themed($tightStack)}>
-              {alertItems.map((item) => (
-                <AlertRow key={item.id} item={item} />
-              ))}
-            </View>
-          </GlassCard>
-        </View>
-
-        <GlassCard>
-          <View style={themed($compactSectionHeader)}>
-            <Text preset="formLabel" text="Upcoming work" />
-            <Text preset="caption" text="Agenda" style={themed($mutedText)} />
-          </View>
-          <View style={themed($tightStack)}>
-            {agendaRows.map((row) => (
-              <AgendaRow
-                key={row.label}
-                label={row.label}
-                tasks={row.tasks}
-                assigneeLabels={assigneeLabels}
-                onPressTask={(taskId) => navigation.navigate("TaskDetail", { taskId })}
+          <View style={themed($statsGrid)}>
+            {statCards.map((card) => (
+              <DashboardStatCard
+                key={card.label}
+                label={card.label}
+                value={card.value}
+                tone={card.tone}
               />
             ))}
           </View>
-        </GlassCard>
 
-        <View style={{ height: Math.max(insets.bottom, 14) + 88 }} />
-      </View>
-    </Screen>
+          <GlassCard style={themed($actionsCard)}>
+            <View style={themed($compactSectionHeader)}>
+              <Text preset="formLabel" text="Quick actions" />
+              {pendingInvitesCount > 0 ? (
+                <Text
+                  preset="caption"
+                  text={`${pendingInvitesCount} invites`}
+                  style={themed($mutedText)}
+                />
+              ) : null}
+            </View>
+            <View style={themed($quickActionsRow)}>
+              <CompactAction
+                label="Create task"
+                onPress={() => navigation.navigate("TaskEditor")}
+              />
+              <CompactAction label="Create project" onPress={goToProjectsTab} />
+              <CompactAction label="Assign task" onPress={goToProjectsTab} />
+              {pendingInvitesCount > 0 ? (
+                <CompactAction label="Invites" onPress={goToInvites} />
+              ) : null}
+            </View>
+          </GlassCard>
+
+          <View style={themed($twoColumnRow)}>
+            <GlassCard style={themed($halfCard)}>
+              <View style={themed($compactSectionHeader)}>
+                <Text preset="formLabel" text="Recent activity" />
+                <Text
+                  preset="caption"
+                  text={`${activityItems.length}`}
+                  style={themed($mutedText)}
+                />
+              </View>
+              <View style={themed($tightStack)}>
+                {activityItems.length === 0 ? (
+                  <Text preset="caption" text="No recent activity." style={themed($mutedText)} />
+                ) : (
+                  activityItems.slice(0, 4).map((item) => <ActivityRow key={item.id} item={item} />)
+                )}
+              </View>
+            </GlassCard>
+
+            <GlassCard style={themed($halfCard)}>
+              <View style={themed($compactSectionHeader)}>
+                <Text preset="formLabel" text="Attention" />
+                <Text
+                  preset="caption"
+                  text={`${projectStreams.length} tracks`}
+                  style={themed($mutedText)}
+                />
+              </View>
+              <View style={themed($tightStack)}>
+                {alertItems.map((item) => (
+                  <AlertRow key={item.id} item={item} />
+                ))}
+              </View>
+            </GlassCard>
+          </View>
+
+          <GlassCard>
+            <View style={themed($compactSectionHeader)}>
+              <Text preset="formLabel" text="Upcoming work" />
+              <Text preset="caption" text="Agenda" style={themed($mutedText)} />
+            </View>
+            <View style={themed($tightStack)}>
+              {agendaRows.map((row) => (
+                <AgendaRow
+                  key={row.label}
+                  label={row.label}
+                  tasks={row.tasks}
+                  assigneeLabels={assigneeLabels}
+                  onPressTask={(taskId) => navigation.navigate("TaskDetail", { taskId })}
+                />
+              ))}
+            </View>
+          </GlassCard>
+
+          <View style={{ height: Math.max(insets.bottom, 14) + 88 }} />
+        </View>
+      </Screen>
+    </AnimatedBackground>
   )
 }
 

@@ -26,7 +26,7 @@ export function SyncHealthCard(props: {
     <LinearGradient
       colors={
         theme.isDark
-          ? ["rgba(71, 28, 92, 0.42)", "rgba(19, 8, 25, 0.69)"]
+          ? ["rgba(47, 28, 98, 0.42)", "rgba(13, 8, 25, 0.69)"]
           : ["rgba(186, 120, 255, 0.16)", "rgba(255, 255, 255, 0.96)"]
       }
       start={{ x: 0, y: 0 }}
