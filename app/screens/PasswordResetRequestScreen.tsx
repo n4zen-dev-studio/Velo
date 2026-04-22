@@ -22,14 +22,12 @@ export function PasswordResetRequestScreen() {
   const handleSubmit = async () => {
     const normalized = email.trim().toLowerCase()
     if (!normalized) return
-    const result = await requestPasswordResetEmail(normalized)
-    setMessage(
-      result.previewToken
-        ? "Reset details are ready. Continue below to set a new password."
-        : "If this email exists, a reset link was sent.",
-    )
-    if (result.previewToken) {
-      navigation.navigate("PasswordResetConfirm", { token: result.previewToken })
+    try {
+      await requestPasswordResetEmail(normalized)
+      setMessage("If this email exists, a reset code was sent.")
+      navigation.navigate("PasswordResetConfirm", { email: normalized })
+    } catch {
+      setMessage("Unable to send a reset code right now.")
     }
   }
 
@@ -41,11 +39,7 @@ export function PasswordResetRequestScreen() {
     >
       <View style={themed($header)}>
         <Text preset="heading" text="Reset password" />
-        <Text preset="formHelper" text="Enter your email to receive a reset link." />
-        <Text
-          preset="formHelper"
-          text="In development, you can continue with the preview reset token immediately."
-        />
+        <Text preset="formHelper" text="Enter your email to receive a 6-digit reset code." />
       </View>
 
       <GlassCard>
@@ -58,7 +52,7 @@ export function PasswordResetRequestScreen() {
         />
         {message ? <Text preset="formHelper" text={message} /> : null}
         <View style={themed($buttonRow)}>
-          <Button text="Send reset link" preset="default" onPress={handleSubmit} />
+          <Button text="Send reset code" preset="default" onPress={handleSubmit} />
           <Button text="Back" preset="reversed" onPress={() => navigation.goBack()} />
         </View>
       </GlassCard>

@@ -169,14 +169,8 @@ export function AuthScreen() {
     try {
       const result = await signupWithEmail(normalizedEmail, password, trimmedUsername || undefined)
       if (result.needsVerification) {
-        setSignupMessage(
-          result.previewToken
-            ? "Account created. Continue to verification."
-            : "Account created. Check your email to verify your account.",
-        )
-        if (result.previewToken) {
-          navigation.navigate("VerifyEmail", { email: normalizedEmail, token: result.previewToken })
-        }
+        setSignupMessage("Check your email for a 6-digit verification code.")
+        navigation.navigate("VerifyEmail", { email: normalizedEmail })
       }
     } catch (e: any) {
       console.log("SIGNUP ERROR", {
@@ -199,14 +193,12 @@ export function AuthScreen() {
       setError("Enter your email to resend verification.")
       return
     }
-    const result = await resendVerificationEmail(normalizedEmail)
-    setSignupMessage(
-      result.previewToken
-        ? "Verification details refreshed."
-        : "Verification email resent. Check your inbox.",
-    )
-    if (result.previewToken) {
-      navigation.navigate("VerifyEmail", { email: normalizedEmail, token: result.previewToken })
+    try {
+      const result = await resendVerificationEmail(normalizedEmail)
+      setSignupMessage(result.ok ? "Verification email resent. Check your inbox." : null)
+      navigation.navigate("VerifyEmail", { email: normalizedEmail })
+    } catch {
+      setError("Unable to resend verification right now.")
     }
   }
 
@@ -376,11 +368,9 @@ export function AuthScreen() {
               onPress={handleResendVerification}
             />
             <Button
-              text="Enter verification token"
+              text="Enter verification code"
               preset="glass"
-              onPress={() =>
-                navigation.navigate("VerifyEmail", { email: email.trim().toLowerCase() })
-              }
+              onPress={() => navigation.navigate("VerifyEmail", { email: email.trim().toLowerCase() })}
             />
           </View>
         ) : null}

@@ -5,11 +5,6 @@ export interface AuthResponse {
   refreshToken: string
 }
 
-export interface AuthDeliveryPreview {
-  previewToken?: string
-  previewLink?: string
-}
-
 export async function login(client: AxiosInstance, email: string, password: string) {
   const response = await client.post<AuthResponse>("/auth/login", { email, password })
   return response.data
@@ -26,22 +21,20 @@ export async function signup(
   password: string,
   username?: string,
 ) {
-  const response = await client.post<
-    { ok: boolean; requiresEmailVerification: boolean } & AuthDeliveryPreview
-  >("/auth/register", { email, password, username })
+  const response = await client.post<{ ok: boolean; requiresEmailVerification: boolean }>(
+    "/auth/register",
+    { email, password, username },
+  )
   return response.data
 }
 
-export async function verifyEmail(client: AxiosInstance, token: string) {
-  const response = await client.post<AuthResponse>("/auth/verify-email", { token })
+export async function verifyEmail(client: AxiosInstance, email: string, code: string) {
+  const response = await client.post<AuthResponse>("/auth/verify-email", { email, code })
   return response.data
 }
 
 export async function resendVerification(client: AxiosInstance, email: string) {
-  const response = await client.post<{ ok: boolean } & AuthDeliveryPreview>(
-    "/auth/resend-verification",
-    { email },
-  )
+  const response = await client.post<{ ok: boolean }>("/auth/resend-verification", { email })
   return response.data
 }
 
@@ -50,20 +43,19 @@ export async function logout(client: AxiosInstance, refreshToken: string) {
 }
 
 export async function requestPasswordReset(client: AxiosInstance, email: string) {
-  const response = await client.post<{ ok: boolean } & AuthDeliveryPreview>(
-    "/auth/request-password-reset",
-    { email },
-  )
+  const response = await client.post<{ ok: boolean }>("/auth/request-password-reset", { email })
   return response.data
 }
 
 export async function confirmPasswordReset(
   client: AxiosInstance,
-  token: string,
+  email: string,
+  code: string,
   newPassword: string,
 ) {
   const response = await client.post<{ ok: boolean }>("/auth/reset-password", {
-    token,
+    email,
+    code,
     newPassword,
   })
   return response.data
