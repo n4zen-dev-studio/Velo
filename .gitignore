@@ -98,3 +98,4 @@ coverage/
 # =========================
 *.orig.*
 *.lock
+docker-compose.velo.yml
