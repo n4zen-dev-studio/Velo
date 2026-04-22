@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react"
 import { Pressable, ScrollView, View, ViewStyle, TextStyle } from "react-native"
+import { useSafeAreaInsets } from "react-native-safe-area-context"
 
+import { AnimatedBackground } from "@/components/AnimatedBackground"
 import { SyncHealthCard } from "@/components/charts/SyncHealthCard"
 import { GlassCard } from "@/components/GlassCard"
 import { Screen } from "@/components/Screen"
@@ -159,236 +161,253 @@ export function SyncDebugScreen() {
   )
 
   return (
-    <Screen
-      preset="scroll"
-      safeAreaEdges={["top", "bottom"]}
-      contentContainerStyle={themed($screen)}
-    >
-      <View style={themed($header)}>
-        <View style={themed($headerTop)}>
-          <View style={themed($headerTitles)}>
-            <Text preset="overline" text="Debug" />
-            <Text preset="heading" text="Sync console" />
-            <Text
-              preset="caption"
-              text="Inspect queued operations, sync state, and recovery tools."
-              style={themed($muted)}
-            />
+    <AnimatedBackground>
+      <Screen
+        preset="scroll"
+        backgroundColor="transparent"
+        contentContainerStyle={themed([
+          $screen,
+          { paddingTop: useSafeAreaInsets().top, paddingBottom: useSafeAreaInsets().bottom },
+        ])}
+      >
+        <View style={themed($header)}>
+          <View style={themed($headerTop)}>
+            <View style={themed($headerTitles)}>
+              <Text preset="overline" text="Debug" />
+              <Text preset="heading" text="Sync console" />
+              <Text
+                preset="caption"
+                text="Inspect queued operations, sync state, and recovery tools."
+                style={themed($muted)}
+              />
+            </View>
+            <View style={themed(syncState.isOnline ? $chipOnline : $chipOffline)}>
+              <View style={themed(syncState.isOnline ? $chipDotOnline : $chipDotOffline)} />
+              <Text preset="caption" text={isOnlineLabel} style={themed($chipText)} />
+            </View>
           </View>
-          <View style={themed(syncState.isOnline ? $chipOnline : $chipOffline)}>
-            <View style={themed(syncState.isOnline ? $chipDotOnline : $chipDotOffline)} />
-            <Text preset="caption" text={isOnlineLabel} style={themed($chipText)} />
-          </View>
+
+          {hasError ? (
+            <View style={themed($errorBanner)}>
+              <Text
+                preset="caption"
+                text={`Last error: ${syncState.lastError}`}
+                style={themed($errorText)}
+              />
+            </View>
+          ) : null}
         </View>
 
-        {hasError ? (
-          <View style={themed($errorBanner)}>
-            <Text
-              preset="caption"
-              text={`Last error: ${syncState.lastError}`}
-              style={themed($errorText)}
-            />
-          </View>
-        ) : null}
-      </View>
-
-      <View>
-        <View style={themed($syncEntryRow)}>
-          <View style={themed($syncEntryCopy)}>
-            <Text preset="formLabel" text="Sync status" />
-            {/* <Text
+        <View>
+          <View style={themed($syncEntryRow)}>
+            <View style={themed($syncEntryCopy)}>
+              <Text preset="formLabel" text="Sync status" />
+              {/* <Text
               preset="caption"
               text="Queue health, conflict review, and recovery tools now live here."
               style={themed($muted)}
             /> */}
+            </View>
+            <SyncBadge />
           </View>
-          <SyncBadge />
+          {syncState.conflictCount > 0 ? (
+            <Pressable onPress={goToConflictList} style={themed($conflictEntryCard)}>
+              <View>
+                <Text preset="caption" text="Open conflicts" style={themed($rowTitle)} />
+                <Text
+                  preset="caption"
+                  text={`${syncState.conflictCount} items need resolution`}
+                  style={themed($muted)}
+                />
+              </View>
+              <Text preset="caption" text="Review" style={themed($strongText)} />
+            </Pressable>
+          ) : null}
         </View>
-        {syncState.conflictCount > 0 ? (
-          <Pressable onPress={goToConflictList} style={themed($conflictEntryCard)}>
-            <View>
-              <Text preset="caption" text="Open conflicts" style={themed($rowTitle)} />
+
+        <SyncHealthCard
+          healthPercent={syncMetrics.healthPercent}
+          sent={syncMetrics.sent}
+          pending={syncMetrics.pending}
+          failed={syncMetrics.failed}
+          trend={syncMetrics.trend}
+        />
+
+        <View style={themed($statsGrid)}>
+          {topStats.map((stat) => (
+            <CompactStatTile key={stat.label} label={stat.label} value={stat.value} />
+          ))}
+        </View>
+
+        {isGuestMode ? (
+          <GlassCard>
+            <View style={themed($guestNotice)}>
+              <View style={themed($guestNoticeHeader)}>
+                <OperationBadge label="Guest mode" tone="primary" />
+              </View>
+              <Text preset="formLabel" text="Sync unavailable in guest mode" />
               <Text
                 preset="caption"
-                text={`${syncState.conflictCount} items need resolution`}
+                text="You’re currently using Velo in guest mode. Changes are still saved locally and can be synced the next time you log in."
                 style={themed($muted)}
               />
             </View>
-            <Text preset="caption" text="Review" style={themed($strongText)} />
-          </Pressable>
+          </GlassCard>
         ) : null}
-      </View>
 
-      <SyncHealthCard
-        healthPercent={syncMetrics.healthPercent}
-        sent={syncMetrics.sent}
-        pending={syncMetrics.pending}
-        failed={syncMetrics.failed}
-        trend={syncMetrics.trend}
-      />
-
-      <View style={themed($statsGrid)}>
-        {topStats.map((stat) => (
-          <CompactStatTile key={stat.label} label={stat.label} value={stat.value} />
-        ))}
-      </View>
-
-      {isGuestMode ? (
         <GlassCard>
-          <View style={themed($guestNotice)}>
-            <View style={themed($guestNoticeHeader)}>
-              <OperationBadge label="Guest mode" tone="primary" />
-            </View>
-            <Text preset="formLabel" text="Sync unavailable in guest mode" />
+          <View style={themed($cardHeaderRow)}>
+            <Text preset="formLabel" text="Actions" />
             <Text
               preset="caption"
-              text="You’re currently using Velo in guest mode. Changes are still saved locally and can be synced the next time you log in."
+              text={isGuestMode ? "Sign in to enable sync tools" : "Recovery and diagnostics"}
               style={themed($muted)}
             />
           </View>
+
+          <View style={themed($actionGrid)}>
+            <CompactActionTile
+              label="Trigger sync"
+              helper="Run a manual sync"
+              onPress={() => syncController.triggerSync("manual").then(load)}
+              emphasis="primary"
+              disabled={isGuestMode}
+            />
+            <CompactActionTile
+              label="Retry failed"
+              helper="Move failed ops back to pending"
+              onPress={() => resetFailedToPending().then(load)}
+              disabled={isGuestMode}
+            />
+            {__DEV__ ? (
+              <>
+                <CompactActionTile
+                  label="Clear sent"
+                  helper="Remove SENT ops"
+                  onPress={() => clearSentOps().then(load)}
+                  disabled={isGuestMode}
+                />
+                <CompactActionTile
+                  label="Prune sent"
+                  helper="Trim old SENT ops"
+                  onPress={() => pruneSentOps(2000, 7).then(load)}
+                  disabled={isGuestMode}
+                />
+              </>
+            ) : null}
+            <CompactActionTile
+              label="Export snapshot"
+              helper="Log a compact snapshot to console"
+              onPress={async () => {
+                const snapshot = await buildDebugSnapshot()
+                console.log("[SYNC] Debug snapshot", snapshot)
+              }}
+            />
+          </View>
         </GlassCard>
-      ) : null}
 
-      <GlassCard>
-        <View style={themed($cardHeaderRow)}>
-          <Text preset="formLabel" text="Actions" />
-          <Text
-            preset="caption"
-            text={isGuestMode ? "Sign in to enable sync tools" : "Recovery and diagnostics"}
-            style={themed($muted)}
-          />
-        </View>
+        <GlassCard>
+          <View style={themed($cardHeaderRow)}>
+            <Text preset="formLabel" text="Sync state" />
+            <Text preset="caption" text={`Phase: ${phaseLabel}`} style={themed($muted)} />
+          </View>
 
-        <View style={themed($actionGrid)}>
-          <CompactActionTile
-            label="Trigger sync"
-            helper="Run a manual sync"
-            onPress={() => syncController.triggerSync("manual").then(load)}
-            emphasis="primary"
-            disabled={isGuestMode}
-          />
-          <CompactActionTile
-            label="Retry failed"
-            helper="Move failed ops back to pending"
-            onPress={() => resetFailedToPending().then(load)}
-            disabled={isGuestMode}
-          />
-          {__DEV__ ? (
-            <>
-              <CompactActionTile
-                label="Clear sent"
-                helper="Remove SENT ops"
-                onPress={() => clearSentOps().then(load)}
-                disabled={isGuestMode}
-              />
-              <CompactActionTile
-                label="Prune sent"
-                helper="Trim old SENT ops"
-                onPress={() => pruneSentOps(2000, 7).then(load)}
-                disabled={isGuestMode}
-              />
-            </>
-          ) : null}
-          <CompactActionTile
-            label="Export snapshot"
-            helper="Log a compact snapshot to console"
-            onPress={async () => {
-              const snapshot = await buildDebugSnapshot()
-              console.log("[SYNC] Debug snapshot", snapshot)
-            }}
-          />
-        </View>
-      </GlassCard>
+          <View style={themed($infoGrid)}>
+            <CompactInfoRow label="Cursor" value={cursor ?? "—"} />
+            <CompactInfoRow label="Last synced" value={lastSyncedLabel} />
+            <CompactInfoRow
+              label="Mode"
+              value={syncPreferences.syncMode === "manual" ? "Manual" : "Automatic"}
+            />
+            <CompactInfoRow
+              label="Connection"
+              value={
+                syncPreferences.syncMode === "manual"
+                  ? "Manual trigger"
+                  : syncPreferences.syncNetworkPolicy === "wifi_only"
+                    ? "Wi-Fi only"
+                    : "Any internet"
+              }
+            />
+          </View>
+          <Text preset="caption" text={behaviorLabel} style={themed($muted)} />
+        </GlassCard>
 
-      <GlassCard>
-        <View style={themed($cardHeaderRow)}>
-          <Text preset="formLabel" text="Sync state" />
-          <Text preset="caption" text={`Phase: ${phaseLabel}`} style={themed($muted)} />
-        </View>
+        <GlassCard>
+          <View style={themed($cardHeaderRow)}>
+            <Text preset="formLabel" text="Pending ops" />
+            <Text
+              preset="caption"
+              text={`${pendingViewModels.length} shown`}
+              style={themed($muted)}
+            />
+          </View>
 
-        <View style={themed($infoGrid)}>
-          <CompactInfoRow label="Cursor" value={cursor ?? "—"} />
-          <CompactInfoRow label="Last synced" value={lastSyncedLabel} />
-          <CompactInfoRow
-            label="Mode"
-            value={syncPreferences.syncMode === "manual" ? "Manual" : "Automatic"}
-          />
-          <CompactInfoRow
-            label="Connection"
-            value={
-              syncPreferences.syncMode === "manual"
-                ? "Manual trigger"
-                : syncPreferences.syncNetworkPolicy === "wifi_only"
-                  ? "Wi-Fi only"
-                  : "Any internet"
-            }
-          />
-        </View>
-        <Text preset="caption" text={behaviorLabel} style={themed($muted)} />
-      </GlassCard>
+          <ScrollView
+            style={themed($list)}
+            nestedScrollEnabled
+            showsVerticalScrollIndicator={false}
+          >
+            {pendingViewModels.length === 0 ? (
+              <Text preset="caption" text="No pending ops." style={themed($muted)} />
+            ) : (
+              pendingViewModels.map((item) => (
+                <OperationRow
+                  key={item.id}
+                  item={item}
+                  expanded={expandedOps.has(item.id)}
+                  onToggle={() => {
+                    setExpandedOps((prev) => {
+                      const next = new Set(prev)
+                      if (next.has(item.id)) next.delete(item.id)
+                      else next.add(item.id)
+                      return next
+                    })
+                  }}
+                />
+              ))
+            )}
+          </ScrollView>
+        </GlassCard>
 
-      <GlassCard>
-        <View style={themed($cardHeaderRow)}>
-          <Text preset="formLabel" text="Pending ops" />
-          <Text
-            preset="caption"
-            text={`${pendingViewModels.length} shown`}
-            style={themed($muted)}
-          />
-        </View>
+        <GlassCard>
+          <View style={themed($cardHeaderRow)}>
+            <Text preset="formLabel" text="Failed ops" />
+            <Text
+              preset="caption"
+              text={`${failedViewModels.length} shown`}
+              style={themed($muted)}
+            />
+          </View>
 
-        <ScrollView style={themed($list)} nestedScrollEnabled showsVerticalScrollIndicator={false}>
-          {pendingViewModels.length === 0 ? (
-            <Text preset="caption" text="No pending ops." style={themed($muted)} />
-          ) : (
-            pendingViewModels.map((item) => (
-              <OperationRow
-                key={item.id}
-                item={item}
-                expanded={expandedOps.has(item.id)}
-                onToggle={() => {
-                  setExpandedOps((prev) => {
-                    const next = new Set(prev)
-                    if (next.has(item.id)) next.delete(item.id)
-                    else next.add(item.id)
-                    return next
-                  })
-                }}
-              />
-            ))
-          )}
-        </ScrollView>
-      </GlassCard>
-
-      <GlassCard>
-        <View style={themed($cardHeaderRow)}>
-          <Text preset="formLabel" text="Failed ops" />
-          <Text preset="caption" text={`${failedViewModels.length} shown`} style={themed($muted)} />
-        </View>
-
-        <ScrollView style={themed($list)} nestedScrollEnabled showsVerticalScrollIndicator={false}>
-          {failedViewModels.length === 0 ? (
-            <Text preset="caption" text="No failed ops." style={themed($muted)} />
-          ) : (
-            failedViewModels.map((item) => (
-              <OperationRow
-                key={item.id}
-                item={item}
-                expanded={expandedOps.has(item.id)}
-                onToggle={() => {
-                  setExpandedOps((prev) => {
-                    const next = new Set(prev)
-                    if (next.has(item.id)) next.delete(item.id)
-                    else next.add(item.id)
-                    return next
-                  })
-                }}
-              />
-            ))
-          )}
-        </ScrollView>
-      </GlassCard>
-    </Screen>
+          <ScrollView
+            style={themed($list)}
+            nestedScrollEnabled
+            showsVerticalScrollIndicator={false}
+          >
+            {failedViewModels.length === 0 ? (
+              <Text preset="caption" text="No failed ops." style={themed($muted)} />
+            ) : (
+              failedViewModels.map((item) => (
+                <OperationRow
+                  key={item.id}
+                  item={item}
+                  expanded={expandedOps.has(item.id)}
+                  onToggle={() => {
+                    setExpandedOps((prev) => {
+                      const next = new Set(prev)
+                      if (next.has(item.id)) next.delete(item.id)
+                      else next.add(item.id)
+                      return next
+                    })
+                  }}
+                />
+              ))
+            )}
+          </ScrollView>
+        </GlassCard>
+      </Screen>
+    </AnimatedBackground>
   )
 }
 
