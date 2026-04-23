@@ -167,7 +167,7 @@ export function SyncDebugScreen() {
         backgroundColor="transparent"
         contentContainerStyle={themed([
           $screen,
-          { paddingTop: useSafeAreaInsets().top, paddingBottom: useSafeAreaInsets().bottom },
+          { paddingTop: useSafeAreaInsets().top, paddingBottom: useSafeAreaInsets().bottom+70 },
         ])}
       >
         <View style={themed($header)}>
