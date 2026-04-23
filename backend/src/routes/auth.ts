@@ -405,11 +405,24 @@ export async function authRoutes(app: FastifyInstance) {
     const { email } = request.body as { email: string }
     const normalized = normalizeEmail(email)
 
+
+
     if (!isValidEmail(normalized)) {
       return reply.send({ ok: true })
     }
 
+    request.log.info({ email: normalized }, "[auth] reset requested")
+
     const user = await prisma.user.findUnique({ where: { email: normalized } })
+
+    request.log.info(
+      {
+        email: normalized,
+        foundUser: !!user,
+        verified: !!user && isUserVerified(user),
+      },
+      "[auth] reset lookup result",
+    )
     if (!user || !isUserVerified(user)) {
       return reply.send({ ok: true })
     }
