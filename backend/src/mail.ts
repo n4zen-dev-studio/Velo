@@ -43,11 +43,27 @@ function getTransporter() {
 
 export async function sendMail(options: MailOptions) {
   const config = getMailConfig()
-  await getTransporter().sendMail({
+
+  console.log("[mail] config loaded", {
+    host: config.host,
+    port: config.port,
+    secure: config.secure,
+    user: config.user,
+    from: config.from,
+    to: options.to,
+  })
+
+  const transporter = getTransporter()
+
+  console.log("[mail] about to send")
+  const info = await transporter.sendMail({
     from: config.from,
     to: options.to,
     subject: options.subject,
     text: options.text,
     html: options.html,
   })
+  console.log("[mail] send success", info)
+
+  return info
 }
