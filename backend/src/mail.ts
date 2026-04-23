@@ -36,6 +36,9 @@ function getTransporter() {
       user: config.user,
       pass: config.pass,
     },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 10000,
   })
 
   return transporter
