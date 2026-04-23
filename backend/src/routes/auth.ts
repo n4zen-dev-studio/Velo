@@ -63,12 +63,13 @@ async function issueAuthTokens(app: FastifyInstance, userId: string) {
   return { accessToken, refreshToken }
 }
 
-async function sendSignupVerificationCode(email: string, code: string) {
-  await sendMail({
+export async function sendSignupVerificationCode(email: string, code: string) {
+  console.log("[mail] sendSignupVerificationCode called", { email })
+  return sendMail({
     to: email,
-    subject: "Your Velo verification code",
-    text: `Your Velo verification code is ${code}. It expires in 15 minutes.`,
-    html: `<p>Your Velo verification code is <strong>${code}</strong>.</p><p>It expires in 15 minutes.</p>`,
+    subject: "Your verification code",
+    text: `Your verification code is ${code}`,
+    html: `<p>Your verification code is <strong>${code}</strong></p>`,
   })
 }
 
