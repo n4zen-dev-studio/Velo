@@ -1,4 +1,4 @@
-
+<a id="top"></a>
 # 🚀 Velo — Offline-First Project Management Engine
 
 ![React Native](https://img.shields.io/badge/React%20Native-0.76-blue.svg)
@@ -9,27 +9,27 @@
 ![Offline First](https://img.shields.io/badge/Architecture-Offline--First-purple.svg)
 ![Status](https://img.shields.io/badge/Status-Active-success.svg)
 
----
-
-## 📌 Short CV Description
-
-**Velo** is an offline-first, mobile-native project management system (Jira-lite) designed to maintain full functionality without network connectivity while providing a robust synchronization pipeline for distributed teams. It implements a conflict-tolerant sync architecture, local-first data modeling, and a scalable backend powered by Fastify and Prisma.
 
 ---
 
+<a id="table-of-contents"></a>
 ## 📖 Table of Contents
 
-* [Executive Summary](#-executive-summary)
-* [System Architecture](#-system-architecture)
-* [Data Pipeline & Sync Model](#-data-pipeline--sync-model)
-* [Technical Deep Dive](#-technical-deep-dive)
-* [Performance & Metrics](#-performance--metrics)
-* [Developer Experience & Setup](#-developer-experience--setup)
-* [Visuals & Media](#-visuals--media)
-* [Why Velo is Different](#-why-velo-is-different)
+- [Executive Summary](#executive-summary)
+- [System Architecture](#system-architecture)
+- [Architecture Diagrams](#architecture-diagrams)
+- [Data Pipeline & Sync Model](#data-pipeline--sync-model)
+- [Technical Deep Dive](#technical-deep-dive)
+- [Performance & Metrics](#performance--metrics)
+- [Developer Experience & Setup](#developer-experience--setup)
+- [Visuals & Media](#visuals--media)
+- [Why Velo is Different](#why-velo-is-different)
+- [Conclusion](#conclusion)
+- [License](#license)
 
 ---
 
+<a id="executive-summary"></a>
 ## 🧠 Executive Summary
 
 Modern project management tools assume **constant connectivity**, which introduces latency, failure points, and degraded UX in real-world mobile environments.
@@ -58,15 +58,18 @@ Velo implements a **local-first architecture** where:
 * 🔄 **Eventual consistency across devices**
 * 📈 Scales from personal use → team collaboration
 
+[⬆ Back to Top](#top)
+
 ---
 
+<a id="system-architecture"></a>
 ## 🏗️ System Architecture
 
 ![System Architecture Diagram](docs/architecture.png)
 
 ### High-Level Components
 
-```
+```text
 Mobile App (React Native)
    ↓
 Local Database (Offline-first state)
@@ -76,7 +79,7 @@ Sync Engine (Op-based queue)
 Backend API (Fastify)
    ↓
 Database (PostgreSQL via Prisma)
-```
+````
 
 ### Key Architectural Decisions
 
@@ -88,21 +91,28 @@ Database (PostgreSQL via Prisma)
 | Prisma ORM           | Type-safe schema management      |
 | PostgreSQL           | Strong consistency + scalability |
 
+[⬆ Back to Top](#top)
+
+---
+
+<a id="architecture-diagrams"></a>
 
 ## Architecture Diagrams
 
-### Local‑first data flow
-```mermaid
+### Local-first data flow
+
+````mermaid
 flowchart TD
   UI[UI] -->|mutate| Repo[Repositories]
   Repo -->|write| SQLite[(SQLite)]
   Repo -->|enqueue| ChangeLog[change_log]
   ChangeLog --> SyncEngine[SyncEngine]
   SyncEngine -->|push| Server[/Sync API/]
-```
+````
 
 ### Sync push/pull cycle
-```mermaid
+
+````mermaid
 sequenceDiagram
   participant Client
   participant Server
@@ -111,20 +121,24 @@ sequenceDiagram
   Server-->>Client: ackOpIds + changes + newCursor
   Client->>Client: mark ops SENT
   Client->>Client: apply changes or create conflicts
-```
+````
 
 ### Conflict resolution flow
-```mermaid
+
+````mermaid
 flowchart TD
   Change[Incoming server change] --> Check{Local pending or newer?}
   Check -- No --> Apply[Apply to local DB]
   Check -- Yes --> Conflict[Create conflict row]
   Conflict --> Resolve[User resolves]
   Resolve --> Enqueue[Enqueue resolution op]
-```
+````
 
+[⬆ Back to Top](#top)
 
 ---
+
+<a id="data-pipeline--sync-model"></a>
 
 ## 🔄 Data Pipeline & Sync Model
 
@@ -132,7 +146,7 @@ flowchart TD
 
 Instead of syncing raw state, Velo syncs **intent-based operations**:
 
-```ts
+````ts
 type SyncOperation = {
   id: string
   entity: "task" | "project" | "comment"
@@ -140,7 +154,7 @@ type SyncOperation = {
   payload: object
   timestamp: number
 }
-```
+````
 
 ### Flow
 
@@ -154,11 +168,9 @@ type SyncOperation = {
    * Generates server changes
 5. Client pulls updates via cursor
 
----
-
 ### Example Sync Request
 
-```json
+````json
 {
   "ops": [
     {
@@ -173,13 +185,11 @@ type SyncOperation = {
   ],
   "cursor": "abc123"
 }
-```
-
----
+````
 
 ### Example Server Response
 
-```json
+````json
 {
   "ack": ["op_123"],
   "changes": [
@@ -194,9 +204,13 @@ type SyncOperation = {
   ],
   "nextCursor": "abc124"
 }
-```
+````
+
+[⬆ Back to Top](#top)
 
 ---
+
+<a id="technical-deep-dive"></a>
 
 ## 🔬 Technical Deep Dive
 
@@ -210,22 +224,18 @@ type SyncOperation = {
 * Navigation: React Navigation
 * UI: Custom glassmorphism system
 
----
-
 ### ⚙️ Backend
 
-```ts
+````ts
 // Core stack
 import Fastify from "fastify"
 import { PrismaClient } from "@prisma/client"
-```
+````
 
 * **Framework:** Fastify (low overhead, high throughput)
 * **ORM:** Prisma (type-safe DB access)
 * **Database:** PostgreSQL 15
 * **Deployment:** Docker + Caddy reverse proxy
-
----
 
 ### 🧩 Data Modeling
 
@@ -240,8 +250,6 @@ Entities:
 
 Relational structure managed via Prisma schema.
 
----
-
 ### 🔁 Sync Engine Internals
 
 * Operation queue (client-side)
@@ -249,15 +257,11 @@ Relational structure managed via Prisma schema.
 * Server change log (`serverChange`)
 * Cursor-based incremental sync
 
----
-
 ### 🧠 Conflict Resolution Strategy
 
 * Last-write-wins (timestamp-based)
 * Operation idempotency
 * Server reconciliation layer
-
----
 
 ### 📈 Improving Data Integrity
 
@@ -265,7 +269,11 @@ Relational structure managed via Prisma schema.
 * Optimistic updates with rollback support
 * Sync retries with exponential backoff
 
+[⬆ Back to Top](#top)
+
 ---
+
+<a id="performance--metrics"></a>
 
 ## 📊 Performance & Metrics
 
@@ -278,15 +286,11 @@ Relational structure managed via Prisma schema.
 | Conflict rate       | Low (op-based model) |
 | App startup         | ~1–2s                |
 
----
-
 ### Testing Strategy
 
 * Unit tests for sync logic
 * Integration tests for API routes
 * Manual multi-device sync validation
-
----
 
 ### Example Workflow Benchmark
 
@@ -296,57 +300,57 @@ Relational structure managed via Prisma schema.
 | Edit task     | Network call    | Instant |
 | Offline usage | Limited         | Full    |
 
+[⬆ Back to Top](#top)
+
 ---
+
+<a id="developer-experience--setup"></a>
 
 ## 🧑‍💻 Developer Experience & Setup
 
 ### 📦 Installation
 
-```bash
+````bash
 git clone https://github.com/yourusername/velo
 cd velo
 pnpm install
-```
-
----
+````
 
 ### 🖥️ Backend Setup
 
-```bash
+````bash
 cd backend
 cp .env.example .env
 pnpm prisma generate
 pnpm prisma migrate dev
 pnpm dev
-```
-
----
+````
 
 ### 📱 Mobile Setup
 
-```bash
+````bash
 cd mobile
 pnpm start
-```
-
----
+````
 
 ### 🐳 Docker (Production)
 
-```bash
+````bash
 docker compose -f docker-compose.velo.yml up -d
-```
-
----
+````
 
 ### Environment Configuration
 
-```env
+````env
 DATABASE_URL=postgresql://user:password@host:5432/db
 JWT_SECRET=your_secret
-```
+````
+
+[⬆ Back to Top](#top)
 
 ---
+
+<a id="visuals--media"></a>
 
 ## 🎥 Visuals & Media
 
@@ -355,7 +359,11 @@ JWT_SECRET=your_secret
 * 📊 Sync Flow Diagram: `docs/sync-flow.png`
 * 📈 Metrics Dashboard: `docs/performance.png`
 
+[⬆ Back to Top](#top)
+
 ---
+
+<a id="why-velo-is-different"></a>
 
 ## 🚀 Why Velo is Different
 
@@ -388,7 +396,11 @@ Most apps degrade offline.
 * Mobile-first workflows
 * Distributed teams
 
+[⬆ Back to Top](#top)
+
 ---
+
+<a id="conclusion"></a>
 
 ## 🔚 Conclusion
 
@@ -400,12 +412,15 @@ Velo demonstrates a **production-grade approach to offline-first application des
 
 It showcases the ability to design systems that are **resilient, scalable, and user-centric under real-world constraints**.
 
+[⬆ Back to Top](#top)
+
+---
+
+<a id="license"></a>
 
 ## 📄 License
 
 MIT License — feel free to use and adapt.
 
+[⬆ Back to Top](#top)
 
-##### ⬆️ Back to Top
-
----
