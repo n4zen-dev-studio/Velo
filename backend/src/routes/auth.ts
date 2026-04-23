@@ -155,65 +155,85 @@ async function findUsernameConflict(username: string, emailToExclude?: string) {
 
 export async function authRoutes(app: FastifyInstance) {
   app.post("/auth/register", async (request, reply) => {
-    const { email, password, username } = request.body as {
-      email: string
-      password: string
-      username?: string
-    }
-    const normalized = normalizeEmail(email)
-    const normalizedUsername = username?.trim() || null
-
-    if (!isValidEmail(normalized)) {
-      return reply.code(400).send({ error: "Invalid email" })
-    }
-    if (!password || password.length < 8) {
-      return reply.code(400).send({ error: "Password must be at least 8 characters" })
-    }
-    if (normalizedUsername) {
-      if (normalizedUsername.length < 3 || normalizedUsername.length > 20) {
-        return reply.code(400).send({ error: "Username must be 3-20 characters" })
-      }
-      if (!/^[a-zA-Z0-9._-]+$/.test(normalizedUsername)) {
-        return reply
-          .code(400)
-          .send({ error: "Username can only use letters, numbers, dots, underscores, and dashes" })
-      }
-    }
-
-    const existingUser = await prisma.user.findUnique({ where: { email: normalized } })
-    if (existingUser && isUserVerified(existingUser)) {
-      return reply.code(409).send({ error: "Email already in use" })
-    }
-
-    if (normalizedUsername) {
-      const usernameConflict = await findUsernameConflict(normalizedUsername, normalized)
-      if (usernameConflict) {
-        return reply.code(409).send({ error: usernameConflict })
-      }
-    }
-
-    const passwordHash = await bcrypt.hash(password, 10)
-    const code = generateSixDigitCode()
-
-    await upsertAuthCode({
-      email: normalized,
-      purpose: SIGNUP_CODE_PURPOSE,
-      code,
-      passwordHash,
-      username: normalizedUsername,
-    })
-
     try {
-      await sendSignupVerificationCode(normalized, code)
-    } catch (error) {
-      request.log.error({ err: error, email: normalized }, "[auth] Failed to send signup code")
-      return reply.code(500).send({ error: "Unable to send verification code" })
-    }
+      const { email, password, username } = request.body as {
+        email: string
+        password: string
+        username?: string
+      }
+      const normalized = normalizeEmail(email)
+      const normalizedUsername = username?.trim() || null
 
-    return reply.send({
-      ok: true,
-      requiresEmailVerification: true,
-    })
+      request.log.info({ email: normalized }, "[auth] register requested")
+
+      if (!isValidEmail(normalized)) {
+        return reply.code(400).send({ error: "Invalid email" })
+      }
+      if (!password || password.length < 8) {
+        return reply.code(400).send({ error: "Password must be at least 8 characters" })
+      }
+      if (normalizedUsername) {
+        if (normalizedUsername.length < 3 || normalizedUsername.length > 20) {
+          return reply.code(400).send({ error: "Username must be 3-20 characters" })
+        }
+        if (!/^[a-zA-Z0-9._-]+$/.test(normalizedUsername)) {
+          return reply.code(400).send({
+            error: "Username can only use letters, numbers, dots, underscores, and dashes",
+          })
+        }
+      }
+
+      const existingUser = await prisma.user.findUnique({ where: { email: normalized } })
+      request.log.info(
+        {
+          email: normalized,
+          existingUser: !!existingUser,
+          verified: !!existingUser && isUserVerified(existingUser),
+        },
+        "[auth] register existing user lookup complete",
+      )
+
+      if (existingUser && isUserVerified(existingUser)) {
+        return reply.code(409).send({ error: "Email already in use" })
+      }
+
+      if (normalizedUsername) {
+        const usernameConflict = await findUsernameConflict(normalizedUsername, normalized)
+        request.log.info(
+          { email: normalized, username: normalizedUsername, usernameConflict },
+          "[auth] register username conflict check complete",
+        )
+        if (usernameConflict) {
+          return reply.code(409).send({ error: usernameConflict })
+        }
+      }
+
+      const passwordHash = await bcrypt.hash(password, 10)
+      request.log.info({ email: normalized }, "[auth] register password hash complete")
+
+      const code = generateSixDigitCode()
+      request.log.info({ email: normalized }, "[auth] register code generated")
+
+      await upsertAuthCode({
+        email: normalized,
+        purpose: SIGNUP_CODE_PURPOSE,
+        code,
+        passwordHash,
+        username: normalizedUsername,
+      })
+      request.log.info({ email: normalized }, "[auth] register code persisted")
+
+      await sendSignupVerificationCode(normalized, code)
+      request.log.info({ email: normalized }, "[auth] signup code sent")
+
+      return reply.send({
+        ok: true,
+        requiresEmailVerification: true,
+      })
+    } catch (error) {
+      request.log.error({ err: error }, "[auth] register failed")
+      return reply.code(500).send({ error: "Unable to register" })
+    }
   })
 
   app.post("/auth/verify-email", async (request, reply) => {
@@ -364,7 +384,9 @@ export async function authRoutes(app: FastifyInstance) {
     if (!user) {
       const pendingSignup = await findPendingSignup(normalized)
       if (pendingSignup) {
-        return reply.code(403).send({ error: "Email not verified", requiresEmailVerification: true })
+        return reply
+          .code(403)
+          .send({ error: "Email not verified", requiresEmailVerification: true })
       }
       return reply.code(401).send({ error: "Invalid credentials" })
     }
@@ -404,8 +426,6 @@ export async function authRoutes(app: FastifyInstance) {
   app.post("/auth/request-password-reset", async (request, reply) => {
     const { email } = request.body as { email: string }
     const normalized = normalizeEmail(email)
-
-
 
     if (!isValidEmail(normalized)) {
       return reply.send({ ok: true })
