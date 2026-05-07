@@ -7,14 +7,14 @@ import { GlassCard } from "@/components/GlassCard"
 import { Screen } from "@/components/Screen"
 import { Text } from "@/components/Text"
 import { TextField } from "@/components/TextField"
-import type { AppStackScreenProps } from "@/navigators/navigationTypes"
+import type { AuthStackScreenProps } from "@/navigators/navigationTypes"
 import { useAuthViewModel } from "@/screens/AuthScreen/useAuthViewModel"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
 
 export function PasswordResetRequestScreen() {
   const { themed } = useAppTheme()
-  const navigation = useNavigation<AppStackScreenProps<"PasswordResetRequest">["navigation"]>()
+  const navigation = useNavigation<AuthStackScreenProps<"PasswordResetRequest">["navigation"]>()
   const { requestPasswordResetEmail } = useAuthViewModel()
   const [email, setEmail] = useState("")
   const [message, setMessage] = useState<string | null>(null)

@@ -11,7 +11,7 @@ import { Text } from "@/components/Text"
 import { TextField } from "@/components/TextField"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
-import type { AppStackScreenProps } from "@/navigators/navigationTypes"
+import type { HomeStackScreenProps } from "@/navigators/navigationTypes"
 import { useSyncStatus } from "@/services/sync/syncStore"
 import { hasOpenConflict } from "@/services/db/repositories/conflictsRepository"
 
@@ -19,8 +19,8 @@ import { useTaskEditorViewModel } from "./useTaskEditorViewModel"
 
 export function TaskEditorScreen() {
   const { themed } = useAppTheme()
-  const navigation = useNavigation<AppStackScreenProps<"TaskEditor">["navigation"]>()
-  const route = useRoute<AppStackScreenProps<"TaskEditor">["route"]>()
+  const navigation = useNavigation<HomeStackScreenProps<"TaskEditor">["navigation"]>()
+  const route = useRoute<HomeStackScreenProps<"TaskEditor">["route"]>()
   const { taskId, projectId } = route.params ?? {}
   const { task, statuses, priorityOptions, defaultValues, saveTask, isSaving } =
     useTaskEditorViewModel(taskId, projectId)
@@ -96,7 +96,7 @@ export function TaskEditorScreen() {
               text="Resolve Conflict"
               preset="default"
               onPress={() =>
-                navigation.navigate("ConflictResolution", { entityType: "task", entityId: taskId ?? "" })
+                navigation.navigate("ConflictResolution", { conflictId: `task:${taskId ?? ""}` })
               }
             />
           </View>

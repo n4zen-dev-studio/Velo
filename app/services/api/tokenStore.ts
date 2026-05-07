@@ -1,15 +1,21 @@
 import * as SecureStore from "expo-secure-store"
+import AsyncStorage from "@react-native-async-storage/async-storage"
 
 const ACCESS_TOKEN_KEY = "tasktrak.accessToken"
 const REFRESH_TOKEN_KEY = "tasktrak.refreshToken"
+const ACCESS_TOKEN_SESSION_KEY = "accessToken"
+const REFRESH_TOKEN_SESSION_KEY = "refreshToken"
 
 export async function setTokens(accessToken: string, refreshToken: string) {
   await SecureStore.setItemAsync(ACCESS_TOKEN_KEY, accessToken)
   await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, refreshToken)
+  await AsyncStorage.setItem(ACCESS_TOKEN_SESSION_KEY, accessToken)
+  await AsyncStorage.setItem(REFRESH_TOKEN_SESSION_KEY, refreshToken)
 }
 
 export async function setAccessToken(accessToken: string) {
   await SecureStore.setItemAsync(ACCESS_TOKEN_KEY, accessToken)
+  await AsyncStorage.setItem(ACCESS_TOKEN_SESSION_KEY, accessToken)
 }
 
 export async function getAccessToken() {
@@ -23,4 +29,6 @@ export async function getRefreshToken() {
 export async function clearTokens() {
   await SecureStore.deleteItemAsync(ACCESS_TOKEN_KEY)
   await SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY)
+  await AsyncStorage.removeItem(ACCESS_TOKEN_SESSION_KEY)
+  await AsyncStorage.removeItem(REFRESH_TOKEN_SESSION_KEY)
 }

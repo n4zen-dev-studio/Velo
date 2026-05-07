@@ -7,14 +7,14 @@ import { Screen } from "@/components/Screen"
 import { Text } from "@/components/Text"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
-import type { AppStackScreenProps } from "@/navigators/navigationTypes"
+import type { HomeStackScreenProps } from "@/navigators/navigationTypes"
 
 import { useTaskDetailViewModel } from "./useTaskDetailViewModel"
 
 export function TaskDetailScreen() {
   const { themed } = useAppTheme()
-  const navigation = useNavigation<AppStackScreenProps<"TaskDetail">["navigation"]>()
-  const route = useRoute<AppStackScreenProps<"TaskDetail">["route"]>()
+  const navigation = useNavigation<HomeStackScreenProps<"TaskDetail">["navigation"]>()
+  const route = useRoute<HomeStackScreenProps<"TaskDetail">["route"]>()
   const { taskId } = route.params
   const { task, comments, events, deleteTask } = useTaskDetailViewModel(taskId)
 

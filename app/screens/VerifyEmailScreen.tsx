@@ -8,20 +8,22 @@ import { GlassCard } from "@/components/GlassCard"
 import { Screen } from "@/components/Screen"
 import { Text } from "@/components/Text"
 import { TextField } from "@/components/TextField"
-import type { AppStackScreenProps } from "@/navigators/navigationTypes"
+import type { AuthStackScreenProps } from "@/navigators/navigationTypes"
 import { setTokens } from "@/services/api/tokenStore"
 import { useAuthViewModel } from "@/screens/AuthScreen/useAuthViewModel"
 import { setCurrentUserId, setSessionMode } from "@/services/sync/identity"
 import { claimOfflineData, markOfflineClaimHandled, shouldPromptOfflineClaim } from "@/services/sync/offlineClaim"
 import { syncController } from "@/services/sync/SyncController"
+import { goToHome } from "@/navigation/navigationActions"
+import { clearOfflineMode } from "@/services/storage/session"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
 
 export function VerifyEmailScreen() {
   const { themed } = useAppTheme()
-  const navigation = useNavigation<AppStackScreenProps<"VerifyEmail">["navigation"]>()
-  const route = useRoute<AppStackScreenProps<"VerifyEmail">["route"]>()
-  const { email } = route.params
+  const navigation = useNavigation<AuthStackScreenProps<"VerifyEmail">["navigation"]>()
+  const route = useRoute<AuthStackScreenProps<"VerifyEmail">["route"]>()
+  const email = route.params?.email ?? ""
   const { resendVerificationEmail, verifyEmailWithToken } = useAuthViewModel()
   const [message, setMessage] = useState<string | null>(null)
   const [token, setToken] = useState("")
@@ -65,7 +67,8 @@ export function VerifyEmailScreen() {
   const finalizeRemoteLogin = async (userId: string) => {
     await setCurrentUserId(userId)
     await setSessionMode("remote")
-    navigation.reset({ index: 0, routes: [{ name: "Home" }] })
+    await clearOfflineMode()
+    goToHome()
   }
 
   const handleClaimOfflineData = async () => {
@@ -75,7 +78,8 @@ export function VerifyEmailScreen() {
     await claimOfflineData(pendingRemoteUserId)
     markOfflineClaimHandled()
     setShowClaimModal(false)
-    navigation.reset({ index: 0, routes: [{ name: "Home" }] })
+    await clearOfflineMode()
+    goToHome()
     void syncController.triggerSync("manual")
   }
 
@@ -85,7 +89,8 @@ export function VerifyEmailScreen() {
     await setSessionMode("remote")
     markOfflineClaimHandled()
     setShowClaimModal(false)
-    navigation.reset({ index: 0, routes: [{ name: "Home" }] })
+    await clearOfflineMode()
+    goToHome()
   }
 
   return (

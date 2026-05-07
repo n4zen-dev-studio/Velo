@@ -7,9 +7,11 @@ import { GlassCard } from "@/components/GlassCard"
 import { Screen } from "@/components/Screen"
 import { Text } from "@/components/Text"
 import { Switch } from "@/components/Toggle/Switch"
-import type { AppStackScreenProps } from "@/navigators/navigationTypes"
+import type { MainTabScreenProps } from "@/navigators/navigationTypes"
 import { clearLocalData } from "@/services/db"
 import { clearCurrentUserId, setSessionMode } from "@/services/sync/identity"
+import { clearOfflineMode } from "@/services/storage/session"
+import { goToAuth } from "@/navigation/navigationActions"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
 import { useAuthViewModel } from "@/screens/AuthScreen/useAuthViewModel"
@@ -20,7 +22,7 @@ export function SettingsScreen() {
   const { themed } = useAppTheme()
   const { options } = useSettingsViewModel()
   const { logoutUser } = useAuthViewModel()
-  const navigation = useNavigation<AppStackScreenProps<"Settings">["navigation"]>()
+  const navigation = useNavigation<MainTabScreenProps<"SettingsTab">["navigation"]>()
   const [showLogoutModal, setShowLogoutModal] = useState(false)
 
   const handleLogout = async () => {
@@ -31,7 +33,8 @@ export function SettingsScreen() {
   const handleKeepLocal = async () => {
     await setSessionMode("local")
     setShowLogoutModal(false)
-    navigation.reset({ index: 0, routes: [{ name: "Auth" }] })
+    await clearOfflineMode()
+    goToAuth()
   }
 
   const handleWipeLocal = async () => {
@@ -39,7 +42,8 @@ export function SettingsScreen() {
     await clearCurrentUserId()
     await setSessionMode("local")
     setShowLogoutModal(false)
-    navigation.reset({ index: 0, routes: [{ name: "Auth" }] })
+    await clearOfflineMode()
+    goToAuth()
   }
 
   return (

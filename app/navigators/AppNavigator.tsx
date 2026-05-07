@@ -5,24 +5,13 @@
  * and a "main" flow which the user will use once logged in.
  */
 import { NavigationContainer } from "@react-navigation/native"
-import { createNativeStackNavigator } from "@react-navigation/native-stack"
 
 import Config from "@/config"
 import { ErrorBoundary } from "@/screens/ErrorScreen/ErrorBoundary"
-import { AuthScreen } from "@/screens/AuthScreen"
-import { ConflictResolutionScreen } from "@/screens/ConflictResolution"
-import { ConflictListScreen } from "@/screens/ConflictListScreen"
-import { HomeScreen } from "@/screens/HomeScreen"
-import { SettingsScreen } from "@/screens/SettingsScreen"
-import { TaskDetailScreen } from "@/screens/TaskDetailScreen"
-import { TaskEditorScreen } from "@/screens/TaskEditorScreen"
-import { SyncDebugScreen } from "@/devtools/SyncDebugScreen"
-import { VerifyEmailScreen } from "@/screens/VerifyEmailScreen"
-import { PasswordResetRequestScreen } from "@/screens/PasswordResetRequestScreen"
-import { PasswordResetConfirmScreen } from "@/screens/PasswordResetConfirmScreen"
+import { RootNavigator } from "@/navigation/RootNavigator"
 import { useAppTheme } from "@/theme/context"
 
-import type { AppStackParamList, NavigationProps } from "./navigationTypes"
+import type { NavigationProps } from "./navigationTypes"
 import { navigationRef, useBackButtonHandler } from "./navigationUtilities"
 
 /**
@@ -30,52 +19,20 @@ import { navigationRef, useBackButtonHandler } from "./navigationUtilities"
  * is pressed while in that screen. Only affects Android.
  */
 const exitRoutes = Config.exitRoutes
-
-// Documentation: https://reactnavigation.org/docs/stack-navigator/
-const Stack = createNativeStackNavigator<AppStackParamList>()
-
-const AppStack = () => {
-  const {
-    theme: { colors },
-  } = useAppTheme()
-
-  return (
-    <Stack.Navigator
-      initialRouteName="Auth"
-      screenOptions={{
-        headerShown: false,
-        navigationBarColor: colors.background,
-        contentStyle: {
-          backgroundColor: colors.background,
-        },
-      }}
-    >
-      <Stack.Screen name="Auth" component={AuthScreen} />
-      <Stack.Screen name="VerifyEmail" component={VerifyEmailScreen} />
-      <Stack.Screen name="PasswordResetRequest" component={PasswordResetRequestScreen} />
-      <Stack.Screen name="PasswordResetConfirm" component={PasswordResetConfirmScreen} />
-      <Stack.Screen name="Home" component={HomeScreen} />
-      <Stack.Screen name="TaskEditor" component={TaskEditorScreen} />
-      <Stack.Screen name="TaskDetail" component={TaskDetailScreen} />
-      <Stack.Screen name="ConflictList" component={ConflictListScreen} />
-      <Stack.Screen name="ConflictResolution" component={ConflictResolutionScreen} />
-      <Stack.Screen name="Settings" component={SettingsScreen} />
-      <Stack.Screen name="SyncDebug" component={SyncDebugScreen} />
-      {/** 🔥 Your screens go here */}
-      {/* IGNITE_GENERATOR_ANCHOR_APP_STACK_SCREENS */}
-    </Stack.Navigator>
-  )
-}
+const defaultExitRoutes = ["Home", "HomeTab", "MainTabs"]
 
 export const AppNavigator = (props: NavigationProps) => {
   const { navigationTheme } = useAppTheme()
 
-  useBackButtonHandler((routeName) => exitRoutes.includes(routeName))
+  useBackButtonHandler((routeName) => {
+    if (exitRoutes.includes(routeName)) return true
+    return defaultExitRoutes.includes(routeName)
+  })
 
   return (
     <NavigationContainer ref={navigationRef} theme={navigationTheme} {...props}>
       <ErrorBoundary catchErrors={Config.catchErrors}>
-        <AppStack />
+        <RootNavigator />
       </ErrorBoundary>
     </NavigationContainer>
   )

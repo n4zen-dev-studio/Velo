@@ -7,14 +7,14 @@ import { GlassCard } from "@/components/GlassCard"
 import { Screen } from "@/components/Screen"
 import { Text } from "@/components/Text"
 import { TextField } from "@/components/TextField"
-import type { AppStackScreenProps } from "@/navigators/navigationTypes"
+import type { AuthStackScreenProps } from "@/navigators/navigationTypes"
 import { useAuthViewModel } from "@/screens/AuthScreen/useAuthViewModel"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
 
 export function PasswordResetConfirmScreen() {
   const { themed } = useAppTheme()
-  const navigation = useNavigation<AppStackScreenProps<"PasswordResetConfirm">["navigation"]>()
+  const navigation = useNavigation<AuthStackScreenProps<"PasswordResetConfirm">["navigation"]>()
   const { confirmPasswordResetToken } = useAuthViewModel()
   const [token, setToken] = useState("")
   const [password, setPassword] = useState("")

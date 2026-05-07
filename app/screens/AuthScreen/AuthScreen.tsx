@@ -12,7 +12,7 @@ import { Text } from "@/components/Text"
 import { TextField } from "@/components/TextField"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
-import type { AppStackScreenProps } from "@/navigators/navigationTypes"
+import type { AuthStackScreenProps } from "@/navigators/navigationTypes"
 import {
   deriveUserIdFromEmail,
   generateUuidV4,
@@ -23,6 +23,8 @@ import { setTokens } from "@/services/api/tokenStore"
 import { claimOfflineData, markOfflineClaimHandled, shouldPromptOfflineClaim } from "@/services/sync/offlineClaim"
 import { syncController } from "@/services/sync/SyncController"
 import { googleOauth, isValidGoogleClientId } from "@/config/oauth"
+import { goToHome } from "@/navigation/navigationActions"
+import { clearOfflineMode, setOfflineMode } from "@/services/storage/session"
 
 import { useAuthViewModel } from "./useAuthViewModel"
 
@@ -42,7 +44,7 @@ export function AuthScreen() {
   const [signupMessage, setSignupMessage] = useState<string | null>(null)
   const [showClaimModal, setShowClaimModal] = useState(false)
   const [pendingRemoteUserId, setPendingRemoteUserId] = useState<string | null>(null)
-  const navigation = useNavigation<AppStackScreenProps<"Auth">["navigation"]>()
+  const navigation = useNavigation<AuthStackScreenProps<"Auth">["navigation"]>()
 
   const googleConfig = {
     androidClientId: googleOauth.androidClientId,
@@ -171,7 +173,8 @@ export function AuthScreen() {
     const userId = normalizedEmail ? await deriveUserIdFromEmail(normalizedEmail) : await generateUuidV4()
     await setCurrentUserId(userId)
     await setSessionMode("local")
-    navigation.reset({ index: 0, routes: [{ name: "Home" }] })
+    await setOfflineMode(true)
+    goToHome()
   }
 
   const completeRemoteLogin = async (accessToken: string, refreshToken: string) => {
@@ -193,7 +196,8 @@ export function AuthScreen() {
   const finalizeRemoteLogin = async (userId: string) => {
     await setCurrentUserId(userId)
     await setSessionMode("remote")
-    navigation.reset({ index: 0, routes: [{ name: "Home" }] })
+    await clearOfflineMode()
+    goToHome()
   }
 
   const handleClaimOfflineData = async () => {
@@ -203,7 +207,8 @@ export function AuthScreen() {
     await claimOfflineData(pendingRemoteUserId)
     markOfflineClaimHandled()
     setShowClaimModal(false)
-    navigation.reset({ index: 0, routes: [{ name: "Home" }] })
+    await clearOfflineMode()
+    goToHome()
     void syncController.triggerSync("manual")
   }
 
@@ -213,7 +218,8 @@ export function AuthScreen() {
     await setSessionMode("remote")
     markOfflineClaimHandled()
     setShowClaimModal(false)
-    navigation.reset({ index: 0, routes: [{ name: "Home" }] })
+    await clearOfflineMode()
+    goToHome()
   }
 
   return (
