@@ -26,33 +26,40 @@ export function VerifyEmailScreen() {
   const { themed } = useAppTheme()
   const navigation = useNavigation<AuthStackScreenProps<"VerifyEmail">["navigation"]>()
   const route = useRoute<AuthStackScreenProps<"VerifyEmail">["route"]>()
-  const email = route.params?.email ?? ""
+  const [email, setEmail] = useState(route.params?.email ?? "")
   const { bootstrapAfterLogin } = useWorkspaceStore()
-  const { resendVerificationEmail, verifyEmailWithToken } = useAuthViewModel()
+  const { resendVerificationEmail, verifyEmailWithCode } = useAuthViewModel()
   const [message, setMessage] = useState<string | null>(null)
-  const [token, setToken] = useState(route.params?.token ?? "")
+  const [code, setCode] = useState("")
   const [showClaimModal, setShowClaimModal] = useState(false)
   const [pendingRemoteUserId, setPendingRemoteUserId] = useState<string | null>(null)
 
   const handleResend = async () => {
-    const result = await resendVerificationEmail(email)
-    setMessage(
-      result.previewToken
-        ? "Verification details refreshed. Continue below."
-        : "Verification email resent. Check your inbox.",
-    )
-    if (result.previewToken) {
-      setToken(result.previewToken)
+    const normalizedEmail = email.trim().toLowerCase()
+    if (!normalizedEmail) {
+      setMessage("Enter your email address.")
+      return
+    }
+    try {
+      await resendVerificationEmail(normalizedEmail)
+      setMessage("Verification code resent. Check your inbox.")
+    } catch {
+      setMessage("Unable to resend the code right now.")
     }
   }
 
   const handleContinue = async () => {
     try {
-      if (!token.trim()) {
-        setMessage("Enter your verification token.")
+      const normalizedEmail = email.trim().toLowerCase()
+      if (!normalizedEmail) {
+        setMessage("Enter your email address.")
         return
       }
-      const auth = await verifyEmailWithToken(token.trim())
+      if (!code.trim()) {
+        setMessage("Enter your 6-digit verification code.")
+        return
+      }
+      const auth = await verifyEmailWithCode(normalizedEmail, code.trim())
       await completeRemoteAuth(auth.accessToken, auth.refreshToken)
     } catch {
       setMessage("Verification failed. Please try again.")
@@ -106,21 +113,30 @@ export function VerifyEmailScreen() {
         <Text preset="heading" text="Verify your email" />
         <Text
           preset="formHelper"
-          text="Check your inbox for the verification token or continue with the preview token shown during development."
+          text="Enter the email address you signed up with and the 6-digit verification code from your inbox."
         />
       </View>
 
       <GlassCard>
-        <Text preset="formLabel" text="Verification token" />
+        <Text preset="formLabel" text="Email" />
         <TextField
-          value={token}
-          onChangeText={setToken}
-          placeholder="token"
+          value={email}
+          onChangeText={setEmail}
+          placeholder="you@company.com"
           autoCapitalize="none"
+          keyboardType="email-address"
+        />
+        <Text preset="formLabel" text="Verification code" />
+        <TextField
+          value={code}
+          onChangeText={setCode}
+          placeholder="123456"
+          autoCapitalize="none"
+          keyboardType="number-pad"
         />
         {message ? <Text preset="formHelper" text={message} /> : null}
         <View style={themed($buttonRow)}>
-          <Button text="Resend email" preset="default" onPress={handleResend} />
+          <Button text="Resend code" preset="default" onPress={handleResend} />
           <Button text="Verify & continue" preset="reversed" onPress={handleContinue} />
         </View>
         <View style={themed($buttonRow)}>

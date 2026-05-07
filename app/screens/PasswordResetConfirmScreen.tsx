@@ -17,14 +17,20 @@ export function PasswordResetConfirmScreen() {
   const navigation = useNavigation<AuthStackScreenProps<"PasswordResetConfirm">["navigation"]>()
   const route = useRoute<AuthStackScreenProps<"PasswordResetConfirm">["route"]>()
   const { confirmPasswordResetToken } = useAuthViewModel()
-  const [token, setToken] = useState(route.params?.token ?? "")
+  const [email, setEmail] = useState(route.params?.email ?? "")
+  const [code, setCode] = useState("")
   const [password, setPassword] = useState("")
   const [message, setMessage] = useState<string | null>(null)
 
   const handleSubmit = async () => {
-    if (!token || !password) return
-    await confirmPasswordResetToken(token, password)
-    setMessage("Password updated. Return to sign in with your new password.")
+    const normalizedEmail = email.trim().toLowerCase()
+    if (!normalizedEmail || !code || !password) return
+    try {
+      await confirmPasswordResetToken(normalizedEmail, code.trim(), password)
+      setMessage("Password updated. Return to sign in with your new password.")
+    } catch {
+      setMessage("Reset failed. Check your code and try again.")
+    }
   }
 
   return (
@@ -33,17 +39,26 @@ export function PasswordResetConfirmScreen() {
         <Text preset="heading" text="Set new password" />
         <Text
           preset="formHelper"
-          text="Paste your reset token and choose a new password, or continue with the preview token already filled in."
+          text="Enter your email, the 6-digit reset code from your inbox, and your new password."
         />
       </View>
 
       <GlassCard>
-        <Text preset="formLabel" text="Reset token" />
+        <Text preset="formLabel" text="Email" />
         <TextField
-          value={token}
-          onChangeText={setToken}
-          placeholder="token"
+          value={email}
+          onChangeText={setEmail}
+          placeholder="you@company.com"
           autoCapitalize="none"
+          keyboardType="email-address"
+        />
+        <Text preset="formLabel" text="Reset code" />
+        <TextField
+          value={code}
+          onChangeText={setCode}
+          placeholder="123456"
+          autoCapitalize="none"
+          keyboardType="number-pad"
         />
         <Text preset="formLabel" text="New password" />
         <TextField

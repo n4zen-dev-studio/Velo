@@ -57,9 +57,9 @@ const config = {
         AuthStack: {
           screens: {
             Auth: "",
-            VerifyEmail: "verify-email/:token?",
+            VerifyEmail: "verify-email",
             PasswordResetRequest: "password-reset",
-            PasswordResetConfirm: "password-reset/confirm/:token?",
+            PasswordResetConfirm: "password-reset/confirm",
           },
         },
         MainTabs: {

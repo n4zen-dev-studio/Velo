@@ -19,9 +19,9 @@ export type OnboardingStackParamList = {
 
 export type AuthStackParamList = {
   Auth: undefined
-  VerifyEmail: { email?: string; token?: string } | undefined
+  VerifyEmail: { email?: string } | undefined
   PasswordResetRequest: undefined
-  PasswordResetConfirm: { token?: string } | undefined
+  PasswordResetConfirm: { email?: string } | undefined
 }
 
 export type HomeStackParamList = {

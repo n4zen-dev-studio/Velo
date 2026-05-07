@@ -35,8 +35,6 @@ export const useAuthViewModel = () => {
     const result = await signup(client, email, password, username)
     return {
       needsVerification: !!result.requiresEmailVerification,
-      previewToken: result.previewToken,
-      previewLink: result.previewLink,
     }
   }
 
@@ -61,12 +59,12 @@ export const useAuthViewModel = () => {
     return requestPasswordReset(client, email)
   }
 
-  const confirmPasswordResetToken = async (token: string, newPassword: string) => {
-    return confirmPasswordReset(client, token, newPassword)
+  const confirmPasswordResetToken = async (email: string, code: string, newPassword: string) => {
+    return confirmPasswordReset(client, email, code, newPassword)
   }
 
-  const verifyEmailWithToken = async (token: string) => {
-    return verifyEmail(client, token)
+  const verifyEmailWithCode = async (email: string, code: string) => {
+    return verifyEmail(client, email, code)
   }
 
   const loginWithGoogle = async (idToken: string) => {
@@ -85,7 +83,7 @@ export const useAuthViewModel = () => {
     logoutUser,
     requestPasswordResetEmail,
     confirmPasswordResetToken,
-    verifyEmailWithToken,
+    verifyEmailWithCode,
     loginWithGoogle,
     loginWithApple,
   }

@@ -24,11 +24,33 @@ model User {
   updatedAt    DateTime       @updatedAt @map("updated_at")
   deletedAt    DateTime?      @map("deleted_at")
   revision     String         @default("rev-0") @map("revision")
+  authCodes    AuthCode[]
   refreshTokens RefreshToken[]
   serverChanges ServerChange[]
   syncDeviceStates SyncDeviceState[]
 
   @@map("users")
+}
+
+model AuthCode {
+  id           String    @id @default(uuid()) @db.Uuid
+  email        String
+  purpose      String
+  codeHash     String    @map("code_hash")
+  expiresAt    DateTime  @map("expires_at")
+  usedAt       DateTime? @map("used_at")
+  passwordHash String?   @map("password_hash")
+  username     String?
+  userId       String?   @map("user_id") @db.Uuid
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@unique([email, purpose])
+  @@index([email])
+  @@index([purpose, expiresAt])
+  @@map("auth_codes")
 }
 
 model RefreshToken {
