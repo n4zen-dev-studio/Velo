@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { Platform, View, ViewStyle, TextStyle } from "react-native"
+import { Platform, View, ViewStyle, TextStyle, Image} from "react-native"
 import { useNavigation } from "@react-navigation/native"
 import * as AppleAuthentication from "expo-apple-authentication"
 import * as Google from "expo-auth-session/providers/google"
@@ -42,8 +42,10 @@ import { GUEST_SCOPE_KEY, userScopeKey } from "@/services/session/scope"
 import { useWorkspaceStore } from "@/stores/workspaceStore"
 
 import { useAuthViewModel } from "./useAuthViewModel"
+import { RadialGlow } from "@/components/RadialGlow"
 
 const ROBOT_ANIM = require("@assets/animations/robot.json")
+const logo = require("@assets/images/logo.png")
 
 export function AuthScreen() {
   const { themed, theme } = useAppTheme()
@@ -79,7 +81,7 @@ export function AuthScreen() {
 
   // UI: pick a subtle accent based on your theme if it exists
   const accent = useMemo(() => {
-    return theme.colors.tint ?? "#7C5CFF"
+    return theme.colors.palette.primary600 ?? "#7C5CFF"
   }, [theme])
 
   useEffect(() => {
@@ -302,11 +304,24 @@ export function AuthScreen() {
       contentContainerStyle={themed($screen)}
     >
       <View style={themed($hero)}>
-        <View style={themed($heroOrbLeft(accent))} />
-        <View style={themed($heroOrbRight)} />
+        <RadialGlow
+          width={190}
+          height={190}
+          color={accent}
+          opacity={0.9}
+          style={themed($heroOrbLeft)}
+        />
+
+        <RadialGlow
+          width={220}
+          height={220}
+          color={theme.colors.gradientEnd}
+          opacity={0.6}
+          style={themed($heroOrbRight)}
+        />
         <View style={themed($heroInner)}>
           <View style={themed($heroBadge)}>
-            <Text preset="overline" text="Velo" style={themed($heroBadgeText)} />
+            <Image source={logo} style={{width: 55, height: 55}} resizeMode='contain' />
           </View>
           <View style={themed($heroRow)}>
             <View style={themed($robotWrap)}>
@@ -458,28 +473,20 @@ const $hero: ThemedStyle<ViewStyle> = ({ colors, radius, elevation, spacing }) =
   ...elevation.floating,
 })
 
-const $heroOrbLeft =
-  (accent: string): ThemedStyle<ViewStyle> =>
-  () => ({
-    position: "absolute",
-    top: -70,
-    left: -40,
-    width: 190,
-    height: 190,
-    borderRadius: 999,
-    backgroundColor: accent,
-    opacity: 0.2,
-  })
+const $heroOrbLeft: ThemedStyle<ViewStyle> = () => ({
+  position: "absolute",
+  top: -70,
+  left: -40,
+  width: 190,
+  height: 190,
+})
 
-const $heroOrbRight: ThemedStyle<ViewStyle> = ({ colors }) => ({
+const $heroOrbRight: ThemedStyle<ViewStyle> = () => ({
   position: "absolute",
   right: -48,
   bottom: -76,
   width: 220,
   height: 220,
-  borderRadius: 999,
-  backgroundColor: colors.gradientEnd,
-  opacity: 0.16,
 })
 
 const $heroInner: ThemedStyle<ViewStyle> = ({ spacing }) => ({
@@ -488,12 +495,12 @@ const $heroInner: ThemedStyle<ViewStyle> = ({ spacing }) => ({
 
 const $heroBadge: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
   alignSelf: "flex-start",
-  paddingHorizontal: spacing.sm,
-  paddingVertical: spacing.xxs,
-  borderRadius: radius.pill,
+  // paddingHorizontal: spacing.sm,
+  // paddingVertical: spacing.xxs,
+  borderRadius: 99,
   backgroundColor: colors.surfaceGlass,
   borderWidth: 1,
-  borderColor: colors.borderStrong,
+  borderColor: colors.borderSubtle,
 })
 
 const $heroBadgeText: ThemedStyle<TextStyle> = ({ colors }) => ({

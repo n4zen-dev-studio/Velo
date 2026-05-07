@@ -161,13 +161,14 @@ export function ProjectsScreen() {
       <View style={themed($header)}>
         <View style={themed($headerCopy)}>
           <Text preset="overline" text="Projects" />
-          <Text preset="heading" text="Command surface" />
+          <Text preset="heading" text="Project Hub" />
           <Text
             preset="caption"
             text="Jump back into active work, or manage projects without leaving mobile flow."
             style={themed($subtitle)}
           />
         </View>
+        
         <Pressable onPress={() => setCreateOpen(true)} style={themed($iconAction)}>
           <Text preset="subheading" text="+" />
         </Pressable>

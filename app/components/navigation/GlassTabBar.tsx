@@ -7,6 +7,8 @@ import { Ionicons } from "@expo/vector-icons"
 
 import { Text } from "@/components/Text"
 import { useAppTheme } from "@/theme/context"
+import { RadialGlow } from "../RadialGlow"
+import { ThemedStyle } from "@/theme/types"
 
 let BlurView: any = null
 try {
@@ -100,8 +102,23 @@ export function GlassTabBar({ state, descriptors, navigation }: BottomTabBarProp
             indicatorStyle,
           ]}
         >
-          <View style={themed($indicatorGlowLeft)} />
-          <View style={themed($indicatorGlowRight)} />
+          {/* <View style={themed($indicatorGlowLeft)} />
+          <View style={themed($indicatorGlowRight)} /> */}
+          <RadialGlow
+            width={30}
+            height={80}
+            color={theme.colors.gradientStart}
+            opacity={0.9}
+            style={themed($indicatorGlowLeft)}
+          />
+
+          <RadialGlow
+            width={40}
+            height={80}
+            color={theme.colors.gradientEnd}
+            opacity={0.9}
+            style={themed($indicatorGlowRight)}
+          />
         </Animated.View>
 
         <View style={themed($row)}>
@@ -154,7 +171,7 @@ const $root = ({ spacing }: any): ViewStyle => ({
 
 const $pill = ({ colors, radius, elevation }: any): ViewStyle => ({
   alignSelf: "center",
-  width: "78%",
+  width: "88%",
   height: PILL_HEIGHT,
   borderRadius: radius.pill,
   borderWidth: 1,
@@ -175,24 +192,20 @@ const $indicator = ({ colors, radius }: any): ViewStyle => ({
   overflow: "hidden",
 })
 
-const $indicatorGlowLeft = ({ colors }: any): ViewStyle => ({
+const $indicatorGlowLeft: ThemedStyle<ViewStyle> = () => ({
   position: "absolute",
   left: -6,
   top: -10,
-  width: 80,
+  width: 40,
   height: 80,
-  borderRadius: 999,
-  backgroundColor: colors.gradientStart,
 })
 
-const $indicatorGlowRight = ({ colors }: any): ViewStyle => ({
+const $indicatorGlowRight: ThemedStyle<ViewStyle> = () => ({
   position: "absolute",
   right: -10,
   top: -10,
-  width: 96,
+  width: 40,
   height: 80,
-  borderRadius: 999,
-  backgroundColor: colors.gradientEnd,
 })
 
 const $row = (): ViewStyle => ({
