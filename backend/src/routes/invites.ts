@@ -74,7 +74,8 @@ async function seedWorkspaceTasksForRecipient(
   const now = new Date()
   await tx.serverChange.createMany({
     data: tasks.map((task) => {
-      const revision = task.revision ?? `srv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+      const revision =
+        task.revision ?? `srv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
       return {
         userId: recipientUserId,
         entityType: "task",
@@ -90,6 +91,8 @@ async function seedWorkspaceTasksForRecipient(
           priority: task.priority,
           assigneeUserId: task.assigneeUserId ?? null,
           createdByUserId: task.createdByUserId,
+          startDate: task.startDate ? task.startDate.toISOString() : null,
+          endDate: task.endDate ? task.endDate.toISOString() : null,
           createdAt: task.createdAt.toISOString(),
           updatedAt: task.updatedAt.toISOString(),
           revision,
@@ -149,7 +152,12 @@ export async function inviteRoutes(app: FastifyInstance) {
 
         const isOwner = await requireWorkspaceOwner(inviterId, workspaceId)
         if (!isOwner) {
-          return sendError(reply, 403, "NOT_WORKSPACE_OWNER", "Only workspace owners can invite members.")
+          return sendError(
+            reply,
+            403,
+            "NOT_WORKSPACE_OWNER",
+            "Only workspace owners can invite members.",
+          )
         }
 
         const existingUser = await prisma.user.findUnique({
@@ -161,7 +169,12 @@ export async function inviteRoutes(app: FastifyInstance) {
             where: { workspaceId, userId: existingUser.id, deletedAt: null },
           })
           if (existingMember) {
-            return sendError(reply, 409, "ALREADY_MEMBER", "This user is already a member of the workspace.")
+            return sendError(
+              reply,
+              409,
+              "ALREADY_MEMBER",
+              "This user is already a member of the workspace.",
+            )
           }
         }
 
@@ -174,7 +187,12 @@ export async function inviteRoutes(app: FastifyInstance) {
           },
         })
         if (existingInvite) {
-          return sendError(reply, 409, "INVITE_ALREADY_SENT", "An invite has already been sent to this email.")
+          return sendError(
+            reply,
+            409,
+            "INVITE_ALREADY_SENT",
+            "An invite has already been sent to this email.",
+          )
         }
 
         const token = generateToken()
@@ -211,7 +229,9 @@ export async function inviteRoutes(app: FastifyInstance) {
 
         const links = buildInviteLink(invite.token)
         // eslint-disable-next-line no-console
-        console.log(`[invite] Send invite to ${invite.email}: ${links.web} (deep: ${links.deepLink})`)
+        console.log(
+          `[invite] Send invite to ${invite.email}: ${links.web} (deep: ${links.deepLink})`,
+        )
 
         return reply.send({ ok: true })
       } catch (error) {
@@ -238,7 +258,12 @@ export async function inviteRoutes(app: FastifyInstance) {
 
       const isOwner = await requireWorkspaceOwner(userId, workspaceId)
       if (!isOwner) {
-        return sendError(reply, 403, "NOT_WORKSPACE_OWNER", "Only workspace owners can view invites.")
+        return sendError(
+          reply,
+          403,
+          "NOT_WORKSPACE_OWNER",
+          "Only workspace owners can view invites.",
+        )
       }
 
       const invites = await prisma.workspaceInvite.findMany({
@@ -279,7 +304,12 @@ export async function inviteRoutes(app: FastifyInstance) {
 
       const isMember = await requireWorkspaceMember(userId, workspaceId)
       if (!isMember) {
-        return sendError(reply, 403, "NOT_WORKSPACE_MEMBER", "Only workspace members can view members.")
+        return sendError(
+          reply,
+          403,
+          "NOT_WORKSPACE_MEMBER",
+          "Only workspace members can view members.",
+        )
       }
 
       const members = await prisma.workspaceMember.findMany({
@@ -352,7 +382,12 @@ export async function inviteRoutes(app: FastifyInstance) {
 
       const isOwner = await requireWorkspaceOwner(userId, workspaceId)
       if (!isOwner) {
-        return sendError(reply, 403, "NOT_WORKSPACE_OWNER", "Only workspace owners can revoke invites.")
+        return sendError(
+          reply,
+          403,
+          "NOT_WORKSPACE_OWNER",
+          "Only workspace owners can revoke invites.",
+        )
       }
 
       const invite = await prisma.workspaceInvite.findFirst({
@@ -390,7 +425,12 @@ export async function inviteRoutes(app: FastifyInstance) {
 
       const isOwner = await requireWorkspaceOwner(requesterId, workspaceId)
       if (!isOwner) {
-        return sendError(reply, 403, "NOT_WORKSPACE_OWNER", "Only workspace owners can remove members.")
+        return sendError(
+          reply,
+          403,
+          "NOT_WORKSPACE_OWNER",
+          "Only workspace owners can remove members.",
+        )
       }
 
       if (userId === requesterId) {
@@ -434,7 +474,12 @@ export async function inviteRoutes(app: FastifyInstance) {
       const userId = (request.user as { sub: string }).sub
 
       if (workspaceId === "personal") {
-        return sendError(reply, 400, "CANNOT_DELETE_PERSONAL", "Personal workspace cannot be deleted.")
+        return sendError(
+          reply,
+          400,
+          "CANNOT_DELETE_PERSONAL",
+          "Personal workspace cannot be deleted.",
+        )
       }
 
       const workspaceExists = await prisma.workspaceMember.findFirst({
@@ -446,7 +491,12 @@ export async function inviteRoutes(app: FastifyInstance) {
 
       const isOwner = await requireWorkspaceOwner(userId, workspaceId)
       if (!isOwner) {
-        return sendError(reply, 403, "NOT_WORKSPACE_OWNER", "Only workspace owners can delete workspaces.")
+        return sendError(
+          reply,
+          403,
+          "NOT_WORKSPACE_OWNER",
+          "Only workspace owners can delete workspaces.",
+        )
       }
 
       const now = new Date()
@@ -493,197 +543,189 @@ export async function inviteRoutes(app: FastifyInstance) {
     })
   })
 
-  app.post(
-    "/invites/:token/accept",
-    { preHandler: [app.authenticate] },
-    async (request, reply) => {
-      const { token } = request.params as { token: string }
-      const userId = (request.user as { sub: string }).sub
+  app.post("/invites/:token/accept", { preHandler: [app.authenticate] }, async (request, reply) => {
+    const { token } = request.params as { token: string }
+    const userId = (request.user as { sub: string }).sub
 
-      const user = await prisma.user.findUnique({ where: { id: userId } })
-      if (!user?.email) {
-        return reply.code(400).send({ error: "User email required to accept invite" })
-      }
+    const user = await prisma.user.findUnique({ where: { id: userId } })
+    if (!user?.email) {
+      return reply.code(400).send({ error: "User email required to accept invite" })
+    }
 
-      const invite = await prisma.workspaceInvite.findUnique({ where: { token } })
-      if (!invite) return reply.code(404).send({ error: "Invite not found" })
+    const invite = await prisma.workspaceInvite.findUnique({ where: { token } })
+    if (!invite) return reply.code(404).send({ error: "Invite not found" })
 
-      if (invite.status !== "PENDING") {
-        const membership = await prisma.workspaceMember.findFirst({
-          where: { workspaceId: invite.workspaceId, userId, deletedAt: null },
-        })
-        return reply.send({
-          ok: true,
-          workspace: { id: invite.workspaceId, label: invite.workspaceLabel, kind: "custom" },
-          membership: membership
-            ? {
-                id: membership.id,
-                workspaceId: membership.workspaceId,
-                userId: membership.userId,
-                role: membership.role,
-                createdAt: membership.createdAt.toISOString(),
-                updatedAt: membership.updatedAt.toISOString(),
-                revision: membership.revision,
-                deletedAt: membership.deletedAt,
-              }
-            : null,
-          invite: {
-            id: invite.id,
-            status: invite.status,
-            acceptedAt: invite.acceptedAt?.toISOString() ?? null,
-          },
-        })
-      }
-
-      if (invite.expiresAt.getTime() < Date.now()) {
-        await prisma.workspaceInvite.update({
-          where: { id: invite.id },
-          data: { status: "EXPIRED" },
-        })
-        return reply.code(410).send({ error: "Invite expired" })
-      }
-
-      if (normalizeEmail(user.email) !== normalizeEmail(invite.email)) {
-        return reply.code(403).send({ error: "Invite email mismatch" })
-      }
-
-      const result = await prisma.$transaction(async (tx) => {
-        const revision = `srv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-        const membership = await tx.workspaceMember.upsert({
-          where: {
-            workspaceId_userId: {
-              workspaceId: invite.workspaceId,
-              userId,
-            },
-          },
-          update: {
-            role: invite.role,
-            deletedAt: null,
-            updatedAt: new Date(),
-            revision,
-          },
-          create: {
-            id: crypto.randomUUID(),
-            workspaceId: invite.workspaceId,
-            userId,
-            role: invite.role,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-            deletedAt: null,
-            revision,
-          },
-        })
-
-        await tx.workspace.upsert({
-          where: { id: invite.workspaceId },
-          update: { label: invite.workspaceLabel ?? invite.workspaceId, kind: "custom" },
-          create: {
-            id: invite.workspaceId,
-            label: invite.workspaceLabel ?? invite.workspaceId,
-            kind: "custom",
-          },
-        })
-
-        const updatedInvite = await tx.workspaceInvite.update({
-          where: { id: invite.id },
-          data: {
-            status: "ACCEPTED",
-            acceptedAt: new Date(),
-            acceptedById: userId,
-          },
-        })
-
-        const owners = await tx.workspaceMember.findMany({
-          where: { workspaceId: invite.workspaceId, role: "OWNER", deletedAt: null },
-          select: { userId: true },
-        })
-        const recipientIds = new Set<string>([userId, ...owners.map((owner) => owner.userId)])
-        for (const recipientId of recipientIds) {
-          await tx.serverChange.create({
-            data: {
-              userId: recipientId,
-              entityType: "workspace_member",
-              entityId: membership.id,
-              opType: "UPSERT",
-              payload: {
-                id: membership.id,
-                workspaceId: membership.workspaceId,
-                userId: membership.userId,
-                role: membership.role,
-                createdAt: membership.createdAt.toISOString(),
-                updatedAt: membership.updatedAt.toISOString(),
-                deletedAt: membership.deletedAt,
-                revision: membership.revision,
-              },
-              revision: membership.revision,
-              updatedAt: membership.updatedAt,
-            },
-          })
-        }
-
-        await emitWorkspaceChange(tx, invite.workspaceId, Array.from(recipientIds), "UPSERT")
-        await seedWorkspaceTasksForRecipient(tx, invite.workspaceId, userId)
-
-        return { membership, updatedInvite }
+    if (invite.status !== "PENDING") {
+      const membership = await prisma.workspaceMember.findFirst({
+        where: { workspaceId: invite.workspaceId, userId, deletedAt: null },
       })
-
       return reply.send({
         ok: true,
         workspace: { id: invite.workspaceId, label: invite.workspaceLabel, kind: "custom" },
-        membership: {
-          id: result.membership.id,
-          workspaceId: result.membership.workspaceId,
-          userId: result.membership.userId,
-          role: result.membership.role,
-          createdAt: result.membership.createdAt.toISOString(),
-          updatedAt: result.membership.updatedAt.toISOString(),
-          revision: result.membership.revision,
-          deletedAt: result.membership.deletedAt,
-        },
+        membership: membership
+          ? {
+              id: membership.id,
+              workspaceId: membership.workspaceId,
+              userId: membership.userId,
+              role: membership.role,
+              createdAt: membership.createdAt.toISOString(),
+              updatedAt: membership.updatedAt.toISOString(),
+              revision: membership.revision,
+              deletedAt: membership.deletedAt,
+            }
+          : null,
         invite: {
-          id: result.updatedInvite.id,
-          status: result.updatedInvite.status,
-          acceptedAt: result.updatedInvite.acceptedAt?.toISOString() ?? null,
-        },
-      })
-    },
-  )
-
-  app.get(
-    "/me/invites",
-    { preHandler: [app.authenticate] },
-    async (request, reply) => {
-      const userId = (request.user as { sub: string }).sub
-      const user = await prisma.user.findUnique({ where: { id: userId } })
-      if (!user?.email) return reply.send([])
-
-      const invites = await prisma.workspaceInvite.findMany({
-        where: {
-          status: "PENDING",
-          email: normalizeEmail(user.email),
-        },
-        orderBy: { createdAt: "desc" },
-      })
-
-      const inviterIds = invites.map((invite) => invite.invitedById)
-      const inviters = await prisma.user.findMany({
-        where: { id: { in: inviterIds } },
-        select: { id: true, email: true },
-      })
-      const inviterMap = new Map(inviters.map((inviter) => [inviter.id, inviter]))
-
-      return reply.send(
-        invites.map((invite) => ({
           id: invite.id,
-          token: invite.token,
-          workspace: { id: invite.workspaceId, label: invite.workspaceLabel },
+          status: invite.status,
+          acceptedAt: invite.acceptedAt?.toISOString() ?? null,
+        },
+      })
+    }
+
+    if (invite.expiresAt.getTime() < Date.now()) {
+      await prisma.workspaceInvite.update({
+        where: { id: invite.id },
+        data: { status: "EXPIRED" },
+      })
+      return reply.code(410).send({ error: "Invite expired" })
+    }
+
+    if (normalizeEmail(user.email) !== normalizeEmail(invite.email)) {
+      return reply.code(403).send({ error: "Invite email mismatch" })
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      const revision = `srv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+      const membership = await tx.workspaceMember.upsert({
+        where: {
+          workspaceId_userId: {
+            workspaceId: invite.workspaceId,
+            userId,
+          },
+        },
+        update: {
           role: invite.role,
-          expiresAt: invite.expiresAt.toISOString(),
-          invitedBy: inviterMap.get(invite.invitedById) ?? { id: invite.invitedById, email: "" },
-        })),
-      )
-    },
-  )
+          deletedAt: null,
+          updatedAt: new Date(),
+          revision,
+        },
+        create: {
+          id: crypto.randomUUID(),
+          workspaceId: invite.workspaceId,
+          userId,
+          role: invite.role,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          deletedAt: null,
+          revision,
+        },
+      })
+
+      await tx.workspace.upsert({
+        where: { id: invite.workspaceId },
+        update: { label: invite.workspaceLabel ?? invite.workspaceId, kind: "custom" },
+        create: {
+          id: invite.workspaceId,
+          label: invite.workspaceLabel ?? invite.workspaceId,
+          kind: "custom",
+        },
+      })
+
+      const updatedInvite = await tx.workspaceInvite.update({
+        where: { id: invite.id },
+        data: {
+          status: "ACCEPTED",
+          acceptedAt: new Date(),
+          acceptedById: userId,
+        },
+      })
+
+      const owners = await tx.workspaceMember.findMany({
+        where: { workspaceId: invite.workspaceId, role: "OWNER", deletedAt: null },
+        select: { userId: true },
+      })
+      const recipientIds = new Set<string>([userId, ...owners.map((owner) => owner.userId)])
+      for (const recipientId of recipientIds) {
+        await tx.serverChange.create({
+          data: {
+            userId: recipientId,
+            entityType: "workspace_member",
+            entityId: membership.id,
+            opType: "UPSERT",
+            payload: {
+              id: membership.id,
+              workspaceId: membership.workspaceId,
+              userId: membership.userId,
+              role: membership.role,
+              createdAt: membership.createdAt.toISOString(),
+              updatedAt: membership.updatedAt.toISOString(),
+              deletedAt: membership.deletedAt,
+              revision: membership.revision,
+            },
+            revision: membership.revision,
+            updatedAt: membership.updatedAt,
+          },
+        })
+      }
+
+      await emitWorkspaceChange(tx, invite.workspaceId, Array.from(recipientIds), "UPSERT")
+      await seedWorkspaceTasksForRecipient(tx, invite.workspaceId, userId)
+
+      return { membership, updatedInvite }
+    })
+
+    return reply.send({
+      ok: true,
+      workspace: { id: invite.workspaceId, label: invite.workspaceLabel, kind: "custom" },
+      membership: {
+        id: result.membership.id,
+        workspaceId: result.membership.workspaceId,
+        userId: result.membership.userId,
+        role: result.membership.role,
+        createdAt: result.membership.createdAt.toISOString(),
+        updatedAt: result.membership.updatedAt.toISOString(),
+        revision: result.membership.revision,
+        deletedAt: result.membership.deletedAt,
+      },
+      invite: {
+        id: result.updatedInvite.id,
+        status: result.updatedInvite.status,
+        acceptedAt: result.updatedInvite.acceptedAt?.toISOString() ?? null,
+      },
+    })
+  })
+
+  app.get("/me/invites", { preHandler: [app.authenticate] }, async (request, reply) => {
+    const userId = (request.user as { sub: string }).sub
+    const user = await prisma.user.findUnique({ where: { id: userId } })
+    if (!user?.email) return reply.send([])
+
+    const invites = await prisma.workspaceInvite.findMany({
+      where: {
+        status: "PENDING",
+        email: normalizeEmail(user.email),
+      },
+      orderBy: { createdAt: "desc" },
+    })
+
+    const inviterIds = invites.map((invite) => invite.invitedById)
+    const inviters = await prisma.user.findMany({
+      where: { id: { in: inviterIds } },
+      select: { id: true, email: true },
+    })
+    const inviterMap = new Map(inviters.map((inviter) => [inviter.id, inviter]))
+
+    return reply.send(
+      invites.map((invite) => ({
+        id: invite.id,
+        token: invite.token,
+        workspace: { id: invite.workspaceId, label: invite.workspaceLabel },
+        role: invite.role,
+        expiresAt: invite.expiresAt.toISOString(),
+        invitedBy: inviterMap.get(invite.invitedById) ?? { id: invite.invitedById, email: "" },
+      })),
+    )
+  })
 
   app.post(
     "/admin/workspaces/backfill-owners",
@@ -752,7 +794,7 @@ export async function inviteRoutes(app: FastifyInstance) {
         orderBy: { createdAt: "asc" },
       })
 
-      const byWorkspace = new Map<string, typeof allMembers[number][]>()
+      const byWorkspace = new Map<string, (typeof allMembers)[number][]>()
       for (const member of allMembers) {
         const list = byWorkspace.get(member.workspaceId) ?? []
         list.push(member)

@@ -99,7 +99,13 @@ export async function syncRoutes(app: FastifyInstance) {
     })
 
     const mapped = changes.map((row) => ({
-      entityType: row.entityType as "task" | "comment" | "task_events" | "user" | "workspace_member" | "workspace",
+      entityType: row.entityType as
+        | "task"
+        | "comment"
+        | "task_events"
+        | "user"
+        | "workspace_member"
+        | "workspace",
       entityId: row.entityId,
       opType: row.opType as "UPSERT" | "DELETE",
       payload: row.payload as Record<string, unknown>,
@@ -154,6 +160,8 @@ async function applyTaskOp(tx: typeof prisma, userId: string, op: SyncOp) {
       priority: patch.priority ?? "medium",
       assigneeUserId: assigneeUserId ?? null,
       createdByUserId: patch.createdByUserId ?? userId,
+      startDate: patch.startDate ? new Date(patch.startDate) : (existing?.startDate ?? null),
+      endDate: patch.endDate ? new Date(patch.endDate) : (existing?.endDate ?? null),
       updatedAt: now,
       revision,
       deletedAt: now,
@@ -174,7 +182,17 @@ async function applyTaskOp(tx: typeof prisma, userId: string, op: SyncOp) {
       opType: "DELETE",
       taskRevision: record.revision,
     })
-    await logChangeForWorkspace(tx, userId, record.workspaceId, "task", op.entityId, "DELETE", record, revision, now)
+    await logChangeForWorkspace(
+      tx,
+      userId,
+      record.workspaceId,
+      "task",
+      op.entityId,
+      "DELETE",
+      record,
+      revision,
+      now,
+    )
     return
   }
 
@@ -188,6 +206,8 @@ async function applyTaskOp(tx: typeof prisma, userId: string, op: SyncOp) {
     priority: patch.priority,
     assigneeUserId: assigneeUserId ?? null,
     createdByUserId: patch.createdByUserId ?? userId,
+    startDate: patch.startDate ? new Date(patch.startDate) : (existing?.startDate ?? null),
+    endDate: patch.endDate ? new Date(patch.endDate) : (existing?.endDate ?? null),
     updatedAt: now,
     revision,
     deletedAt: patch.deletedAt ?? null,
@@ -209,7 +229,17 @@ async function applyTaskOp(tx: typeof prisma, userId: string, op: SyncOp) {
     opType: "UPSERT",
     taskRevision: record.revision,
   })
-  await logChangeForWorkspace(tx, userId, record.workspaceId, "task", op.entityId, "UPSERT", record, revision, now)
+  await logChangeForWorkspace(
+    tx,
+    userId,
+    record.workspaceId,
+    "task",
+    op.entityId,
+    "UPSERT",
+    record,
+    revision,
+    now,
+  )
 }
 
 async function createTaskEventForOp(
@@ -225,7 +255,16 @@ async function createTaskEventForOp(
     taskRevision: string
   },
 ) {
-  const { taskId, workspaceId, actorUserId, now, existingTask, nextStatusId, opType, taskRevision } = params
+  const {
+    taskId,
+    workspaceId,
+    actorUserId,
+    now,
+    existingTask,
+    nextStatusId,
+    opType,
+    taskRevision,
+  } = params
   const eventId = crypto.randomUUID()
   const eventRevision = `evt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
@@ -239,7 +278,11 @@ async function createTaskEventForOp(
     payload = { message: "Task created" }
   } else if (existingTask.statusId !== nextStatusId) {
     type = "STATUS_CHANGED"
-    payload = { fromStatusId: existingTask.statusId, toStatusId: nextStatusId, revision: taskRevision }
+    payload = {
+      fromStatusId: existingTask.statusId,
+      toStatusId: nextStatusId,
+      revision: taskRevision,
+    }
   }
 
   const scopeKey = workspaceId ? `workspace:${workspaceId}` : ""
@@ -303,7 +346,17 @@ async function applyCommentOp(tx: typeof prisma, userId: string, op: SyncOp) {
     })
 
     const workspaceId = await resolveWorkspaceIdForTask(tx, record.taskId)
-    await logChangeForWorkspace(tx, userId, workspaceId, "comment", op.entityId, "DELETE", record, revision, now)
+    await logChangeForWorkspace(
+      tx,
+      userId,
+      workspaceId,
+      "comment",
+      op.entityId,
+      "DELETE",
+      record,
+      revision,
+      now,
+    )
     return
   }
 
@@ -325,7 +378,17 @@ async function applyCommentOp(tx: typeof prisma, userId: string, op: SyncOp) {
   })
 
   const workspaceId = await resolveWorkspaceIdForTask(tx, record.taskId)
-  await logChangeForWorkspace(tx, userId, workspaceId, "comment", op.entityId, "UPSERT", record, revision, now)
+  await logChangeForWorkspace(
+    tx,
+    userId,
+    workspaceId,
+    "comment",
+    op.entityId,
+    "UPSERT",
+    record,
+    revision,
+    now,
+  )
 }
 
 async function applyUserOp(tx: typeof prisma, userId: string, op: SyncOp) {
@@ -406,10 +469,13 @@ async function applyWorkspaceMemberOp(tx: typeof prisma, userId: string, op: Syn
     now,
   )
 
-  await emitWorkspaceIndexChangeForRecipients(tx, record.workspaceId, Array.from(recipientIds), 
-  now,
-  patch.workspaceLabel as string | undefined
-)
+  await emitWorkspaceIndexChangeForRecipients(
+    tx,
+    record.workspaceId,
+    Array.from(recipientIds),
+    now,
+    patch.workspaceLabel as string | undefined,
+  )
 
   if (op.opType === "UPSERT" && !record.deletedAt && !existingActiveMember) {
     const tasks = await tx.task.findMany({
@@ -432,6 +498,8 @@ async function applyWorkspaceMemberOp(tx: typeof prisma, userId: string, op: Syn
           priority: task.priority,
           assigneeUserId: task.assigneeUserId ?? null,
           createdByUserId: task.createdByUserId,
+          startDate: task.startDate ? task.startDate.toISOString() : null,
+          endDate: task.endDate ? task.endDate.toISOString() : null,
           createdAt: task.createdAt,
           updatedAt: task.updatedAt,
           revision: task.revision,
@@ -456,7 +524,8 @@ async function logChange(
 ) {
   const safePayload = toJsonSafe({
     ...payload,
-    updatedAt: payload.updatedAt instanceof Date ? payload.updatedAt.toISOString() : payload.updatedAt,
+    updatedAt:
+      payload.updatedAt instanceof Date ? payload.updatedAt.toISOString() : payload.updatedAt,
   })
   await tx.serverChange.create({
     data: {
@@ -514,7 +583,16 @@ async function logChangeForWorkspace(
     await logChange(tx, actorUserId, entityType, entityId, opType, payload, revision, updatedAt)
     return
   }
-  await logChangeForRecipients(tx, recipients, entityType, entityId, opType, payload, revision, updatedAt)
+  await logChangeForRecipients(
+    tx,
+    recipients,
+    entityType,
+    entityId,
+    opType,
+    payload,
+    revision,
+    updatedAt,
+  )
 }
 
 async function logChangeForRecipients(
@@ -530,7 +608,8 @@ async function logChangeForRecipients(
   const recipients = Array.from(new Set(userIds))
   const safePayload = toJsonSafe({
     ...payload,
-    updatedAt: payload.updatedAt instanceof Date ? payload.updatedAt.toISOString() : payload.updatedAt,
+    updatedAt:
+      payload.updatedAt instanceof Date ? payload.updatedAt.toISOString() : payload.updatedAt,
   })
   await tx.serverChange.createMany({
     data: recipients.map((recipientId) => ({
@@ -556,7 +635,9 @@ async function emitWorkspaceIndexChangeForRecipients(
 
   if (!workspace) {
     if (!workspaceLabel) {
-      console.warn("[workspace] Missing workspace row + label; cannot emit correct index", { workspaceId })
+      console.warn("[workspace] Missing workspace row + label; cannot emit correct index", {
+        workspaceId,
+      })
       return
     }
     // Create with correct label instead of workspaceId
@@ -580,9 +661,17 @@ async function emitWorkspaceIndexChangeForRecipients(
   }
 
   const revision = `srv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-  await logChangeForRecipients(tx, recipientUserIds, "workspace", workspace.id, "UPSERT", payload, revision, now)
+  await logChangeForRecipients(
+    tx,
+    recipientUserIds,
+    "workspace",
+    workspace.id,
+    "UPSERT",
+    payload,
+    revision,
+    now,
+  )
 }
-
 
 async function validateTaskOp(tx: typeof prisma, userId: string, op: SyncOp) {
   const patch = op.patch as any
