@@ -929,6 +929,7 @@ export function SettingsScreen() {
 const $screen: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   padding: spacing.lg,
   gap: spacing.lg,
+  paddingBottom: spacing.xxxl
 })
 
 const $header: ThemedStyle<ViewStyle> = ({ spacing }) => ({

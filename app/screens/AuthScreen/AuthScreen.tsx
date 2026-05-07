@@ -389,7 +389,7 @@ const $spacer: ThemedStyle<ViewStyle> = ({ spacing }) => ({
 })
 
 const $buttonRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
-  flexDirection: "row",
+  flexDirection: "column",
   gap: spacing.sm,
   marginTop: spacing.md,
 })
