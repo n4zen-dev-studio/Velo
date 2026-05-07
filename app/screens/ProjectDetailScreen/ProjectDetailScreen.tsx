@@ -35,6 +35,7 @@ import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
 import { formatDateRange, formatDateTime, formatShortDate } from "@/utils/dateFormat"
 import { resolveUserLabel, resolveUserMeta } from "@/utils/userLabel"
+import { spacing } from "@/theme/spacingDark"
 
 type Segment = "board" | "timeline" | "team" | "overview"
 
@@ -282,7 +283,7 @@ export function ProjectDetailScreen() {
   return (
     <AnimatedBackground>
       <Screen
-        preset="fixed"
+        preset="scroll"
         backgroundColor="transparent"
         contentContainerStyle={themed([
           $screen,
@@ -330,13 +331,13 @@ export function ProjectDetailScreen() {
 
         <View style={themed($statPillsRow)}>
           <ProjectStatPill label="Open" value={`${openCount}`} tone="#dfd91e" />
-          <ProjectStatPill label="Done" value={`${doneCount}`} tone="#57b396" />
+          {/* <ProjectStatPill label="Done" value={`${doneCount}`} tone="#57b396" /> */}
           <ProjectStatPill
             label="Team"
             value={`${members.length || workspace?.membersCount || 1}`}
             tone="#4443ad"
           />
-          <ProjectStatPill label="At risk" value={`${highPriorityTasks.length}`} tone="#cb5d1d" />
+          <ProjectStatPill label="At-Risk" value={`${highPriorityTasks.length}`} tone="#cb5d1d" />
           <ProjectStatPill
             label="Complete"
             value={`${Math.round(progress * 100)}%`}
