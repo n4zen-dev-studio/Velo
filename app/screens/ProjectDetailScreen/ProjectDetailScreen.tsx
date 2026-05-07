@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from "react"
 import {
+  Modal,
   Pressable,
   ScrollView,
   TextStyle,
@@ -57,6 +58,7 @@ export function ProjectDetailScreen() {
   const [streams, setStreams] = useState<Project[]>([])
   const [members, setMembers] = useState<MemberSummary[]>([])
   const [movingTaskId, setMovingTaskId] = useState<string | null>(null)
+  const [isWorkspacePickerOpen, setIsWorkspacePickerOpen] = useState(false)
 
   const workspace = useMemo(
     () => workspaces.find((item) => item.id === workspaceId) ?? null,
@@ -230,7 +232,20 @@ export function ProjectDetailScreen() {
   )
 
   const fabBottom = Math.max(insets.bottom, 14) + 78
-  const boardHeight = Math.max(height - fabBottom - 350, 320)
+  const boardHeight = Math.max((height*0.55) - fabBottom, 320)
+
+  const handleWorkspaceSwitch = useCallback(
+    async (nextWorkspaceId: string) => {
+      if (nextWorkspaceId === workspaceId) {
+        setIsWorkspacePickerOpen(false)
+        return
+      }
+      await setActiveWorkspaceId(nextWorkspaceId)
+      setIsWorkspacePickerOpen(false)
+      navigation.replace("ProjectDetail", { workspaceId: nextWorkspaceId })
+    },
+    [navigation, setActiveWorkspaceId, workspaceId],
+  )
 
   return (
     <Screen
@@ -259,12 +274,30 @@ export function ProjectDetailScreen() {
         />
       </View>
 
+      <Pressable
+        onPress={() => workspaces.length > 1 && setIsWorkspacePickerOpen(true)}
+        style={[
+          themed($workspaceSelector),
+          workspaces.length <= 1 && themed($workspaceSelectorDisabled),
+        ]}
+      >
+        <View style={themed($workspaceSelectorCopy)}>
+          <Text preset="caption" text="Workspace" style={themed($subtitle)} />
+          <Text preset="formLabel" text={workspace?.label ?? "Personal"} numberOfLines={1} />
+        </View>
+        <Text
+          preset="caption"
+          text={workspaces.length > 1 ? "Switch" : "Current"}
+          style={themed($workspaceSelectorAction)}
+        />
+      </Pressable>
+
       <View style={themed($statPillsRow)}>
-        <ProjectStatPill label="Open" value={`${openCount}`} />
-        <ProjectStatPill label="Done" value={`${doneCount}`} />
-        <ProjectStatPill label="Team" value={`${members.length || workspace?.membersCount || 1}`} />
-        <ProjectStatPill label="At risk" value={`${highPriorityTasks.length}`} />
-        <ProjectStatPill label="Complete" value={`${Math.round(progress * 100)}%`} />
+        <ProjectStatPill label="Open" value={`${openCount}`} tone="#dfd91e" />
+        <ProjectStatPill label="Done" value={`${doneCount}`} tone="#57b396" />
+        <ProjectStatPill label="Team" value={`${members.length || workspace?.membersCount || 1}`} tone="#4443ad" />
+        <ProjectStatPill label="At risk" value={`${highPriorityTasks.length}`} tone="#cb5d1d" />
+        <ProjectStatPill label="Complete" value={`${Math.round(progress * 100)}%`} tone="#14f326" />
       </View>
 
       <View style={themed($segmentRow)}>
@@ -556,15 +589,75 @@ export function ProjectDetailScreen() {
       ) : null}
 
       <ProjectFab bottom={fabBottom} onPress={() => navigation.navigate("TaskEditor")} />
+
+      <Modal visible={isWorkspacePickerOpen} transparent animationType="fade">
+        <Pressable style={themed($sheetBackdrop)} onPress={() => setIsWorkspacePickerOpen(false)}>
+          <Pressable style={themed($workspaceSheet)} onPress={() => undefined}>
+            <View style={themed($workspaceSheetHeader)}>
+              <View style={themed($workspaceSheetHeaderCopy)}>
+                <Text preset="subheading" text="Switch workspace" />
+                <Text
+                  preset="caption"
+                  text="Jump between workspaces without leaving the current work surface."
+                  style={themed($subtitle)}
+                />
+              </View>
+              <Button
+                text="Manage"
+                preset="glass"
+                onPress={() => {
+                  setIsWorkspacePickerOpen(false)
+                  navigation.navigate("ProjectsHome")
+                }}
+              />
+            </View>
+
+            <View style={themed($workspaceSheetList)}>
+              {workspaces.map((item) => {
+                const isCurrent = item.id === workspaceId
+                return (
+                  <Pressable
+                    key={item.id}
+                    onPress={() => void handleWorkspaceSwitch(item.id)}
+                    style={[
+                      themed($workspaceSheetItem),
+                      isCurrent && themed($workspaceSheetItemActive),
+                    ]}
+                  >
+                    <View style={themed($workspaceSheetCopy)}>
+                      <Text preset="formLabel" text={item.label} />
+                      <Text
+                        preset="caption"
+                        text={item.kind === "personal" ? "Personal workspace" : "Shared workspace"}
+                        style={themed($subtitle)}
+                      />
+                    </View>
+                    <Text
+                      preset="caption"
+                      text={isCurrent ? "Current" : "Select"}
+                      style={
+                        isCurrent ? themed($workspaceSheetBadge) : themed($workspaceSelectorAction)
+                      }
+                    />
+                  </Pressable>
+                )
+              })}
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </Screen>
   )
 }
 
-function ProjectStatPill({ label, value }: { label: string; value: string }) {
+function ProjectStatPill({ label, value, tone }: { label: string; value: string, tone: string }) {
   const { themed } = useAppTheme()
   return (
     <View style={themed($statPill)}>
-      <Text preset="caption" text={label} style={themed($subtitle)} />
+      <View style={themed($statTopRow)}>
+        <View style={[themed($statDot), { backgroundColor: tone }]} />
+        <Text preset="caption" text={label} style={themed($subtitle)} />
+      </View>
       <Text preset="caption" text={value} style={themed($memberName)} />
     </View>
   )
@@ -726,20 +819,58 @@ const $subtitle: ThemedStyle<TextStyle> = ({ colors }) => ({
   color: colors.textDim,
 })
 
+const $workspaceSelector: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: spacing.md,
+  borderRadius: radius.large,
+  borderWidth: 1,
+  borderColor: colors.borderSubtle,
+  backgroundColor: colors.surfaceGlass,
+  paddingHorizontal: spacing.md,
+  paddingVertical: spacing.sm,
+})
+
+const $workspaceSelectorDisabled: ThemedStyle<ViewStyle> = () => ({
+  opacity: 0.72,
+})
+
+const $workspaceSelectorCopy: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flex: 1,
+  gap: spacing.xxxs,
+})
+
+const $workspaceSelectorAction: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.primary,
+})
+
 const $statPillsRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   flexDirection: "row",
   flexWrap: "wrap",
-  gap: spacing.xs,
+  gap: spacing.xxxs,
+})
+
+const $statTopRow: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  alignItems: "center",
+  gap: spacing.xxs,
+})
+
+const $statDot: ThemedStyle<ViewStyle> = ({ radius }) => ({
+  width: 7,
+  height: 7,
+  borderRadius: radius.pill,
 })
 
 const $statPill: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
-  borderRadius: radius.pill,
+  borderRadius: 20,
   borderWidth: 1,
   borderColor: colors.borderSubtle,
   backgroundColor: colors.surface,
   paddingHorizontal: spacing.sm,
   paddingVertical: spacing.xs,
-  flexDirection: "row",
+  // flexDirection: "row",
   alignItems: "center",
   gap: spacing.xs,
 })
@@ -870,6 +1001,68 @@ const $sectionHeader: ThemedStyle<ViewStyle> = ({ spacing }) => ({
 const $secondaryContent: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   paddingBottom: spacing.md,
   gap: spacing.md,
+})
+
+const $sheetBackdrop: ThemedStyle<ViewStyle> = ({ colors, spacing }) => ({
+  flex: 1,
+  justifyContent: "flex-end",
+  backgroundColor: colors.overlay,
+  padding: spacing.md,
+})
+
+const $workspaceSheet: ThemedStyle<ViewStyle> = ({ colors, spacing, radius, elevation }) => ({
+  borderRadius: radius.xl,
+  borderWidth: 1,
+  borderColor: colors.borderSubtle,
+  backgroundColor: colors.surfaceElevated,
+  paddingHorizontal: spacing.lg,
+  paddingTop: spacing.lg,
+  paddingBottom: spacing.lg,
+  gap: spacing.md,
+  ...elevation.card,
+})
+
+const $workspaceSheetHeader: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: spacing.md,
+})
+
+const $workspaceSheetHeaderCopy: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flex: 1,
+  gap: spacing.xxxs,
+})
+
+const $workspaceSheetList: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  gap: spacing.sm,
+})
+
+const $workspaceSheetItem: ThemedStyle<ViewStyle> = ({ colors, spacing, radius }) => ({
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: spacing.md,
+  borderRadius: radius.large,
+  borderWidth: 1,
+  borderColor: colors.borderSubtle,
+  backgroundColor: colors.surface,
+  paddingHorizontal: spacing.md,
+  paddingVertical: spacing.sm,
+})
+
+const $workspaceSheetItemActive: ThemedStyle<ViewStyle> = ({ colors }) => ({
+  borderColor: colors.primary,
+  backgroundColor: colors.glowSoft,
+})
+
+const $workspaceSheetCopy: ThemedStyle<ViewStyle> = ({ spacing }) => ({
+  flex: 1,
+  gap: spacing.xxxs,
+})
+
+const $workspaceSheetBadge: ThemedStyle<TextStyle> = ({ colors }) => ({
+  color: colors.textInverse,
 })
 
 const $timelineBars: ThemedStyle<ViewStyle> = ({ spacing }) => ({
