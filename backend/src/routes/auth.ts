@@ -16,8 +16,9 @@ function normalizeEmail(email: string) {
   return email.trim().toLowerCase()
 }
 
-function isValidEmail(email: string) {
-  return /^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(email)
+export function isValidEmail(email: string): boolean {
+  if (!email) return false
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/u.test(email)
 }
 
 function isUserVerified(user: { emailVerified: boolean; emailVerifiedAt: Date | null }) {
