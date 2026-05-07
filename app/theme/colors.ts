@@ -17,6 +17,7 @@ export const palette = {
   primary400: "#B687FF",
   primary500: "#8F55FF",
   primary600: "#6B2FE6",
+  primary: "#8F55FF",
 
   // Secondary (cool slate / desaturated purple-gray)
   secondary100: "#EEF0F6",

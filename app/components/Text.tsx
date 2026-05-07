@@ -14,48 +14,16 @@ type Weights = keyof typeof typography.primary
 type Presets = "default" | "bold" | "heading" | "subheading" | "formLabel" | "formHelper"
 
 export interface TextProps extends RNTextProps {
-  /**
-   * Text which is looked up via i18n.
-   */
   tx?: TxKeyPath
-  /**
-   * The text to display if not using `tx` or nested components.
-   */
   text?: string
-  /**
-   * Optional options to pass to i18n. Useful for interpolation
-   * as well as explicitly setting locale or translation fallbacks.
-   */
   txOptions?: TOptions
-  /**
-   * An optional style override useful for padding & margin.
-   */
   style?: StyleProp<TextStyle>
-  /**
-   * One of the different types of text presets.
-   */
   preset?: Presets
-  /**
-   * Text weight modifier.
-   */
   weight?: Weights
-  /**
-   * Text size modifier.
-   */
   size?: Sizes
-  /**
-   * Children components.
-   */
   children?: ReactNode
 }
 
-/**
- * For your text displaying needs.
- * This component is a HOC over the built-in React Native one.
- * @see [Documentation and Examples]{@link https://docs.infinite.red/ignite-cli/boilerplate/app/components/Text/}
- * @param {TextProps} props - The props for the `Text` component.
- * @returns {JSX.Element} The rendered `Text` component.
- */
 export const Text = forwardRef(function Text(props: TextProps, ref: ForwardedRef<RNText>) {
   const { weight, size, tx, txOptions, text, children, style: $styleOverride, ...rest } = props
   const { themed } = useAppTheme()
@@ -79,20 +47,28 @@ export const Text = forwardRef(function Text(props: TextProps, ref: ForwardedRef
   )
 })
 
+/**
+ * Slightly more modern typographic scale:
+ * - headings not absurdly large
+ * - tighter line height & subtle letterSpacing
+ */
 const $sizeStyles = {
-  xxl: { fontSize: 36, lineHeight: 44 } satisfies TextStyle,
-  xl: { fontSize: 24, lineHeight: 34 } satisfies TextStyle,
-  lg: { fontSize: 20, lineHeight: 32 } satisfies TextStyle,
-  md: { fontSize: 18, lineHeight: 26 } satisfies TextStyle,
-  sm: { fontSize: 16, lineHeight: 24 } satisfies TextStyle,
-  xs: { fontSize: 14, lineHeight: 21 } satisfies TextStyle,
-  xxs: { fontSize: 12, lineHeight: 18 } satisfies TextStyle,
+  xxl: { fontSize: 30, lineHeight: 36 } satisfies TextStyle,
+  xl: { fontSize: 24, lineHeight: 30 } satisfies TextStyle,
+  lg: { fontSize: 18, lineHeight: 24 } satisfies TextStyle,
+  md: { fontSize: 16, lineHeight: 22 } satisfies TextStyle,
+  sm: { fontSize: 14, lineHeight: 20 } satisfies TextStyle,
+  xs: { fontSize: 12, lineHeight: 18 } satisfies TextStyle,
+  xxs: { fontSize: 11, lineHeight: 16 } satisfies TextStyle,
 }
 
-const $fontWeightStyles = Object.entries(typography.primary).reduce((acc, [weight, fontFamily]) => {
-  return { ...acc, [weight]: { fontFamily } }
+const $fontWeightStyles = Object.entries(typography.primary).reduce((acc, [w, fontFamily]) => {
+  return { ...acc, [w]: { fontFamily } }
 }, {}) as Record<Weights, TextStyle>
 
+/**
+ * Base stays theme-driven (important: used everywhere)
+ */
 const $baseStyle: ThemedStyle<TextStyle> = (theme) => ({
   ...$sizeStyles.sm,
   ...$fontWeightStyles.normal,
@@ -100,17 +76,57 @@ const $baseStyle: ThemedStyle<TextStyle> = (theme) => ({
 })
 
 const $presets: Record<Presets, ThemedStyleArray<TextStyle>> = {
-  default: [$baseStyle],
-  bold: [$baseStyle, { ...$fontWeightStyles.bold }],
+  default: [
+    $baseStyle,
+    {
+      letterSpacing: 0.2,
+    },
+  ],
+
+  bold: [
+    $baseStyle,
+    {
+      ...$fontWeightStyles.bold,
+      letterSpacing: 0.15,
+    },
+  ],
+
   heading: [
     $baseStyle,
     {
       ...$sizeStyles.xxl,
       ...$fontWeightStyles.bold,
+      letterSpacing: -0.3,
     },
   ],
-  subheading: [$baseStyle, { ...$sizeStyles.lg, ...$fontWeightStyles.medium }],
-  formLabel: [$baseStyle, { ...$fontWeightStyles.medium }],
-  formHelper: [$baseStyle, { ...$sizeStyles.sm, ...$fontWeightStyles.normal }],
+
+  subheading: [
+    $baseStyle,
+    {
+      ...$sizeStyles.lg,
+      ...$fontWeightStyles.medium,
+      letterSpacing: -0.1,
+    },
+  ],
+
+  formLabel: [
+    $baseStyle,
+    {
+      ...$sizeStyles.sm,
+      ...$fontWeightStyles.medium,
+      letterSpacing: 0.15,
+    },
+  ],
+
+  formHelper: [
+    $baseStyle,
+    {
+      ...$sizeStyles.xs,
+      ...$fontWeightStyles.normal,
+      opacity: 0.85,
+      letterSpacing: 0.2,
+    },
+  ],
 }
+
 const $rtlStyle: TextStyle = isRTL ? { writingDirection: "rtl" } : {}
