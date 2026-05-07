@@ -1,7 +1,7 @@
 import { openDatabaseAsync, type SQLiteDatabase } from "expo-sqlite"
 
 import { createIndexesSql, createTablesSql } from "@/services/db/schema"
-import { executeTransaction, execute } from "@/services/db/queries"
+import { executeTransaction, execute, executeSqlBatch, queryFirst } from "@/services/db/queries"
 import { seedDefaultStatuses } from "@/services/db/repositories/statusesRepository"
 
 const DB_NAME = "tasktrak.db"
@@ -21,16 +21,22 @@ export async function getDb() {
 
   if (!initPromise) {
     initPromise = (async () => {
-      // 🔹 PRAGMAs MUST be outside transaction
-      await execute(db, "PRAGMA journal_mode = WAL;")
-      await execute(db, "PRAGMA synchronous = NORMAL;")
       await execute(db, "PRAGMA foreign_keys = ON;")
       await execute(db, "PRAGMA busy_timeout = 5000;")
+      await execute(db, "PRAGMA journal_mode = WAL;")
+      await execute(db, "PRAGMA synchronous = NORMAL;")
 
       // 🔹 Everything else inside ONE transaction
       await executeTransaction(db, async (txDb) => {
-        await execute(txDb, createTablesSql)
-        await execute(txDb, createIndexesSql)
+        await executeSqlBatch(txDb, createTablesSql)
+        const table = await queryFirst<{ name: string }>(
+          txDb,
+          "SELECT name FROM sqlite_master WHERE type='table' AND name='tasks'",
+        )
+        if (!table) {
+          throw new Error("[DB] Schema init failed: tasks table not created")
+        }
+        await executeSqlBatch(txDb, createIndexesSql)
         await seedDefaultStatuses(txDb)
       })
     })()

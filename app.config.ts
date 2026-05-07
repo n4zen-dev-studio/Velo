@@ -19,6 +19,13 @@ module.exports = ({ config }: ConfigContext): Partial<ExpoConfig> => {
 
   return {
     ...config,
+    extra: {
+      ...(config.extra ?? {}),
+      googleAndroidClientId: process.env.ANDROID_CLIENT_ID,
+      googleIosClientId: process.env.IOS_CLIENT_ID,
+      googleWebClientId: process.env.WEB_CLIENT_ID,
+      apiBaseUrl: process.env.API_BASE_URL,
+    },
     ios: {
       ...config.ios,
       // This privacyManifests is to get you started.

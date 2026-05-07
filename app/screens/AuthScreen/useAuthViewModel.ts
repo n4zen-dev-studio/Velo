@@ -1,6 +1,17 @@
 import { BASE_URL } from "@/config/api"
 import { createHttpClient } from "@/services/api/httpClient"
-import { login, resendVerification, signup } from "@/services/api/authApi"
+import {
+  appleLogin,
+  confirmPasswordReset,
+  googleLogin,
+  login,
+  logout,
+  requestPasswordReset,
+  resendVerification,
+  signup,
+  verifyEmail,
+} from "@/services/api/authApi"
+import { clearTokens, getRefreshToken } from "@/services/api/tokenStore"
 
 export const useAuthViewModel = () => {
   const client = createHttpClient(BASE_URL)
@@ -20,11 +31,44 @@ export const useAuthViewModel = () => {
   }
 
   const signupWithEmail = async (email: string, password: string) => {
-    return signup(client, email, password)
+    const result = await signup(client, email, password)
+    return { needsVerification: !!result.requiresEmailVerification }
   }
 
   const resendVerificationEmail = async (email: string) => {
     return resendVerification(client, email)
+  }
+
+  const logoutUser = async () => {
+    const refreshToken = await getRefreshToken()
+    if (refreshToken) {
+      try {
+        await logout(client, refreshToken)
+      } catch {
+        // best-effort
+      }
+    }
+    await clearTokens()
+  }
+
+  const requestPasswordResetEmail = async (email: string) => {
+    return requestPasswordReset(client, email)
+  }
+
+  const confirmPasswordResetToken = async (token: string, newPassword: string) => {
+    return confirmPasswordReset(client, token, newPassword)
+  }
+
+  const verifyEmailWithToken = async (token: string) => {
+    return verifyEmail(client, token)
+  }
+
+  const loginWithGoogle = async (idToken: string) => {
+    return googleLogin(client, idToken)
+  }
+
+  const loginWithApple = async (idToken: string) => {
+    return appleLogin(client, idToken)
   }
 
   return {
@@ -32,5 +76,11 @@ export const useAuthViewModel = () => {
     loginWithEmail,
     signupWithEmail,
     resendVerificationEmail,
+    logoutUser,
+    requestPasswordResetEmail,
+    confirmPasswordResetToken,
+    verifyEmailWithToken,
+    loginWithGoogle,
+    loginWithApple,
   }
 }

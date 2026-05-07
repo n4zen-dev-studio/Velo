@@ -21,6 +21,7 @@ import "./utils/gestureHandler"
 import { useEffect, useState } from "react"
 import { useFonts } from "expo-font"
 import * as Linking from "expo-linking"
+import * as WebBrowser from "expo-web-browser"
 import { KeyboardProvider } from "react-native-keyboard-controller"
 import { initialWindowMetrics, SafeAreaProvider } from "react-native-safe-area-context"
 
@@ -34,6 +35,9 @@ import { initializeDatabase } from "./services/db"
 import * as storage from "./utils/storage"
 import { syncController } from "./services/sync/SyncController"
 import { registerBackgroundSync } from "./services/sync/backgroundSync"
+import { BASE_URL } from "./config/api"
+
+WebBrowser.maybeCompleteAuthSession()
 
 export const NAVIGATION_PERSISTENCE_KEY = "NAVIGATION_STATE"
 
@@ -58,6 +62,10 @@ const config = {
  * @returns {JSX.Element} The rendered `App` component.
  */
 export function App() {
+  if (__DEV__) {
+    // eslint-disable-next-line no-console
+    console.log("[API] BASE_URL =", BASE_URL)
+  }
   const {
     initialNavigationState,
     onNavigationStateChange,

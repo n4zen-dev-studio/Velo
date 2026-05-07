@@ -34,6 +34,7 @@
     "icon": "./assets/images/app-icon-ios.png",
     "supportsTablet": true,
     "bundleIdentifier": "com.n4zen.tasktrak",
+    "usesAppleSignIn": true,
     "splash": {
       "backgroundColor": "#171418"
     },
@@ -68,7 +69,8 @@
         }
       }
     ],
-    "expo-build-properties"
+    "expo-build-properties",
+    "expo-apple-authentication"
   ],
   "experiments": {
     "tsconfigPaths": true

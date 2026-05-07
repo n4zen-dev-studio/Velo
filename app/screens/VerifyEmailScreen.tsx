@@ -3,13 +3,17 @@ import { View, ViewStyle } from "react-native"
 import { useNavigation, useRoute } from "@react-navigation/native"
 
 import { Button } from "@/components/Button"
+import { ClaimOfflineDataModal } from "@/components/ClaimOfflineDataModal"
 import { GlassCard } from "@/components/GlassCard"
 import { Screen } from "@/components/Screen"
 import { Text } from "@/components/Text"
+import { TextField } from "@/components/TextField"
 import type { AppStackScreenProps } from "@/navigators/navigationTypes"
 import { setTokens } from "@/services/api/tokenStore"
 import { useAuthViewModel } from "@/screens/AuthScreen/useAuthViewModel"
 import { setCurrentUserId, setSessionMode } from "@/services/sync/identity"
+import { claimOfflineData, markOfflineClaimHandled, shouldPromptOfflineClaim } from "@/services/sync/offlineClaim"
+import { syncController } from "@/services/sync/SyncController"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
 
@@ -17,9 +21,12 @@ export function VerifyEmailScreen() {
   const { themed } = useAppTheme()
   const navigation = useNavigation<AppStackScreenProps<"VerifyEmail">["navigation"]>()
   const route = useRoute<AppStackScreenProps<"VerifyEmail">["route"]>()
-  const { email, password } = route.params
-  const { loginWithEmail, resendVerificationEmail } = useAuthViewModel()
+  const { email } = route.params
+  const { resendVerificationEmail, verifyEmailWithToken } = useAuthViewModel()
   const [message, setMessage] = useState<string | null>(null)
+  const [token, setToken] = useState("")
+  const [showClaimModal, setShowClaimModal] = useState(false)
+  const [pendingRemoteUserId, setPendingRemoteUserId] = useState<string | null>(null)
 
   const handleResend = async () => {
     await resendVerificationEmail(email)
@@ -28,43 +35,85 @@ export function VerifyEmailScreen() {
 
   const handleContinue = async () => {
     try {
-      const auth = await loginWithEmail(email, password)
-      await setTokens(auth.accessToken, auth.refreshToken)
-      const userId = parseUserIdFromJwt(auth.accessToken)
-      if (!userId) {
-        setMessage("Unable to read session. Please try again.")
+      if (!token.trim()) {
+        setMessage("Enter your verification token.")
         return
       }
-      await setCurrentUserId(userId)
-      await setSessionMode("remote")
-      navigation.reset({ index: 0, routes: [{ name: "Home" }] })
+      const auth = await verifyEmailWithToken(token.trim())
+      await completeRemoteLogin(auth.accessToken, auth.refreshToken)
     } catch (err: any) {
-      if (err?.type === "EMAIL_NOT_VERIFIED") {
-        setMessage("Email not verified yet.")
-        return
-      }
-      setMessage("Login failed. Please try again.")
+      setMessage("Verification failed. Please try again.")
     }
+  }
+
+  const completeRemoteLogin = async (accessToken: string, refreshToken: string) => {
+    await setTokens(accessToken, refreshToken)
+    const userId = parseUserIdFromJwt(accessToken)
+    if (!userId) {
+      setMessage("Unable to read session. Please try again.")
+      return
+    }
+    const needsClaim = await shouldPromptOfflineClaim()
+    if (needsClaim) {
+      setPendingRemoteUserId(userId)
+      setShowClaimModal(true)
+      return
+    }
+    await finalizeRemoteLogin(userId)
+  }
+
+  const finalizeRemoteLogin = async (userId: string) => {
+    await setCurrentUserId(userId)
+    await setSessionMode("remote")
+    navigation.reset({ index: 0, routes: [{ name: "Home" }] })
+  }
+
+  const handleClaimOfflineData = async () => {
+    if (!pendingRemoteUserId) return
+    await setCurrentUserId(pendingRemoteUserId)
+    await setSessionMode("remote")
+    await claimOfflineData(pendingRemoteUserId)
+    markOfflineClaimHandled()
+    setShowClaimModal(false)
+    navigation.reset({ index: 0, routes: [{ name: "Home" }] })
+    void syncController.triggerSync("manual")
+  }
+
+  const handleKeepSeparate = async () => {
+    if (!pendingRemoteUserId) return
+    await setCurrentUserId(pendingRemoteUserId)
+    await setSessionMode("remote")
+    markOfflineClaimHandled()
+    setShowClaimModal(false)
+    navigation.reset({ index: 0, routes: [{ name: "Home" }] })
   }
 
   return (
     <Screen preset="scroll" contentContainerStyle={themed($screen)}>
       <View style={themed($header)}>
         <Text preset="heading" text="Verify your email" />
-        <Text preset="formHelper" text="We sent you a verification link. Open it, then return here." />
-        <Text preset="formHelper" text="In development, the server prints the link in the console." />
+        <Text preset="formHelper" text="Check your email for the verification token, then enter it below." />
+        <Text preset="formHelper" text="In development, the server prints the token in the console." />
       </View>
 
       <GlassCard>
+        <Text preset="formLabel" text="Verification token" />
+        <TextField value={token} onChangeText={setToken} placeholder="token" autoCapitalize="none" />
         {message ? <Text preset="formHelper" text={message} /> : null}
         <View style={themed($buttonRow)}>
           <Button text="Resend email" preset="default" onPress={handleResend} />
-          <Button text="I verified, continue" preset="reversed" onPress={handleContinue} />
+          <Button text="Verify & continue" preset="reversed" onPress={handleContinue} />
         </View>
         <View style={themed($buttonRow)}>
           <Button text="Back to login" preset="reversed" onPress={() => navigation.goBack()} />
         </View>
       </GlassCard>
+
+      <ClaimOfflineDataModal
+        visible={showClaimModal}
+        onClaim={handleClaimOfflineData}
+        onKeepSeparate={handleKeepSeparate}
+      />
     </Screen>
   )
 }

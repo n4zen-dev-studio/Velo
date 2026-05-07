@@ -11,11 +11,15 @@ model User {
   id           String         @id @default(uuid()) @db.Uuid
   email        String         @unique
   passwordHash String         @map("password_hash")
+  emailVerified Boolean       @default(false) @map("email_verified")
   emailVerifiedAt DateTime?   @map("email_verified_at")
+  verificationTokenHash String? @map("verification_token_hash")
+  passwordResetTokenHash String? @map("password_reset_token_hash")
+  passwordResetExpiresAt DateTime? @map("password_reset_expires_at")
+  googleSub    String?        @unique @map("google_sub")
   createdAt    DateTime       @default(now()) @map("created_at")
   refreshTokens RefreshToken[]
   serverChanges ServerChange[]
-  verificationTokens EmailVerificationToken[]
 
   @@map("users")
 }
@@ -32,20 +36,6 @@ model RefreshToken {
   @@map("refresh_tokens")
 }
 
-model EmailVerificationToken {
-  id         String   @id @default(uuid()) @db.Uuid
-  userId     String   @map("user_id") @db.Uuid
-  tokenHash  String   @map("token_hash")
-  expiresAt  DateTime @map("expires_at")
-  usedAt     DateTime? @map("used_at")
-  createdAt  DateTime @default(now()) @map("created_at")
-
-  user User @relation(fields: [userId], references: [id])
-
-  @@index([userId])
-  @@index([tokenHash])
-  @@map("email_verification_tokens")
-}
 
 model Task {
   id             String   @id @db.Uuid
@@ -94,6 +84,8 @@ model ServerChange {
   revision   String
   updatedAt  DateTime @map("updatedat")
   createdAt  DateTime @default(now()) @map("createdat")
+
+  user User @relation(fields: [userId], references: [id])
 
   @@map("server_changes")
 }
