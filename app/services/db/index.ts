@@ -9,16 +9,17 @@ export * from "./repositories/projectsRepository"
 export * from "./repositories/taskEventsRepository"
 export * from "./repositories/statusesRepository"
 export * from "./repositories/tasksRepository"
+export * from "./repositories/workspacesRepository"
 
 import { getDb } from "./db"
-import { migrate } from "./migrations"
-import { seedDefaultStatuses } from "./repositories/statusesRepository"
-import { executeTransaction } from "./queries"
-import { execute } from "./queries"
+import { execute, executeTransaction } from "./queries"
+import { bootstrapWorkspaces } from "./repositories/workspacesRepository"
 
+// Workspace bootstrapping happens here via bootstrapWorkspaces (Personal + active id + default statuses).
+// When adding new user-owned entities, include a `workspaceId` column and default to the active workspace in repos + migrations.
 export async function initializeDatabase() {
   const db = await getDb()
-  await seedDefaultStatuses(db)
+  await bootstrapWorkspaces(db)
 }
 
 export async function clearLocalData() {
@@ -30,5 +31,7 @@ export async function clearLocalData() {
     await execute(txDb, "DELETE FROM change_log")
     await execute(txDb, "DELETE FROM conflicts")
     await execute(txDb, "DELETE FROM sync_state")
+    await execute(txDb, "DELETE FROM workspace_state")
+    await execute(txDb, "DELETE FROM workspaces")
   })
 }

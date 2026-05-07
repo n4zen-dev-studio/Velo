@@ -14,6 +14,7 @@ import type { ThemedStyle } from "@/theme/types"
 import type { HomeStackScreenProps } from "@/navigators/navigationTypes"
 import { useSyncStatus } from "@/services/sync/syncStore"
 import { hasOpenConflict } from "@/services/db/repositories/conflictsRepository"
+import { useWorkspaceStore } from "@/stores/workspaceStore"
 
 import { useTaskEditorViewModel } from "./useTaskEditorViewModel"
 
@@ -26,6 +27,12 @@ export function TaskEditorScreen() {
     useTaskEditorViewModel(taskId, projectId)
   const syncState = useSyncStatus()
   const [hasConflict, setHasConflict] = useState(false)
+  const { workspaces, activeWorkspaceId } = useWorkspaceStore()
+
+  const workspaceLabel = useMemo(() => {
+    const targetId = task?.workspaceId ?? activeWorkspaceId
+    return workspaces.find((w) => w.id === targetId)?.label ?? "Personal"
+  }, [task?.workspaceId, activeWorkspaceId, workspaces])
 
   useEffect(() => {
     if (!taskId) return
@@ -81,7 +88,7 @@ export function TaskEditorScreen() {
     <Screen preset="scroll" contentContainerStyle={themed($screen)}>
       <View style={themed($header)}>
         <Text preset="heading" text={task ? "Edit task" : "Create task"} />
-        <Text preset="formHelper" text={task?.projectId ? "Project workspace" : "Personal workspace"} />
+        <Text preset="formHelper" text={`Workspace: ${workspaceLabel}`} />
       </View>
 
       {hasConflict ? (
@@ -150,7 +157,7 @@ export function TaskEditorScreen() {
         <View style={themed($pillRow)}>
           {statuses.map((status) => (
             <Pressable
-              key={`${status.projectId ?? "personal"}:${status.id}`}
+              key={`${status.workspaceId}:${status.projectId ?? "personal"}:${status.id}`}
               onPress={() => !hasConflict && setValue("statusId", status.id)}
               style={[themed($pill), statusValue === status.id && themed($pillActive)]}
             >

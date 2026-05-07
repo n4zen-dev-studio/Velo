@@ -1,8 +1,7 @@
 import { openDatabaseAsync, type SQLiteDatabase } from "expo-sqlite"
 
-import { createIndexesSql, createTablesSql } from "@/services/db/schema"
-import { executeTransaction, execute, executeSqlBatch, queryFirst } from "@/services/db/queries"
-import { seedDefaultStatuses } from "@/services/db/repositories/statusesRepository"
+import { execute, queryFirst } from "@/services/db/queries"
+import { migrate } from "@/services/db/migrations"
 
 const DB_NAME = "tasktrak.db"
 let cachedDb: SQLiteDatabase | null = null
@@ -26,19 +25,14 @@ export async function getDb() {
       await execute(db, "PRAGMA journal_mode = WAL;")
       await execute(db, "PRAGMA synchronous = NORMAL;")
 
-      // 🔹 Everything else inside ONE transaction
-      await executeTransaction(db, async (txDb) => {
-        await executeSqlBatch(txDb, createTablesSql)
-        const table = await queryFirst<{ name: string }>(
-          txDb,
-          "SELECT name FROM sqlite_master WHERE type='table' AND name='tasks'",
-        )
-        if (!table) {
-          throw new Error("[DB] Schema init failed: tasks table not created")
-        }
-        await executeSqlBatch(txDb, createIndexesSql)
-        await seedDefaultStatuses(txDb)
-      })
+      await migrate(db)
+      const table = await queryFirst<{ name: string }>(
+        db,
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='tasks'",
+      )
+      if (!table) {
+        throw new Error("[DB] Schema init failed: tasks table not created")
+      }
     })()
   }
 

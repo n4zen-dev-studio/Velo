@@ -14,6 +14,7 @@ export interface User {
 export interface Project {
   id: string
   name: string
+  workspaceId: string
   createdByUserId: string
   updatedAt: string
   archivedAt: string | null
@@ -29,14 +30,25 @@ export interface ProjectMember {
 export interface Status {
   id: string
   projectId: string | null
+  workspaceId: string
   name: string
   orderIndex: number
   category: "todo" | "in_progress" | "done"
 }
 
+export interface Workspace {
+  id: string
+  label: string
+  kind: "personal" | "custom"
+  createdAt: number
+  updatedAt: number
+  remoteId: string | null
+}
+
 export interface Task {
   id: string
   projectId: string | null
+  workspaceId: string
   title: string
   description: string
   statusId: string
@@ -79,6 +91,7 @@ export interface ChangeLogEntry {
   deviceId: string
   userId: string
   projectId: string | null
+  workspaceId: string
   status: ChangeLogStatus
   attemptCount: number
   lastAttemptAt: string | null

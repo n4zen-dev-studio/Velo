@@ -29,6 +29,7 @@ import { initI18n } from "./i18n"
 import { AppNavigator } from "./navigators/AppNavigator"
 import { useNavigationPersistence } from "./navigators/navigationUtilities"
 import { ThemeProvider } from "./theme/context"
+import { WorkspaceProvider } from "./stores/workspaceStore"
 import { customFontsToLoad } from "./theme/typography"
 import { loadDateFnsLocale } from "./utils/formatDate"
 import { initializeDatabase } from "./services/db"
@@ -132,13 +133,15 @@ export function App() {
     <SafeAreaProvider initialMetrics={initialWindowMetrics}>
       <KeyboardProvider>
         <ThemeProvider>
-           <GestureHandlerRootView style={{ flex: 1 }}>
-          <AppNavigator
-            linking={linking}
-            initialState={initialNavigationState}
-            onStateChange={onNavigationStateChange}
-          />
-          </GestureHandlerRootView>
+          <WorkspaceProvider>
+            <GestureHandlerRootView style={{ flex: 1 }}>
+              <AppNavigator
+                linking={linking}
+                initialState={initialNavigationState}
+                onStateChange={onNavigationStateChange}
+              />
+            </GestureHandlerRootView>
+          </WorkspaceProvider>
         </ThemeProvider>
       </KeyboardProvider>
     </SafeAreaProvider>

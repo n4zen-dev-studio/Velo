@@ -2,14 +2,15 @@ import type { HomeData } from "./types"
 
 export const homeMockData: HomeData = {
   workspaces: [
-    { id: "personal", label: "Personal", projectId: null },
-    { id: "project-nimbus", label: "Nimbus", projectId: "project-nimbus" },
-    { id: "project-orbit", label: "Orbit", projectId: "project-orbit" },
+    { id: "personal", label: "Personal", kind: "personal", createdAt: 0, updatedAt: 0, remoteId: null },
+    { id: "workspace-nimbus", label: "Nimbus", kind: "custom", createdAt: 0, updatedAt: 0, remoteId: null },
+    { id: "workspace-orbit", label: "Orbit", kind: "custom", createdAt: 0, updatedAt: 0, remoteId: null },
   ],
   projects: [
     {
       id: "project-nimbus",
       name: "Nimbus",
+      workspaceId: "workspace-nimbus",
       createdByUserId: "user-1",
       updatedAt: "2025-01-10T10:00:00.000Z",
       archivedAt: null,
@@ -17,22 +18,24 @@ export const homeMockData: HomeData = {
     {
       id: "project-orbit",
       name: "Orbit",
+      workspaceId: "workspace-orbit",
       createdByUserId: "user-1",
       updatedAt: "2025-01-09T10:00:00.000Z",
       archivedAt: null,
     },
   ],
   statuses: [
-    { id: "backlog", projectId: null, name: "Backlog", orderIndex: 0, category: "todo" },
-    { id: "todo", projectId: null, name: "To Do", orderIndex: 1, category: "todo" },
-    { id: "in_progress", projectId: null, name: "In Progress", orderIndex: 2, category: "in_progress" },
-    { id: "review", projectId: null, name: "Review", orderIndex: 3, category: "in_progress" },
-    { id: "done", projectId: null, name: "Done", orderIndex: 4, category: "done" },
+    { id: "backlog", projectId: null, workspaceId: "personal", name: "Backlog", orderIndex: 0, category: "todo" },
+    { id: "todo", projectId: null, workspaceId: "personal", name: "To Do", orderIndex: 1, category: "todo" },
+    { id: "in_progress", projectId: null, workspaceId: "personal", name: "In Progress", orderIndex: 2, category: "in_progress" },
+    { id: "review", projectId: null, workspaceId: "personal", name: "Review", orderIndex: 3, category: "in_progress" },
+    { id: "done", projectId: null, workspaceId: "personal", name: "Done", orderIndex: 4, category: "done" },
   ],
   tasks: [
     {
       id: "task-1",
       projectId: null,
+      workspaceId: "personal",
       title: "Draft Q1 review notes",
       description: "Pull highlights from the last sprint and summarize blockers.",
       statusId: "todo",
@@ -46,6 +49,7 @@ export const homeMockData: HomeData = {
     {
       id: "task-2",
       projectId: null,
+      workspaceId: "personal",
       title: "Sync research with mobile team",
       description: "Capture the findings from the sync engine spike.",
       statusId: "in_progress",
@@ -59,6 +63,7 @@ export const homeMockData: HomeData = {
     {
       id: "task-3",
       projectId: "project-nimbus",
+      workspaceId: "workspace-nimbus",
       title: "Wireframe conflict flow",
       description: "Explore safe vs unsafe merge flows for tasks.",
       statusId: "review",
@@ -72,6 +77,7 @@ export const homeMockData: HomeData = {
     {
       id: "task-4",
       projectId: "project-nimbus",
+      workspaceId: "workspace-nimbus",
       title: "Refine sync status badge",
       description: "Map status to colors and animation states.",
       statusId: "done",
@@ -85,6 +91,7 @@ export const homeMockData: HomeData = {
     {
       id: "task-5",
       projectId: "project-orbit",
+      workspaceId: "workspace-orbit",
       title: "Define change log schema",
       description: "Finalize op payloads and persistence approach.",
       statusId: "todo",

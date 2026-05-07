@@ -1,25 +1,39 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 
-import { getTaskById, listStatuses, upsertTask } from "@/services/db"
+import { getProjectById, getTaskById, listStatuses, upsertTask } from "@/services/db"
 import type { Priority, Status, Task } from "@/services/db/types"
 import { generateUuidV4, getCurrentUserId } from "@/services/sync/identity"
 import { refreshLocalCounts } from "@/services/sync/syncStore"
+import { useWorkspaceStore } from "@/stores/workspaceStore"
 
 export const useTaskEditorViewModel = (taskId?: string, projectId?: string) => {
+  const { activeWorkspaceId } = useWorkspaceStore()
   const [task, setTask] = useState<Task | null>(null)
   const [statuses, setStatuses] = useState<Status[]>([])
+  const [workspaceId, setWorkspaceId] = useState(activeWorkspaceId)
   const [isSaving, setIsSaving] = useState(false)
 
   const effectiveProjectId = task?.projectId ?? projectId ?? null
 
   const load = useCallback(async () => {
+    let resolvedWorkspaceId = activeWorkspaceId
     if (taskId) {
       const existing = await getTaskById(taskId)
       setTask(existing)
+      if (existing?.workspaceId) {
+        resolvedWorkspaceId = existing.workspaceId
+      }
     }
-    const statusRows = await listStatuses(effectiveProjectId)
+    if (!taskId && projectId) {
+      const project = await getProjectById(projectId)
+      if (project?.workspaceId) {
+        resolvedWorkspaceId = project.workspaceId
+      }
+    }
+    setWorkspaceId(resolvedWorkspaceId)
+    const statusRows = await listStatuses(resolvedWorkspaceId, effectiveProjectId)
     setStatuses(statusRows)
-  }, [taskId, effectiveProjectId])
+  }, [taskId, effectiveProjectId, projectId, activeWorkspaceId])
 
   useEffect(() => {
     void load()
@@ -39,6 +53,7 @@ export const useTaskEditorViewModel = (taskId?: string, projectId?: string) => {
       const payload: Task = {
         id: task?.id ?? (await generateUuidV4()),
         projectId: effectiveProjectId,
+        workspaceId,
         title: values.title,
         description: values.description,
         statusId: values.statusId,
@@ -55,7 +70,7 @@ export const useTaskEditorViewModel = (taskId?: string, projectId?: string) => {
       setIsSaving(false)
       return payload
     },
-    [effectiveProjectId, task],
+    [effectiveProjectId, task, workspaceId],
   )
 
   const defaultValues = useMemo(() => {

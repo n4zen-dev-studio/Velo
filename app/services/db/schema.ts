@@ -1,4 +1,4 @@
-export const schemaVersion = 1
+export const schemaVersion = 2
 
 export const createTablesSql = `
 CREATE TABLE IF NOT EXISTS users (
@@ -9,9 +9,24 @@ CREATE TABLE IF NOT EXISTS users (
   updatedAt TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS workspaces (
+  id TEXT PRIMARY KEY,
+  label TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  createdAt INTEGER NOT NULL,
+  updatedAt INTEGER NOT NULL,
+  remoteId TEXT
+);
+
+CREATE TABLE IF NOT EXISTS workspace_state (
+  id TEXT PRIMARY KEY,
+  activeWorkspaceId TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS projects (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
+  workspaceId TEXT NOT NULL,
   createdByUserId TEXT NOT NULL,
   updatedAt TEXT NOT NULL,
   archivedAt TEXT
@@ -28,15 +43,17 @@ CREATE TABLE IF NOT EXISTS project_members (
 CREATE TABLE IF NOT EXISTS statuses (
   id TEXT NOT NULL,
   projectId TEXT,
+  workspaceId TEXT NOT NULL,
   name TEXT NOT NULL,
   orderIndex INTEGER NOT NULL,
   category TEXT NOT NULL,
-  PRIMARY KEY (id, projectId)
+  PRIMARY KEY (id, projectId, workspaceId)
 );
 
 CREATE TABLE IF NOT EXISTS tasks (
   id TEXT PRIMARY KEY,
   projectId TEXT,
+  workspaceId TEXT NOT NULL,
   title TEXT NOT NULL,
   description TEXT NOT NULL,
   statusId TEXT NOT NULL,
@@ -79,6 +96,7 @@ CREATE TABLE IF NOT EXISTS change_log (
   deviceId TEXT NOT NULL,
   userId TEXT NOT NULL,
   projectId TEXT,
+  workspaceId TEXT NOT NULL,
   status TEXT NOT NULL,
   attemptCount INTEGER NOT NULL,
   lastAttemptAt TEXT
@@ -105,10 +123,14 @@ CREATE TABLE IF NOT EXISTS sync_state (
 `
 
 export const createIndexesSql = `
+CREATE INDEX IF NOT EXISTS idx_projects_workspace ON projects (workspaceId);
 CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks (projectId);
+CREATE INDEX IF NOT EXISTS idx_tasks_workspace ON tasks (workspaceId);
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks (statusId);
 CREATE INDEX IF NOT EXISTS idx_tasks_updated ON tasks (updatedAt);
+CREATE INDEX IF NOT EXISTS idx_statuses_workspace ON statuses (workspaceId, projectId);
 CREATE INDEX IF NOT EXISTS idx_comments_task ON comments (taskId);
 CREATE INDEX IF NOT EXISTS idx_change_log_status ON change_log (status);
+CREATE INDEX IF NOT EXISTS idx_change_log_workspace ON change_log (workspaceId);
 CREATE INDEX IF NOT EXISTS idx_conflicts_entity ON conflicts (entityType, entityId);
 `
