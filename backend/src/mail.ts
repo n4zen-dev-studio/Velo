@@ -1,4 +1,4 @@
-import nodemailer from "nodemailer"
+import { Resend } from "resend"
 
 type MailOptions = {
   to: string
@@ -8,65 +8,53 @@ type MailOptions = {
 }
 
 function getMailConfig() {
-  const host = process.env.SMTP_HOST?.trim()
-  const port = Number(process.env.SMTP_PORT ?? 465)
-  const secure = (process.env.SMTP_SECURE ?? "true").toLowerCase() === "true"
-  const user = process.env.SMTP_USER?.trim()
-  const pass = process.env.SMTP_PASS
+  const apiKey = process.env.RESEND_API_KEY?.trim()
   const from = process.env.MAIL_FROM?.trim()
 
-  if (!host || !user || !pass || !from || Number.isNaN(port)) {
-    throw new Error("SMTP mail configuration is incomplete")
+  if (!apiKey || !from) {
+    throw new Error("Resend mail configuration is incomplete")
   }
 
-  return { host, port, secure, user, pass, from }
+  return { apiKey, from }
 }
 
-let transporter: nodemailer.Transporter | null = null
+let client: Resend | null = null
 
-function getTransporter() {
-  if (transporter) return transporter
+function getClient() {
+  if (client) return client
 
   const config = getMailConfig()
-  transporter = nodemailer.createTransport({
-    host: config.host,
-    port: config.port,
-    secure: config.secure,
-    auth: {
-      user: config.user,
-      pass: config.pass,
-    },
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 10000,
-  })
-
-  return transporter
+  client = new Resend(config.apiKey)
+  return client
 }
 
 export async function sendMail(options: MailOptions) {
   const config = getMailConfig()
 
-  console.log("[mail] config loaded", {
-    host: config.host,
-    port: config.port,
-    secure: config.secure,
-    user: config.user,
-    from: config.from,
-    to: options.to,
-  })
+  try {
+    const response = await getClient().emails.send({
+      from: config.from,
+      to: [options.to],
+      subject: options.subject,
+      text: options.text,
+      html: options.html,
+    })
 
-  const transporter = getTransporter()
+    if (response.error) {
+      console.error("[mail] resend send failed", {
+        name: response.error.name,
+        message: response.error.message,
+      })
+      throw new Error(`Resend send failed: ${response.error.message}`)
+    }
 
-  console.log("[mail] about to send")
-  const info = await transporter.sendMail({
-    from: config.from,
-    to: options.to,
-    subject: options.subject,
-    text: options.text,
-    html: options.html,
-  })
-  console.log("[mail] send success", info)
-
-  return info
+    return response.data
+  } catch (error: any) {
+    console.error("[mail] resend request failed", {
+      message: error?.message ?? "Unknown Resend error",
+      name: error?.name,
+      statusCode: error?.statusCode,
+    })
+    throw error instanceof Error ? error : new Error("Resend send failed")
+  }
 }
