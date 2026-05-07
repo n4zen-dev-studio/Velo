@@ -97,5 +97,4 @@ coverage/
 # Misc
 # =========================
 *.orig.*
-*.lock
 docker-compose.velo.yml
