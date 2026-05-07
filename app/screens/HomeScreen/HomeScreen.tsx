@@ -13,9 +13,10 @@ import { goToSettingsTab, goToDebugTab } from "@/navigation/navigationActions"
 import { SyncBadge } from "@/components/SyncBadge"
 
 import { useHomeViewModel } from "./useHomeViewModel"
+import { Button } from "@/components/Button"
 
 export function HomeScreen() {
-  const { themed } = useAppTheme()
+  const { themed, toggleTheme } = useAppTheme()
   const navigation = useNavigation<HomeStackScreenProps<"Home">["navigation"]>()
   const { workspaces, activeWorkspaceId, setActiveWorkspaceId, tasksByStatus, refreshAll, isRefreshing, activeProjectId } =
     useHomeViewModel()
@@ -43,7 +44,10 @@ export function HomeScreen() {
           <SyncBadge />
         </View>
       </View>
-
+   <Button
+          tx="welcomeScreen:SwitchTheme"
+          onPress={toggleTheme}
+        />
       <WorkspaceSwitcher
         options={workspaces.map((workspace) => ({
           id: workspace.id,
