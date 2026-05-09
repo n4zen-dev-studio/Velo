@@ -63,6 +63,70 @@ Velo implements a **local-first architecture** where:
 
 ---
 
+
+<a id="visuals--media"></a>
+
+## 🧪 Demo & Visuals
+
+### 📱 Dashboard UI
+
+<table>
+<tr>
+<td align="center"><img src="docs/ui1.png" width="220"/></td>
+<td align="center"><img src="docs/ui2.png" width="220"/></td>
+<td align="center"><img src="docs/ui3.png" width="220"/></td>
+<td align="center"><img src="docs/ui4.png" width="220"/></td>
+</tr>
+</table>
+
+
+### 🎬 Demo Video
+
+See Velo in action — a lightweight, offline-first project management system built for real-world team workflows.
+
+---
+
+<table>
+<tr>
+
+<td width="25%"></td>
+
+<td width="50%" valign="top">
+
+### ⚡ Velo App Demo
+
+<a href="https://github.com/user-attachments/assets/fad44935-96a3-43cb-96bf-1787a6cc32dd" target="_blank">
+  <img src="docs/demo/demo.png" alt="Velo App Demo" width="100%" />
+</a>
+
+> End-to-end walkthrough of Velo’s core experience — from project creation to task execution and sync.
+
+**Highlights**
+- Project + task management flow  
+- Offline-first interactions  
+- Sync + state reconciliation  
+- Clean, responsive mobile UI  
+
+</td>
+
+<td width="25%"></td>
+
+</tr>
+</table>
+
+
+### UI Screenshots
+
+
+
+---
+
+<p align="right">
+  <a href="#readme-top">⬆️ Back to top</a>
+</p>
+
+---
+
 <a id="system-architecture"></a>
 ## 🏗️ System Architecture
 
@@ -349,20 +413,6 @@ JWT_SECRET=your_secret
 
 [⬆ Back to Top](#top)
 
----
-
-<a id="visuals--media"></a>
-
-## 🎥 Visuals & Media
-
-<!-- * 📹 Demo Video: `docs/demo.mp4` -->
-* 🧭 Architecture Diagram: `docs/architecture.png`
-<!-- * 📊 Sync Flow Diagram: `docs/sync-flow.png`
-* 📈 Metrics Dashboard: `docs/performance.png` -->
-> Other Visuals and metrics deshboard will be added soon!
-
-
-[⬆ Back to Top](#top)
 
 ---
 <a id="releases"></a>
