@@ -115,10 +115,6 @@ See Velo in action — a lightweight, offline-first project management system bu
 </table>
 
 
-### UI Screenshots
-
-
-
 ---
 
 <p align="right">
